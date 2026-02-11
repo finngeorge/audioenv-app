@@ -118,8 +118,7 @@ class KeychainHelper {
             kSecAttrAccount as String: key,
             kSecAttrService as String: "com.audioenv.app",  // Group items by service
             kSecValueData as String: data,
-            kSecAttrAccessControl as String: access,  // Use access control instead of kSecAttrAccessible
-            kSecUseDataProtectionKeychain as String: true  // Use modern data protection keychain
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
         // Delete any existing item

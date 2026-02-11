@@ -78,9 +78,18 @@ class S3BackupDestination: BackupDestination, ObservableObject {
 
         // Get file size
         let attrs = try FileManager.default.attributesOfItem(atPath: fileToUpload)
-        guard let fileSize = attrs[.size] as? Int64 else {
+        let fileSize: Int64
+        if let size = attrs[.size] as? Int64 {
+            fileSize = size
+        } else if let size = attrs[.size] as? UInt64 {
+            fileSize = Int64(size)
+        } else if let size = attrs[.size] as? NSNumber {
+            fileSize = size.int64Value
+        } else {
+            logger.error("Cannot determine file size for: \(fileToUpload, privacy: .public)")
             throw BackupError.cannotDetermineSize
         }
+        logger.info("📏 File size for upload: \(fileSize) bytes (\(fileToUpload, privacy: .public))")
 
         // Choose upload method based on size
         if fileSize > multipartThreshold {
