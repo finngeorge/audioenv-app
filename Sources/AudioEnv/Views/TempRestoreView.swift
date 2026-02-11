@@ -25,7 +25,7 @@ struct TempRestoreView: View {
                 configView
             }
         }
-        .frame(width: 550, minHeight: 400)
+        .frame(minWidth: 550, minHeight: 400)
     }
 
     // MARK: - DRM Warning
