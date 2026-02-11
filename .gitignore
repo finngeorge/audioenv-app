@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# SwiftPM / Xcode
+.build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+*.xcuserstate
+
+# App binaries / dSYM
+*.app
+*.dSYM
+
+# Claude
+.claude/

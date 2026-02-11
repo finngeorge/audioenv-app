@@ -1,0 +1,30 @@
+name: AudioEnv
+options:
+  bundleIdPrefix: com.audioenv
+  deploymentTarget:
+    macOS: "14.0"
+
+targets:
+  AudioEnv:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/AudioEnv
+      - path: audioenv.icns
+        buildPhase: resources
+    resources:
+      - path: Sources/AudioEnv/Resources
+        type: folder
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.audioenv.app
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+      CODE_SIGN_ENTITLEMENTS: AudioEnv.entitlements
+      CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: ""  # Leave empty for "Sign to Run Locally"
+      INFOPLIST_FILE: Sources/AudioEnv/Info.plist
+      INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026"
+      INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
+      INFOPLIST_KEY_CFBundleName: AudioEnv
+      INFOPLIST_KEY_CFBundleDisplayName: AudioEnv
+      ASSETCATALOG_COMPILER_APPICON_NAME: ""
+      INFOPLIST_KEY_CFBundleIconFile: audioenv

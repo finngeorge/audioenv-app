@@ -1,0 +1,149 @@
+import SwiftUI
+import os.log
+
+@main
+struct AudioEnvApp: App {
+    @StateObject private var scanner = ScannerService()
+    @StateObject private var backup  = BackupService()
+    @StateObject private var auth    = AuthenticationService()
+    @StateObject private var sampleCollector = SampleCollectionService()
+    @StateObject private var sync    = SyncService()
+    @StateObject private var tempRestore = TempRestoreService()
+
+    private static let logger = Logger(subsystem: "com.audioenv.app", category: "App")
+
+    var body: some Scene {
+        WindowGroup("AudioEnv") {
+            ContentView()
+                .environmentObject(scanner)
+                .environmentObject(backup)
+                .environmentObject(auth)
+                .environmentObject(sampleCollector)
+                .environmentObject(sync)
+                .environmentObject(tempRestore)
+                .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
+                .onAppear {
+                    // Check for orphaned temp restore sessions
+                    tempRestore.checkForOrphanedSessions()
+
+                    // Sync user ID from auth to backup service
+                    backup.userId = auth.currentUser?.id
+
+                    // Wire up manifest sync callback
+                    backup.onManifestUploaded = { manifest in
+                        guard let token = auth.authToken else { return }
+                        Task {
+                            await sync.syncBackupManifest(manifest: manifest, token: token)
+                        }
+                    }
+
+                    // Load S3 config for current user if logged in
+                    if let userId = auth.currentUser?.id {
+                        Self.loadS3ConfigForUser(userId, backup: backup)
+
+                        // Sync S3 config to backend on app launch if configured
+                        if let config = KeychainHelper.shared.loadS3Config(forUser: userId),
+                           let token = auth.authToken {
+                            Task {
+                                await sync.syncS3Config(
+                                    bucket: config.bucket,
+                                    region: config.region,
+                                    accessKey: config.accessKeyId,
+                                    secretKey: config.secretKey,
+                                    token: token
+                                )
+                            }
+                        }
+                    }
+                }
+                .onChange(of: auth.currentUser?.id) { oldUserId, newUserId in
+                    // Update backup service when user logs in/out
+                    backup.userId = newUserId
+
+                    // Clear old user's S3 config from memory when user changes
+                    if let oldId = oldUserId, oldId != newUserId {
+                        backup.configure(destination: nil)
+                    }
+
+                    // Load new user's S3 config from keychain
+                    if let newId = newUserId {
+                        Self.loadS3ConfigForUser(newId, backup: backup)
+                    }
+
+                    // Auto-sync on login if scanner has data
+                    if newUserId != nil, auth.isAuthenticated, let token = auth.authToken,
+                       !scanner.plugins.isEmpty || !scanner.sessions.isEmpty {
+                        Task {
+                            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                        }
+                    }
+                }
+                .onChange(of: scanner.isScanning) { oldValue, newValue in
+                    // Auto-sync when scan completes
+                    if oldValue == true && newValue == false,
+                       auth.isAuthenticated, let token = auth.authToken {
+                        Task {
+                            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                        }
+                    }
+                }
+                .onOpenURL { url in
+                    Self.handleURL(url, scanner: scanner, sync: sync, auth: auth)
+                }
+        }
+        .handlesExternalEvents(matching: Set(arrayLiteral: "*"))
+        .windowStyle(.hiddenTitleBar)
+        .commands {
+            AudioEnvCommands()
+
+            CommandGroup(after: .help) {
+                Button("How to Scan") {
+                    NotificationCenter.default.post(name: .showHowToScan, object: nil)
+                }
+                .keyboardShortcut("?", modifiers: [.command, .shift])
+            }
+        }
+    }
+
+    // MARK: - Private Helpers
+
+    @MainActor
+    private static func loadS3ConfigForUser(_ userId: String, backup: BackupService) {
+        // First attempt migration from old unscoped config
+        KeychainHelper.shared.migrateS3ConfigIfNeeded(forUser: userId)
+
+        // Then load user-scoped config
+        if let config = KeychainHelper.shared.loadS3Config(forUser: userId) {
+            let destination = S3BackupDestination(
+                bucketName: config.bucket,
+                region: config.region,
+                credentials: (config.accessKeyId, config.secretKey)
+            )
+            backup.configure(destination: destination)
+        }
+    }
+
+    @MainActor
+    private static func handleURL(_ url: URL, scanner: ScannerService, sync: SyncService, auth: AuthenticationService) {
+        logger.info("Received URL: \(url)")
+
+        guard url.scheme == "audioenv" else { return }
+
+        switch url.host {
+        case "scan":
+            NotificationCenter.default.post(name: .navigateToSummary, object: nil)
+            if !scanner.isScanning {
+                scanner.scanAll()
+            }
+        case "sync":
+            if auth.isAuthenticated, let token = auth.authToken {
+                Task {
+                    await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                }
+            }
+        default:
+            // "open" or anything else — just bring to front (handled by onOpenURL)
+            break
+        }
+    }
+}
