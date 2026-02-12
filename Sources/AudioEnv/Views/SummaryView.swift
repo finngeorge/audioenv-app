@@ -56,7 +56,7 @@ struct SummaryView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .navigationTitle("Summary")
+        .navigationTitle("")
         .onAppear(perform: updateCachedStats)
         .onChange(of: scanner.plugins.count) { _, _ in updateCachedStats() }
         .onChange(of: scanner.sessions.count) { _, _ in updateCachedStats() }
@@ -140,6 +140,8 @@ struct SummaryView: View {
                 Text(syncStatusText())
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
                 Spacer()
 
@@ -177,6 +179,8 @@ struct SummaryView: View {
                 Text(lastScannedText())
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             if scanner.skippedLargeSessions > 0 {
                 Text("\(scanner.skippedLargeSessions) large session(s) skipped during scan")
@@ -202,7 +206,7 @@ struct SummaryView: View {
     // MARK: – Stats grid
 
     private func statsGrid() -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        LazyVGrid(columns: [GridItem(.flexible(minimum: 120)), GridItem(.flexible(minimum: 120))], spacing: 12) {
             StatCard(title: "Total Plugins",  count: cachedTotalPlugins,
                      icon: "waveform",    color: .indigo, action: {
                 onNavigateToPlugins()
@@ -240,14 +244,17 @@ struct SummaryView: View {
                 let n = cachedPluginFormatCounts[f] ?? 0
                 if n > 0 {
                     HStack {
-                        Circle().fill(colorFor(f)).frame(width: 10)
+                        Circle().fill(colorFor(f)).frame(width: 10, height: 10)
                         Text(f.rawValue)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
                         Spacer()
                         Text("\(n) (\(percent(n, of: cachedTotalPlugins)))")
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
             }
@@ -263,10 +270,17 @@ struct SummaryView: View {
             ForEach(SessionFormat.allCases) { format in
                 let n = cachedFormatCounts[format] ?? 0
                 HStack {
-                    Circle().fill(colorFor(format)).frame(width: 10)
-                    Text(format.rawValue).font(.subheadline).foregroundColor(.secondary)
+                    Circle().fill(colorFor(format)).frame(width: 10, height: 10)
+                    Text(format.rawValue)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
                     Spacer()
-                    Text("\(n) (\(percent(n, of: cachedTotalSessions)))").font(.subheadline).fontWeight(.medium)
+                    Text("\(n) (\(percent(n, of: cachedTotalSessions)))")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
         }
@@ -289,6 +303,8 @@ struct SummaryView: View {
             Text("Backup: \(backup.destination?.displayName ?? "Not configured")")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 
@@ -329,10 +345,13 @@ struct StatCard: View {
                 Text("\(count)")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(color)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)

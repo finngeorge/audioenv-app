@@ -98,38 +98,22 @@ class KeychainHelper {
     private func save(_ value: String, forKey key: String) {
         let data = value.data(using: .utf8)!
 
-        // Create access control to suppress prompts after initial "Always Allow"
-        var error: Unmanaged<CFError>?
-        guard let access = SecAccessControlCreateWithFlags(
-            kCFAllocatorDefault,
-            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,  // Device-specific, more secure
-            [],  // Empty flags = no user interaction after initial grant
-            &error
-        ) else {
-            if let cfError = error?.takeRetainedValue() {
-                logger.error("Failed to create access control: \(cfError)")
-            }
-            return
-        }
+        // Delete any existing item (both legacy and data-protection keychain)
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecAttrService as String: "com.audioenv.app",
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
 
-        // Create query with proper access control to avoid repeated prompts
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
-            kSecAttrService as String: "com.audioenv.app",  // Group items by service
+            kSecAttrService as String: "com.audioenv.app",
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
-        // Delete any existing item
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-            kSecAttrService as String: "com.audioenv.app"
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
-
-        // Add new item
         let status = SecItemAdd(query as CFDictionary, nil)
 
         if status != errSecSuccess {
@@ -142,10 +126,9 @@ class KeychainHelper {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
-            kSecAttrService as String: "com.audioenv.app",  // Must match save
+            kSecAttrService as String: "com.audioenv.app",
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseDataProtectionKeychain as String: true  // Use modern data protection keychain
         ]
 
         var result: AnyObject?
@@ -165,7 +148,7 @@ class KeychainHelper {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
-            kSecAttrService as String: "com.audioenv.app"  // Must match save/load
+            kSecAttrService as String: "com.audioenv.app",
         ]
 
         SecItemDelete(query as CFDictionary)

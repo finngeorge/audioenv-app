@@ -6,32 +6,49 @@ class DAWIconLoader {
 
     private static var iconCache: [String: NSImage] = [:]
 
+    /// The SwiftPM resource bundle — Bundle.module works for `swift run`,
+    /// but for .app bundles the bundle is in Contents/Resources/.
+    private static let resourceBundle: Bundle? = {
+        // 1) Bundle.module works when running via `swift run` (build dir)
+        //    It also works if the build dir still exists after `open .app`
+        let moduleBundle = Bundle.module
+
+        // 2) For .app bundles, also check Contents/Resources/
+        if let resourceURL = Bundle.main.resourceURL {
+            let appBundlePath = resourceURL
+                .appendingPathComponent("AudioEnv_AudioEnv.bundle").path
+            if let appBundle = Bundle(path: appBundlePath) {
+                return appBundle
+            }
+        }
+
+        return moduleBundle
+    }()
+
     /// Load a DAW icon by format name (for project lists)
     static func icon(for format: SessionFormat) -> NSImage? {
         let iconName = iconFileName(for: format)
 
-        // Check cache first
         if let cached = iconCache[iconName] {
             return cached
         }
 
-        // Load from Bundle.main
+        // Try resource bundle, then Bundle.main
+        if let bundle = resourceBundle,
+           let image = loadFromBundle(bundle, iconName: iconName) {
+            iconCache[iconName] = image
+            return image
+        }
         if let image = loadFromBundle(Bundle.main, iconName: iconName) {
             iconCache[iconName] = image
             return image
         }
 
-        // If looking for generic folder icon, use macOS system folder icon
+        // Generic folder icon fallback
         if iconName == "folder" {
-            if #available(macOS 11.0, *) {
-                let folderIcon = NSWorkspace.shared.icon(for: .folder)
-                iconCache[iconName] = folderIcon
-                return folderIcon
-            } else {
-                let folderIcon = NSWorkspace.shared.icon(forFileType: NSFileTypeForHFSTypeCode(OSType(kGenericFolderIcon)))
-                iconCache[iconName] = folderIcon
-                return folderIcon
-            }
+            let folderIcon = NSWorkspace.shared.icon(for: .folder)
+            iconCache[iconName] = folderIcon
+            return folderIcon
         }
 
         return nil
@@ -41,18 +58,22 @@ class DAWIconLoader {
     static func sessionIcon(for format: SessionFormat) -> NSImage? {
         let iconName = sessionIconFileName(for: format)
 
-        // Check cache first
         if let cached = iconCache[iconName] {
             return cached
         }
 
-        // Load from Bundle.main
+        // Try resource bundle, then Bundle.main
+        if let bundle = resourceBundle,
+           let image = loadFromBundle(bundle, iconName: iconName) {
+            iconCache[iconName] = image
+            return image
+        }
         if let image = loadFromBundle(Bundle.main, iconName: iconName) {
             iconCache[iconName] = image
             return image
         }
 
-        // Fallback to regular DAW icon if session-specific not found
+        // Fallback to regular DAW icon
         return icon(for: format)
     }
 

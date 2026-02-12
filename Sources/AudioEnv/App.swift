@@ -41,17 +41,21 @@ struct AudioEnvApp: App {
                     if let userId = auth.currentUser?.id {
                         Self.loadS3ConfigForUser(userId, backup: backup)
 
-                        // Sync S3 config to backend on app launch if configured
-                        if let config = KeychainHelper.shared.loadS3Config(forUser: userId),
-                           let token = auth.authToken {
-                            Task {
-                                await sync.syncS3Config(
-                                    bucket: config.bucket,
-                                    region: config.region,
-                                    accessKey: config.accessKeyId,
-                                    secretKey: config.secretKey,
-                                    token: token
-                                )
+                        if let token = auth.authToken {
+                            if let config = KeychainHelper.shared.loadS3Config(forUser: userId) {
+                                // Push local config to API to keep it in sync
+                                Task {
+                                    await sync.syncS3Config(
+                                        bucket: config.bucket,
+                                        region: config.region,
+                                        accessKey: config.accessKeyId,
+                                        secretKey: config.secretKey,
+                                        token: token
+                                    )
+                                }
+                            } else {
+                                // No local config — try restoring from API
+                                Self.restoreS3ConfigFromAPI(userId: userId, token: token, sync: sync, backup: backup)
                             }
                         }
                     }
@@ -65,9 +69,13 @@ struct AudioEnvApp: App {
                         backup.configure(destination: nil)
                     }
 
-                    // Load new user's S3 config from keychain
+                    // Load new user's S3 config from keychain, or restore from API
                     if let newId = newUserId {
                         Self.loadS3ConfigForUser(newId, backup: backup)
+
+                        if let token = auth.authToken {
+                            Self.restoreS3ConfigFromAPI(userId: newId, token: token, sync: sync, backup: backup)
+                        }
                     }
 
                     // Auto-sync on login if scanner has data
@@ -112,7 +120,7 @@ struct AudioEnvApp: App {
         // First attempt migration from old unscoped config
         KeychainHelper.shared.migrateS3ConfigIfNeeded(forUser: userId)
 
-        // Then load user-scoped config
+        // Then load user-scoped config from keychain
         if let config = KeychainHelper.shared.loadS3Config(forUser: userId) {
             let destination = S3BackupDestination(
                 bucketName: config.bucket,
@@ -120,6 +128,21 @@ struct AudioEnvApp: App {
                 credentials: (config.accessKeyId, config.secretKey)
             )
             backup.configure(destination: destination)
+        }
+    }
+
+    /// Try to restore S3 config from the API if keychain is empty.
+    @MainActor
+    private static func restoreS3ConfigFromAPI(userId: String, token: String, sync: SyncService, backup: BackupService) {
+        // Only fetch from API if local keychain has nothing
+        guard KeychainHelper.shared.loadS3Config(forUser: userId) == nil else { return }
+
+        Task {
+            let restored = await sync.fetchS3Config(token: token, userId: userId)
+            if restored {
+                // Now load from keychain (fetchS3Config saved it there)
+                loadS3ConfigForUser(userId, backup: backup)
+            }
         }
     }
 

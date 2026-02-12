@@ -1,75 +1,296 @@
 {
-  "version": 1,
+  "version": 2,
   "plugins": [
+    {
+      "name": "(REAL) Analog Modular Synths FX1",
+      "manufacturer": "G-Sonique",
+      "category": "instrument library"
+    },
+    {
+      "name": "4030 Retro Compressor",
+      "manufacturer": "McDSP",
+      "img": "9578.jpg"
+    },
     {
       "name": "4Front TruePianos",
       "manufacturer": "4Front Technologies",
-      "img": "27278.jpg"
-    },
-    {
-      "name": "TruePianos",
-      "manufacturer": "4Front Technologies",
-      "img": "281.jpg"
-    },
-    {
-      "name": "Invisible Limiter",
-      "manufacturer": "A.O.M.",
-      "img": "8318.jpg"
-    },
-    {
-      "name": "Live 10 Lite",
-      "manufacturer": "Ableton",
-      "img": "38929163.jpg",
+      "img": "27278.jpg",
       "aliases": [
-        "Live",
-        "Live 10"
+        "TruePianos"
       ]
     },
     {
-      "name": "M4L Granulator II",
-      "manufacturer": "Ableton",
-      "img": "784.jpg",
+      "name": "8-Bit Shaper",
+      "manufacturer": "Xfer Records",
+      "img": "17477.jpg"
+    },
+    {
+      "name": "AAS Player",
+      "manufacturer": "Applied Acoustics Systems",
+      "img": "5179.jpg"
+    },
+    {
+      "name": "Absynth 6",
+      "manufacturer": "Native Instruments",
+      "category": "Synth (Semi Modular)",
+      "img": "114.jpg",
       "aliases": [
-        "M4L Granulator"
+        "Absynth"
       ]
+    },
+    {
+      "name": "AC Box Combo",
+      "manufacturer": "Native Instruments",
+      "img": "22919.jpg"
     },
     {
       "name": "Access Virus TI",
       "manufacturer": "Access",
-      "img": "22215.jpg"
-    },
-    {
-      "name": "Virus TI",
-      "manufacturer": "Access Music",
-      "img": "87.jpg"
-    },
-    {
-      "name": "JP6K",
-      "manufacturer": "Adam Szabo",
-      "img": "18841.jpg"
-    },
-    {
-      "name": "Tune It",
-      "manufacturer": "Aglae Software",
-      "img": "15326.jpg"
-    },
-    {
-      "name": "MPC 2",
-      "manufacturer": "Akai",
-      "img": "7695.jpg",
+      "img": "22215.jpg",
       "aliases": [
-        "MPC"
+        "Virus TI"
       ]
     },
     {
-      "name": "VLINN",
-      "manufacturer": "AlyJamesLab",
-      "img": "defaultavatarhuge.jpg"
+      "name": "ACE",
+      "manufacturer": "u-he",
+      "img": "680.jpg"
+    },
+    {
+      "name": "Addictive Drums 2",
+      "manufacturer": "XLN Audio",
+      "img": "26511.jpg",
+      "aliases": [
+        "Addictive Drums"
+      ]
+    },
+    {
+      "name": "Addictive Keys Complete Collection",
+      "manufacturer": "XLN Audio",
+      "img": "38962957.jpg"
+    },
+    {
+      "name": "Adventure Trance Vol 1 for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Trance presets for Adam Szabo JP6K"
+    },
+    {
+      "name": "Adventure Trance Vol 2 for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Trance presets for Adam Szabo JP6K",
+      "img": "adventure-trance-vol-2-for-adam-szabo-jp6k.jpg"
+    },
+    {
+      "name": "Adventure Trance Vol 3 Soundset for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Trance presets for Adam Szabo JP6K"
+    },
+    {
+      "name": "Adventure Trance Vol 4 for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Trance presets for Adam Szabo JP6K"
+    },
+    {
+      "name": "Adventure Trance Vol 5 for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Trance presets for Adam Szabo JP6K"
+    },
+    {
+      "name": "Adventure Trance Vol 6 for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Trance presets for Adam Szabo JP6K",
+      "img": "adventure-trance-vol-6-for-adam-szabo-jp6k.jpg"
+    },
+    {
+      "name": "AkoustikPiano",
+      "manufacturer": "Native Instruments",
+      "img": "1627.jpg"
+    },
+    {
+      "name": "AkustiX Enhancer",
+      "manufacturer": "Tone2",
+      "img": "973.jpg"
+    },
+    {
+      "name": "Albino 3",
+      "manufacturer": "Rob Papen",
+      "img": "342.jpg",
+      "aliases": [
+        "Albino"
+      ]
+    },
+    {
+      "name": "Alloy",
+      "manufacturer": "iZotope",
+      "img": "224.jpg"
+    },
+    {
+      "name": "Altitude 2 Trance Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Uplifting Trance performances for Roland JP8080",
+      "img": "altitude-2-trance-soundset-for-roland-jp8080-jp8000-je-8086.jpg"
+    },
+    {
+      "name": "Altitude 3 Trance Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Uplifting Trance performances for Roland JP8080"
+    },
+    {
+      "name": "Altitude 4 Trance Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Uplifting Trance performances for Roland JP8080"
+    },
+    {
+      "name": "Altitude Trance Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Uplifting Trance performances for Roland JP8080"
+    },
+    {
+      "name": "Altiverb",
+      "manufacturer": "Audio Ease",
+      "img": "5068.jpg"
+    },
+    {
+      "name": "Ambience",
+      "manufacturer": "Smart Electronix",
+      "category": "Reverb"
+    },
+    {
+      "name": "Amorph",
+      "manufacturer": "Artists in DSP",
+      "category": "Text-to-DSP"
+    },
+    {
+      "name": "AmpBrowser",
+      "manufacturer": "Nice Stomps",
+      "category": "Guitar Amp"
+    },
+    {
+      "name": "AmpliTube",
+      "manufacturer": "IK Multimedia",
+      "img": "819.jpg"
+    },
+    {
+      "name": "ANA",
+      "manufacturer": "Sonic Academy",
+      "img": "977.jpg"
+    },
+    {
+      "name": "Analog Channel",
+      "manufacturer": "McDSP",
+      "img": "17680.jpg"
+    },
+    {
+      "name": "Analog Lab V",
+      "manufacturer": "Arturia",
+      "img": "38958417.jpg",
+      "aliases": [
+        "Analog Lab"
+      ]
+    },
+    {
+      "name": "AnSpec",
+      "manufacturer": "Voxengo",
+      "img": "6136.jpg"
     },
     {
       "name": "Antares Harmony Engine",
       "manufacturer": "Antares",
       "img": "13848.jpg"
+    },
+    {
+      "name": "Antresol",
+      "manufacturer": "D16 Group",
+      "img": "1425922.jpg"
+    },
+    {
+      "name": "Aphex Vintage Exciter",
+      "manufacturer": "Waves",
+      "img": "274.jpg"
+    },
+    {
+      "name": "API-2500",
+      "manufacturer": "Waves",
+      "img": "9181.jpg"
+    },
+    {
+      "name": "API-550",
+      "manufacturer": "Waves",
+      "img": "145.jpg"
+    },
+    {
+      "name": "Apple AULowShelfFilter",
+      "manufacturer": "Apple",
+      "img": "106.jpg"
+    },
+    {
+      "name": "Apple's built-in Multiband Compressor",
+      "manufacturer": "Apple",
+      "img": "137.jpg"
+    },
+    {
+      "name": "ARP ODYSSEY",
+      "manufacturer": "KORG",
+      "img": "38561803.jpg"
+    },
+    {
+      "name": "Artillery II Computer Music Edition",
+      "manufacturer": "Sugar Bytes",
+      "img": "4232.jpg"
+    },
+    {
+      "name": "ASP4816",
+      "manufacturer": "Audient",
+      "category": "Console",
+      "img": "asp4816.jpg"
+    },
+    {
+      "name": "ASP510",
+      "manufacturer": "Audient",
+      "category": "Monitor Controller"
+    },
+    {
+      "name": "ASP800",
+      "manufacturer": "Audient",
+      "category": "Preamp"
+    },
+    {
+      "name": "ASP8024 Heritage Edition",
+      "manufacturer": "Audient",
+      "category": "Console",
+      "aliases": [
+        "ASP8024"
+      ]
+    },
+    {
+      "name": "ASP880",
+      "manufacturer": "Audient",
+      "category": "Preamp"
+    },
+    {
+      "name": "Astra",
+      "manufacturer": "Splice",
+      "img": "38929864.jpg"
+    },
+    {
+      "name": "Attack EP88",
+      "manufacturer": "UVI",
+      "category": "Electric Piano"
+    },
+    {
+      "name": "Audacity",
+      "manufacturer": "Muse Group",
+      "category": "Audio Editor"
+    },
+    {
+      "name": "AudioGridder",
+      "manufacturer": "Andreas Pohl",
+      "category": "DSP Server"
+    },
+    {
+      "name": "AudioMap Mini",
+      "manufacturer": "AudioMap",
+      "category": "Sample Browser"
     },
     {
       "name": "Auto-Tune EFX",
@@ -90,619 +311,9 @@
       ]
     },
     {
-      "name": "CHOIR",
-      "manufacturer": "Antares",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Apple AULowShelfFilter",
-      "manufacturer": "Apple",
-      "img": "106.jpg"
-    },
-    {
-      "name": "Apple's built-in Multiband Compressor",
-      "manufacturer": "Apple",
-      "img": "137.jpg"
-    },
-    {
-      "name": "Matrix Reverb",
-      "manufacturer": "Apple",
-      "img": "17659.jpg"
-    },
-    {
-      "name": "AAS Player",
-      "manufacturer": "Applied Acoustics Systems",
-      "img": "5179.jpg"
-    },
-    {
-      "name": "Chromaphone",
-      "manufacturer": "Applied Acoustics Systems",
-      "img": "3760.jpg"
-    },
-    {
-      "name": "Lounge Lizard EP-4",
-      "manufacturer": "Applied Acoustics Systems",
-      "img": "3728.jpg"
-    },
-    {
-      "name": "Lounge Lizard Session",
-      "manufacturer": "Applied Acoustics Systems",
-      "img": "19866.jpg"
-    },
-    {
-      "name": "Ultra Analog VA-2",
-      "manufacturer": "Applied Acoustics Systems",
-      "img": "903.jpg"
-    },
-    {
-      "name": "Reverb",
-      "manufacturer": "ArtsAcoustic",
-      "img": "7817.jpg"
-    },
-    {
-      "name": "Analog Lab V",
-      "manufacturer": "Arturia",
-      "img": "38958417.jpg",
-      "aliases": [
-        "Analog Lab"
-      ]
-    },
-    {
-      "name": "FX Collection 2",
-      "manufacturer": "Arturia",
-      "img": "39010245.jpg",
-      "aliases": [
-        "FX Collection"
-      ]
-    },
-    {
-      "name": "Pigments 3",
-      "manufacturer": "Arturia",
-      "img": "38677978.jpg",
-      "aliases": [
-        "Pigments"
-      ]
-    },
-    {
-      "name": "V Collection 8",
-      "manufacturer": "Arturia",
-      "img": "38946150.jpg",
-      "aliases": [
-        "V Collection"
-      ]
-    },
-    {
-      "name": "Nuxx",
-      "manufacturer": "Audiaire",
-      "img": "38734119.jpg"
-    },
-    {
-      "name": "Zenith",
-      "manufacturer": "Audiaire",
-      "img": "38786250.jpg"
-    },
-    {
-      "name": "Zone",
-      "manufacturer": "Audiaire",
-      "img": "38651584.jpg"
-    },
-    {
-      "name": "Altiverb",
-      "manufacturer": "Audio Ease",
-      "img": "5068.jpg"
-    },
-    {
-      "name": "MiniSpillage",
-      "manufacturer": "AudioSpillage",
-      "img": "12286.jpg"
-    },
-    {
-      "name": "Bitwig Studio",
-      "manufacturer": "Bitwig",
-      "img": "39084269.jpg"
-    },
-    {
-      "name": "Blue Cat Flanger",
-      "manufacturer": "Blue Cat Audio",
-      "img": "5951.jpg"
-    },
-    {
-      "name": "Chorus",
-      "manufacturer": "Blue Cat Audio",
-      "img": "5945.jpg"
-    },
-    {
-      "name": "FreqAnalyst",
-      "manufacturer": "Blue Cat Audio",
-      "img": "1385.jpg"
-    },
-    {
-      "name": "Phaser 3",
-      "manufacturer": "Blue Cat Audio",
-      "img": "5302.jpg",
-      "aliases": [
-        "Phaser"
-      ]
-    },
-    {
-      "name": "Triple EQ 4",
-      "manufacturer": "Blue Cat Audio",
-      "img": "1395.jpg",
-      "aliases": [
-        "Triple EQ"
-      ]
-    },
-    {
-      "name": "Curve 2",
-      "manufacturer": "Cableguys",
-      "img": "2002.jpg",
-      "aliases": [
-        "Curve"
-      ]
-    },
-    {
-      "name": "FilterShaper 3",
-      "manufacturer": "Cableguys",
-      "img": "8881.jpg",
-      "aliases": [
-        "FilterShaper"
-      ]
-    },
-    {
-      "name": "HalfTime",
-      "manufacturer": "Cableguys",
-      "img": "38555572.jpg"
-    },
-    {
-      "name": "Kickstart",
-      "manufacturer": "Cableguys",
-      "img": "211.jpg"
-    },
-    {
-      "name": "MidiShaper",
-      "manufacturer": "Cableguys",
-      "img": "2160.jpg"
-    },
-    {
-      "name": "PanCake",
-      "manufacturer": "Cableguys",
-      "img": "8378.jpg"
-    },
-    {
-      "name": "VolumeShaper 4",
-      "manufacturer": "Cableguys",
-      "img": "37049.jpg",
-      "aliases": [
-        "VolumeShaper"
-      ]
-    },
-    {
-      "name": "Z3TA+ 2",
-      "manufacturer": "Cakewalk",
-      "img": "785.jpg",
-      "aliases": [
-        "Z3TA+"
-      ]
-    },
-    {
-      "name": "CamelSpace",
-      "manufacturer": "Camel Audio",
-      "img": "1992.jpg"
-    },
-    {
-      "name": "Melodyne",
-      "manufacturer": "Celemony",
-      "img": "55.jpg"
-    },
-    {
-      "name": "The Glue",
-      "manufacturer": "Cytomic",
-      "img": "163.jpg"
-    },
-    {
-      "name": "Antresol",
-      "manufacturer": "D16 Group",
-      "img": "1425922.jpg"
-    },
-    {
-      "name": "D16 FX Bundle",
-      "manufacturer": "D16 Group",
-      "img": "38581431.jpg"
-    },
-    {
-      "name": "Decimort 2",
-      "manufacturer": "D16 Group",
-      "img": "4410517.jpg",
-      "aliases": [
-        "Decimort"
-      ]
-    },
-    {
-      "name": "Devastor 2",
-      "manufacturer": "D16 Group",
-      "img": "3497272.jpg",
-      "aliases": [
-        "Devastor"
-      ]
-    },
-    {
-      "name": "Fazortan",
-      "manufacturer": "D16 Group",
-      "img": "2900.jpg"
-    },
-    {
-      "name": "LuSH-101",
-      "manufacturer": "D16 Group",
-      "img": "1064.jpg"
-    },
-    {
-      "name": "Nithonat",
-      "manufacturer": "D16 Group",
-      "img": "3135.jpg"
-    },
-    {
-      "name": "Phoscyon",
-      "manufacturer": "D16 Group",
-      "img": "2322.jpg"
-    },
-    {
-      "name": "Punchbox",
-      "manufacturer": "D16 Group",
-      "img": "8806418.jpg"
-    },
-    {
-      "name": "Tekturon",
-      "manufacturer": "D16 Group",
-      "img": "38516775.jpg"
-    },
-    {
-      "name": "Toraverb 2",
-      "manufacturer": "D16 Group",
-      "img": "38542705.jpg",
-      "aliases": [
-        "Toraverb"
-      ]
-    },
-    {
-      "name": "Sausage Fattener",
-      "manufacturer": "Dada Life",
-      "img": "187.jpg"
-    },
-    {
-      "name": "MiGiC",
-      "manufacturer": "Dev code",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Tantra",
-      "manufacturer": "Dmitry Sches",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "EMpTy250",
-      "manufacturer": "ERS",
-      "img": "32516.jpg"
-    },
-    {
-      "name": "Play",
-      "manufacturer": "East West",
-      "img": "5056.jpg"
-    },
-    {
-      "name": "Excalibur",
-      "manufacturer": "Exponential Audio",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Pro-DS",
-      "manufacturer": "FabFilter",
-      "img": "1677.jpg"
-    },
-    {
-      "name": "Pro-MB",
-      "manufacturer": "FabFilter",
-      "img": "4428.jpg"
-    },
-    {
-      "name": "Pro-Q",
-      "manufacturer": "FabFilter",
-      "img": "128.jpg"
-    },
-    {
-      "name": "Saturn",
-      "manufacturer": "FabFilter",
-      "img": "245.jpg"
-    },
-    {
-      "name": "Volcano",
-      "manufacturer": "FabFilter",
-      "img": "696.jpg"
-    },
-    {
-      "name": "BitterSweet",
-      "manufacturer": "Flux",
-      "img": "25272.jpg"
-    },
-    {
-      "name": "Stereo Tool",
-      "manufacturer": "Flux",
-      "img": "25273.jpg"
-    },
-    {
-      "name": "Red 2 EQ",
-      "manufacturer": "Focusrite",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Circle\u00b2",
-      "manufacturer": "FutureAudioWorkshop",
-      "img": "944.jpg"
-    },
-    {
-      "name": "Oddity",
-      "manufacturer": "GForce",
-      "img": "721.jpg"
-    },
-    {
-      "name": "W1 Limiter",
-      "manufacturer": "George Yohng",
-      "img": "670.jpg"
-    },
-    {
-      "name": "Fracture",
-      "manufacturer": "Glitchmachines",
-      "img": "2924.jpg"
-    },
-    {
-      "name": "CanOpener Studio",
-      "manufacturer": "Goodhertz",
-      "img": "28482.jpg"
-    },
-    {
-      "name": "Lossy",
-      "manufacturer": "Goodhertz",
-      "img": "31922.jpg"
-    },
-    {
-      "name": "Vulf Compressor",
-      "manufacturer": "Goodhertz",
-      "img": "37417.jpg"
-    },
-    {
-      "name": "Project Time",
-      "manufacturer": "HOFA",
-      "img": "5813.jpg"
-    },
-    {
-      "name": "AmpliTube",
-      "manufacturer": "IK Multimedia",
-      "img": "819.jpg"
-    },
-    {
-      "name": "Philharmonik",
-      "manufacturer": "IK Multimedia",
-      "img": "1012.jpg"
-    },
-    {
-      "name": "T-RackS CS",
-      "manufacturer": "IK Multimedia",
-      "img": "849.jpg"
-    },
-    {
-      "name": "TR Meter",
-      "manufacturer": "IK Multimedia",
-      "img": "852.jpg"
-    },
-    {
-      "name": "Synth1",
-      "manufacturer": "Ichiro Toda",
-      "img": "1832.jpg"
-    },
-    {
-      "name": "The Anvil",
-      "manufacturer": "Ignite Amps",
-      "img": "27164.jpg"
-    },
-    {
-      "name": "Glitch",
-      "manufacturer": "Illformed",
-      "img": "951.jpg"
-    },
-    {
-      "name": "dblue.TapeStop",
-      "manufacturer": "Illformed",
-      "img": "23714.jpg"
-    },
-    {
-      "name": "Harmor",
-      "manufacturer": "Image-Line",
-      "img": "24023.jpg"
-    },
-    {
-      "name": "Minihost Modular",
-      "manufacturer": "Image-Line",
-      "img": "15331.jpg"
-    },
-    {
-      "name": "Morphine",
-      "manufacturer": "Image-Line",
-      "img": "8766.jpg"
-    },
-    {
-      "name": "Newtone",
-      "manufacturer": "Image-Line",
-      "img": "25475.jpg"
-    },
-    {
-      "name": "Sakura",
-      "manufacturer": "Image-Line",
-      "img": "7954.jpg"
-    },
-    {
-      "name": "BazzISM",
-      "manufacturer": "Intelligent Sounds & Music",
-      "img": "332.jpg"
-    },
-    {
-      "name": "ARP ODYSSEY",
-      "manufacturer": "KORG",
-      "img": "38561803.jpg"
-    },
-    {
-      "name": "KORG Collection 3",
-      "manufacturer": "KORG",
-      "img": "39027907.jpg",
-      "aliases": [
-        "KORG Collection"
-      ]
-    },
-    {
-      "name": "M1",
-      "manufacturer": "KORG",
-      "img": "38937107.jpg"
-    },
-    {
-      "name": "MDE-X",
-      "manufacturer": "KORG",
-      "img": "38937113.jpg"
-    },
-    {
-      "name": "MS-20",
-      "manufacturer": "KORG",
-      "img": "38937104.jpg"
-    },
-    {
-      "name": "Mono/Poly",
-      "manufacturer": "KORG",
-      "img": "38937098.jpg"
-    },
-    {
-      "name": "Polysix",
-      "manufacturer": "KORG",
-      "img": "38937101.jpg"
-    },
-    {
-      "name": "Prophecy",
-      "manufacturer": "KORG",
-      "img": "39027913.jpg"
-    },
-    {
-      "name": "TRITON",
-      "manufacturer": "KORG",
-      "img": "38794189.jpg"
-    },
-    {
-      "name": "TRITON Extreme",
-      "manufacturer": "KORG",
-      "img": "39029501.jpg"
-    },
-    {
-      "name": "WAVESTATION",
-      "manufacturer": "KORG",
-      "img": "38937110.jpg"
-    },
-    {
-      "name": "miniKORG 700S",
-      "manufacturer": "KORG",
-      "img": "39027910.jpg"
-    },
-    {
-      "name": "KSHMR Essentials",
-      "manufacturer": "KSHMR",
-      "img": "38814837.jpg"
-    },
-    {
-      "name": "SynthMaster",
-      "manufacturer": "KV331Audio",
-      "img": "6743.jpg"
-    },
-    {
-      "name": "ClipShifter",
-      "manufacturer": "LVC-Audio",
-      "img": "9217.jpg"
-    },
-    {
-      "name": "Sylenth1",
-      "manufacturer": "LennarDigital",
-      "img": "31.jpg"
-    },
-    {
-      "name": "LexConcertHall",
-      "manufacturer": "Lexicon",
-      "img": "1058.jpg"
-    },
-    {
-      "name": "LexHall",
-      "manufacturer": "Lexicon",
-      "img": "1059.jpg"
-    },
-    {
-      "name": "Mathew Lane DrMS v4",
-      "manufacturer": "Mathew Lane",
-      "img": "22050.jpg",
-      "aliases": [
-        "Mathew Lane DrMS"
-      ]
-    },
-    {
-      "name": "Helm",
-      "manufacturer": "Matt Tytel",
-      "img": "1762026.jpg"
-    },
-    {
-      "name": "4030 Retro Compressor",
-      "manufacturer": "McDSP",
-      "img": "9578.jpg"
-    },
-    {
-      "name": "Analog Channel",
-      "manufacturer": "McDSP",
-      "img": "17680.jpg"
-    },
-    {
-      "name": "FilterBank",
-      "manufacturer": "McDSP",
-      "img": "17578.jpg"
-    },
-    {
-      "name": "ML4000",
-      "manufacturer": "McDSP",
-      "img": "9645.jpg"
-    },
-    {
-      "name": "Revolver",
-      "manufacturer": "McDSP",
-      "img": "9668.jpg"
-    },
-    {
-      "name": "WaveShaper",
-      "manufacturer": "MeldaProduction",
-      "img": "8177.jpg"
-    },
-    {
-      "name": "Defacer",
-      "manufacturer": "MetaFunction",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Rift",
-      "manufacturer": "Minimal Audio",
-      "img": "39041405.jpg"
-    },
-    {
-      "name": "AC Box Combo",
-      "manufacturer": "Native Instruments",
-      "img": "22919.jpg"
-    },
-    {
-      "name": "Absynth",
-      "manufacturer": "Native Instruments",
-      "img": "114.jpg"
-    },
-    {
-      "name": "AkoustikPiano",
-      "manufacturer": "Native Instruments",
-      "img": "1627.jpg"
+      "name": "Automap",
+      "manufacturer": "Novation",
+      "category": "Utility"
     },
     {
       "name": "B4 II",
@@ -713,180 +324,154 @@
       ]
     },
     {
+      "name": "Bandy",
+      "manufacturer": "Benedict Roff-Marsh",
+      "category": "Synth (Digital / Subtractive / Additive)"
+    },
+    {
+      "name": "Bass Drop",
+      "manufacturer": "Ablaze",
+      "category": "Synth"
+    },
+    {
+      "name": "Bass Rider",
+      "manufacturer": "Waves",
+      "img": "932.jpg"
+    },
+    {
       "name": "Battery",
       "manufacturer": "Native Instruments",
-      "img": "157.jpg"
+      "img": "157.jpg",
+      "category": "Drum Sampler"
     },
     {
-      "name": "FM8",
-      "manufacturer": "Native Instruments",
-      "img": "130.jpg"
+      "name": "BazzISM",
+      "manufacturer": "Intelligent Sounds & Music",
+      "img": "332.jpg"
     },
     {
-      "name": "Guitar Rig",
-      "manufacturer": "Native Instruments",
-      "img": "549.jpg"
+      "name": "BeatCounter",
+      "manufacturer": "Teragon Audio",
+      "img": "5216.jpg"
     },
     {
-      "name": "Kontakt",
-      "manufacturer": "Native Instruments",
-      "img": "33.jpg"
+      "name": "Beatmaker",
+      "manufacturer": "Splice",
+      "img": "38570321.jpg"
     },
     {
-      "name": "Kore",
-      "manufacturer": "Native Instruments",
-      "img": "4943.jpg"
+      "name": "Beeper",
+      "manufacturer": "Voxengo",
+      "img": "7439.jpg"
     },
     {
-      "name": "Kore Player",
-      "manufacturer": "Native Instruments",
-      "img": "38114.jpg"
+      "name": "Bespoke",
+      "manufacturer": "Ryan Challinor",
+      "category": "Synth"
     },
     {
-      "name": "Maschine 2",
-      "manufacturer": "Native Instruments",
-      "img": "815.jpg",
+      "name": "Bidule",
+      "manufacturer": "Plogue",
+      "category": "Modular Environment"
+    },
+    {
+      "name": "BiFilter2",
+      "manufacturer": "Tone2",
+      "img": "2632.jpg"
+    },
+    {
+      "name": "Big Max Zero",
+      "manufacturer": "Big Man Labs",
+      "category": "Limiter"
+    },
+    {
+      "name": "BigKick",
+      "manufacturer": "Plugin Boutique",
+      "img": "14555.jpg"
+    },
+    {
+      "name": "BitterSweet",
+      "manufacturer": "Flux",
+      "img": "25272.jpg"
+    },
+    {
+      "name": "Bitwig Studio 5",
+      "manufacturer": "Bitwig",
+      "category": "Sequencer / Multitrack",
+      "img": "39084269.jpg",
       "aliases": [
-        "Maschine"
+        "Bitwig Studio"
       ]
     },
     {
-      "name": "Massive",
-      "manufacturer": "Native Instruments",
-      "img": "97.jpg"
+      "name": "Black Hole DSP2 Multi-Effect",
+      "manufacturer": "Erica Synths",
+      "category": "Eurorack"
     },
     {
-      "name": "Pro-53",
-      "manufacturer": "Native Instruments",
-      "img": "1249.jpg"
+      "name": "Blade",
+      "manufacturer": "Rob Papen",
+      "img": "524.jpg"
     },
     {
-      "name": "Reaktor",
-      "manufacturer": "Native Instruments",
-      "img": "112.jpg"
+      "name": "Blip1000",
+      "manufacturer": "WOK",
+      "category": "Step Sequencer"
     },
     {
-      "name": "Replika",
-      "manufacturer": "Native Instruments",
-      "img": "46432.jpg"
+      "name": "Blip2000",
+      "manufacturer": "WOK",
+      "category": "Matrix Sequencer"
     },
     {
-      "name": "Transient Master",
-      "manufacturer": "Native Instruments",
-      "img": "814.jpg"
+      "name": "Bloom Palette Modular",
+      "manufacturer": "Excite Audio",
+      "category": "Sampler"
     },
     {
-      "name": "Frohmage",
-      "manufacturer": "Ohm Force",
-      "img": "1472.jpg"
+      "name": "Blue Cat Flanger",
+      "manufacturer": "Blue Cat Audio",
+      "img": "5951.jpg"
     },
     {
-      "name": "Ohmicide",
-      "manufacturer": "Ohm Force",
-      "img": "269.jpg"
+      "name": "Blue Tubes Compressor CP2S",
+      "manufacturer": "Nomad Factory",
+      "category": "Analog Tube Compressor"
     },
     {
-      "name": "Symptohm PE",
-      "manufacturer": "Ohm Force",
-      "img": "96.jpg"
+      "name": "Boogex",
+      "manufacturer": "Voxengo",
+      "img": "44649.jpg"
     },
     {
-      "name": "MOVEMENT",
-      "manufacturer": "Output",
-      "img": "6089454.jpg"
+      "name": "BoomBlender",
+      "manufacturer": "Quagliardi Pro Audio",
+      "category": "Compressor"
     },
     {
-      "name": "PORTAL",
-      "manufacturer": "Output",
-      "img": "38587013.jpg"
+      "name": "Booster",
+      "manufacturer": "Ablaze",
+      "category": "Dynamics"
     },
     {
-      "name": "THERMAL",
-      "manufacturer": "Output",
-      "img": "38897818.jpg"
+      "name": "BreakTweaker",
+      "manufacturer": "iZotope",
+      "img": "1023.jpg"
     },
     {
-      "name": "PSP 84",
-      "manufacturer": "PSPaudioware",
-      "img": "19228.jpg",
-      "aliases": [
-        "PSP"
-      ]
+      "name": "Bridge",
+      "manufacturer": "Splice",
+      "img": "38971787.jpg"
     },
     {
-      "name": "PianoVerb",
-      "manufacturer": "PSPaudioware",
-      "img": "9172.jpg"
+      "name": "Busboy",
+      "manufacturer": "Carve Audio",
+      "category": "Channel Strip"
     },
     {
-      "name": "VintageMeter",
-      "manufacturer": "PSPaudioware",
-      "img": "22484.jpg"
-    },
-    {
-      "name": "PM-Chainer",
-      "manufacturer": "Plug and Mix",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Chandler GAV19T",
-      "manufacturer": "Plugin Alliance",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "ENGL E646 VS",
-      "manufacturer": "Plugin Alliance",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "ENGL E765 RT",
-      "manufacturer": "Plugin Alliance",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Maag EQ2",
-      "manufacturer": "Plugin Alliance",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Maag EQ4",
-      "manufacturer": "Plugin Alliance",
-      "img": "7958.jpg"
-    },
-    {
-      "name": "Millennia NSEQ-2",
-      "manufacturer": "Plugin Alliance",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Millennia TCL-2",
-      "manufacturer": "Plugin Alliance",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "SPL Bass Ranger",
-      "manufacturer": "Plugin Alliance",
-      "img": "792.jpg"
-    },
-    {
-      "name": "SPL De-Verb",
-      "manufacturer": "Plugin Alliance",
-      "img": "12159.jpg"
-    },
-    {
-      "name": "SPL Free Ranger",
-      "manufacturer": "Plugin Alliance",
-      "img": "797.jpg"
-    },
-    {
-      "name": "SPL Transient Designer",
-      "manufacturer": "Plugin Alliance",
-      "img": "129.jpg"
-    },
-    {
-      "name": "Vertigo VSM-3",
-      "manufacturer": "Plugin Alliance",
-      "img": "defaultavatarhuge.jpg"
+      "name": "Buttr",
+      "manufacturer": "Buttr FX",
+      "category": "Guitar Player"
     },
     {
       "name": "bx_boom!",
@@ -919,111 +504,175 @@
       "img": "6987.jpg"
     },
     {
-      "name": "BigKick",
-      "manufacturer": "Plugin Boutique",
-      "img": "14555.jpg"
+      "name": "C1 Compressor",
+      "manufacturer": "Waves",
+      "img": "13900.jpg"
     },
     {
-      "name": "Studio One 5 Professional",
-      "manufacturer": "PreSonus",
-      "img": "38892279.jpg",
-      "aliases": [
-        "Studio One",
-        "Studio One 5"
-      ]
+      "name": "C1 Gate",
+      "manufacturer": "Waves",
+      "img": "14770.jpg"
     },
     {
-      "name": "Pitchwheel",
-      "manufacturer": "Quickquak",
-      "img": "75.jpg"
+      "name": "C6 Multiband Compressor",
+      "manufacturer": "Waves",
+      "img": "6392.jpg"
     },
     {
-      "name": "Equator2",
-      "manufacturer": "ROLI",
-      "img": "39053110.jpg"
+      "name": "CamelSpace",
+      "manufacturer": "Camel Audio",
+      "img": "1992.jpg"
     },
     {
-      "name": "Spire",
-      "manufacturer": "Reveal Sound",
-      "img": "965.jpg"
+      "name": "CanOpener Studio",
+      "manufacturer": "Goodhertz",
+      "img": "28482.jpg"
     },
     {
-      "name": "Albino 3",
-      "manufacturer": "Rob Papen",
-      "img": "342.jpg",
-      "aliases": [
-        "Albino"
-      ]
+      "name": "Center",
+      "manufacturer": "Waves",
+      "img": "8053.jpg"
     },
     {
-      "name": "Blade",
-      "manufacturer": "Rob Papen",
-      "img": "524.jpg"
-    },
-    {
-      "name": "Predator",
-      "manufacturer": "Rob Papen",
-      "img": "218.jpg"
-    },
-    {
-      "name": "Punch",
-      "manufacturer": "Rob Papen",
-      "img": "220.jpg"
-    },
-    {
-      "name": "SubBoomBass",
-      "manufacturer": "Rob Papen",
-      "img": "61.jpg"
-    },
-    {
-      "name": "Magic AB",
-      "manufacturer": "Sample Magic",
-      "img": "7620.jpg"
-    },
-    {
-      "name": "Transient Shaper",
-      "manufacturer": "Schaack Audio Technologies",
-      "img": "258.jpg"
-    },
-    {
-      "name": "Sample",
-      "manufacturer": "Serato",
-      "img": "36938854.jpg"
-    },
-    {
-      "name": "Spectrum Analyzer",
-      "manufacturer": "Seven Phases",
-      "img": "21906.jpg"
-    },
-    {
-      "name": "Zap",
-      "manufacturer": "Sinevibes",
+      "name": "Chandler GAV19T",
+      "manufacturer": "Plugin Alliance",
       "img": "defaultavatarhuge.jpg"
     },
     {
-      "name": "VerbSuite Classics",
-      "manufacturer": "Slate Digital",
-      "img": "19359457.jpg"
+      "name": "Charlatan",
+      "manufacturer": "BlauKraut Engineering",
+      "category": "Synth (Analogue / Subtractive)"
     },
     {
-      "name": "Virtual Mix Rack",
-      "manufacturer": "Slate Digital",
-      "img": "41319.jpg"
+      "name": "Chip32",
+      "manufacturer": "Sam",
+      "category": "Synth (Wavetable)",
+      "img": "chip32.jpg"
     },
     {
-      "name": "Virtual Mixbuss",
-      "manufacturer": "Slate Digital",
-      "img": "22248.jpg"
+      "name": "CHOIR",
+      "manufacturer": "Antares",
+      "img": "defaultavatarhuge.jpg"
     },
     {
-      "name": "Parallels",
-      "manufacturer": "Softube",
-      "img": "38707879.jpg"
+      "name": "Chorus",
+      "manufacturer": "Blue Cat Audio",
+      "img": "5945.jpg"
     },
     {
-      "name": "Saturation Knob",
-      "manufacturer": "Softube",
-      "img": "46347.jpg"
+      "name": "CHP VTH 4x12 P50",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet",
+      "img": "chp-vth-4x12-p50.jpg"
+    },
+    {
+      "name": "Chromaphone",
+      "manufacturer": "Applied Acoustics Systems",
+      "img": "3760.jpg"
+    },
+    {
+      "name": "Circle²",
+      "manufacturer": "FutureAudioWorkshop",
+      "img": "944.jpg"
+    },
+    {
+      "name": "CLA Bass",
+      "manufacturer": "Waves",
+      "img": "347.jpg"
+    },
+    {
+      "name": "CLA Drums",
+      "manufacturer": "Waves",
+      "img": "275.jpg"
+    },
+    {
+      "name": "CLA Guitars",
+      "manufacturer": "Waves",
+      "img": "9067.jpg"
+    },
+    {
+      "name": "CLA Unplugged",
+      "manufacturer": "Waves",
+      "img": "13906.jpg"
+    },
+    {
+      "name": "CLA Vocals",
+      "manufacturer": "Waves",
+      "img": "14744.jpg"
+    },
+    {
+      "name": "CLA-2A",
+      "manufacturer": "Waves",
+      "img": "14745.jpg"
+    },
+    {
+      "name": "CLA-3A",
+      "manufacturer": "Waves",
+      "img": "15793.jpg"
+    },
+    {
+      "name": "Clap! Hands Up Soundset for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Hands Up presets for Adam Szabo JP6K",
+      "img": "clap-hands-up-soundset-for-adam-szabo-jp6k.jpg"
+    },
+    {
+      "name": "ClipShifter",
+      "manufacturer": "LVC-Audio",
+      "img": "9217.jpg"
+    },
+    {
+      "name": "CMP100",
+      "manufacturer": "Electronik Sound Lab",
+      "category": "Virtual PMC100"
+    },
+    {
+      "name": "Codex",
+      "manufacturer": "Waves",
+      "img": "36170.jpg"
+    },
+    {
+      "name": "Comp4",
+      "manufacturer": "Plektron",
+      "category": "Dynamics (Compressor / Limiter)"
+    },
+    {
+      "name": "Comp760",
+      "manufacturer": "SKnote",
+      "category": "Dynamics",
+      "img": "comp760.jpg"
+    },
+    {
+      "name": "Cozy Piano",
+      "manufacturer": "SampleScience",
+      "category": "Piano"
+    },
+    {
+      "name": "CP2V Vintage Compressor",
+      "manufacturer": "Mellowmuse",
+      "category": "Dynamics (Compressor / Limiter)"
+    },
+    {
+      "name": "CP35 Attenuators",
+      "manufacturer": "Behringer",
+      "category": "Eurorack",
+      "img": "cp35-attenuators.jpg"
+    },
+    {
+      "name": "CP3A-M Mixer",
+      "manufacturer": "Behringer",
+      "category": "Eurorack",
+      "img": "cp3a-m-mixer.jpg"
+    },
+    {
+      "name": "CP3V Vintage Compressor",
+      "manufacturer": "Mellowmuse",
+      "category": "Dynamics (Compressor / Limiter)"
+    },
+    {
+      "name": "Craze",
+      "manufacturer": "DAWJunkie",
+      "category": "Phaser"
     },
     {
       "name": "Creative Filter",
@@ -1031,9 +680,699 @@
       "img": "5836.jpg"
     },
     {
-      "name": "ANA",
-      "manufacturer": "Sonic Academy",
-      "img": "977.jpg"
+      "name": "Crystal",
+      "manufacturer": "Green Oak",
+      "category": "Semi-Modular Synth"
+    },
+    {
+      "name": "Crystallizer",
+      "manufacturer": "Soundtoys",
+      "img": "331.jpg"
+    },
+    {
+      "name": "Cthulhu",
+      "manufacturer": "Xfer Records",
+      "img": "918.jpg"
+    },
+    {
+      "name": "Cubase Pro 15",
+      "manufacturer": "Steinberg",
+      "category": "Sequencer / Multitrack"
+    },
+    {
+      "name": "CUBEDRONE (CD-24 GROOVEBOX)",
+      "manufacturer": "digieuro",
+      "category": "Groovebox"
+    },
+    {
+      "name": "Curve 2",
+      "manufacturer": "Cableguys",
+      "img": "2002.jpg",
+      "aliases": [
+        "Curve"
+      ]
+    },
+    {
+      "name": "D16 FX Bundle",
+      "manufacturer": "D16 Group",
+      "img": "38581431.jpg"
+    },
+    {
+      "name": "DalEQ Core",
+      "manufacturer": "NIVIEM",
+      "category": "Equalizer"
+    },
+    {
+      "name": "DawProjectPilot",
+      "manufacturer": "pdkmusic",
+      "category": "Project Manager"
+    },
+    {
+      "name": "dblue.TapeStop",
+      "manufacturer": "Illformed",
+      "img": "23714.jpg"
+    },
+    {
+      "name": "dbx 160",
+      "manufacturer": "Universal Audio",
+      "img": "222.jpg",
+      "aliases": [
+        "dbx"
+      ]
+    },
+    {
+      "name": "DC1A",
+      "manufacturer": "Klanghelm",
+      "category": "Compressor"
+    },
+    {
+      "name": "Decapitator",
+      "manufacturer": "Soundtoys",
+      "img": "170.jpg"
+    },
+    {
+      "name": "Decimort 2",
+      "manufacturer": "D16 Group",
+      "img": "4410517.jpg",
+      "aliases": [
+        "Decimort"
+      ]
+    },
+    {
+      "name": "DeEsser",
+      "manufacturer": "Waves",
+      "img": "263.jpg"
+    },
+    {
+      "name": "Defacer",
+      "manufacturer": "MetaFunction",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Delay Rings 8bit",
+      "manufacturer": "W. A. Production",
+      "category": "Delay"
+    },
+    {
+      "name": "DeltaModulator",
+      "manufacturer": "Xfer Records",
+      "img": "16381.jpg"
+    },
+    {
+      "name": "DephazEAudi0",
+      "manufacturer": "DephazEAudi0",
+      "category": "Effect Processor"
+    },
+    {
+      "name": "Devastor 2",
+      "manufacturer": "D16 Group",
+      "img": "3497272.jpg",
+      "aliases": [
+        "Devastor"
+      ]
+    },
+    {
+      "name": "Devil-Loc",
+      "manufacturer": "Soundtoys",
+      "img": "4565.jpg"
+    },
+    {
+      "name": "Dexed",
+      "manufacturer": "Digital Suburban",
+      "category": "FM"
+    },
+    {
+      "name": "Dialogue Extractor",
+      "manufacturer": "MyAudioFactory",
+      "category": "Dialogue Cleanup"
+    },
+    {
+      "name": "Dimension Expander",
+      "manufacturer": "Xfer Records",
+      "img": "1524.jpg"
+    },
+    {
+      "name": "Diva",
+      "manufacturer": "u-he",
+      "img": "827.jpg",
+      "category": "Synth"
+    },
+    {
+      "name": "DJMFilter",
+      "manufacturer": "Xfer Records",
+      "img": "5131.jpg"
+    },
+    {
+      "name": "Doom Voice Taunt Mod Generator",
+      "manufacturer": "Reactorcore",
+      "category": "Software"
+    },
+    {
+      "name": "DragOn",
+      "manufacturer": "GGM Media",
+      "category": "Sampler"
+    },
+    {
+      "name": "Dream Ambient Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Ambient presets for Roland JP8080"
+    },
+    {
+      "name": "DRP2a mkII - Dynamic Range Processor",
+      "manufacturer": "Raising Jake Studios",
+      "category": "Dynamic Processor"
+    },
+    {
+      "name": "DSP56300 Emulator",
+      "manufacturer": "The Usual Suspects",
+      "category": "DSP56300 Emulator"
+    },
+    {
+      "name": "DualComp",
+      "manufacturer": "Teragon Audio",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "DUNE 3",
+      "manufacturer": "Synapse Audio",
+      "category": "Synth (Analogue / Subtractive)",
+      "img": "695.jpg",
+      "aliases": [
+        "Dune"
+      ]
+    },
+    {
+      "name": "Duoflux by SounDevice Digital",
+      "manufacturer": "United Plugins",
+      "category": "Modulation"
+    },
+    {
+      "name": "EchoBoy",
+      "manufacturer": "Soundtoys",
+      "img": "328.jpg"
+    },
+    {
+      "name": "Echoe",
+      "manufacturer": "Echoe",
+      "category": "File Sharing"
+    },
+    {
+      "name": "Efektor CP3603 Compressor",
+      "manufacturer": "Kuassa",
+      "category": "MP Guitar Effects",
+      "img": "efektor-cp3603-compressor.jpg"
+    },
+    {
+      "name": "Effectrix",
+      "manufacturer": "Sugar Bytes",
+      "img": "832.jpg"
+    },
+    {
+      "name": "Egoist",
+      "manufacturer": "Sugar Bytes",
+      "img": "21091.jpg"
+    },
+    {
+      "name": "EL7 FATSO",
+      "manufacturer": "Universal Audio",
+      "img": "80.jpg"
+    },
+    {
+      "name": "Electra2",
+      "manufacturer": "Tone2",
+      "img": "722.jpg"
+    },
+    {
+      "name": "Element",
+      "manufacturer": "Kushview",
+      "category": "Plug-in Chainer / Rack"
+    },
+    {
+      "name": "Emissary",
+      "manufacturer": "Ignite Amps",
+      "category": "Amp Simulator"
+    },
+    {
+      "name": "EMpTy250",
+      "manufacturer": "ERS",
+      "img": "32516.jpg"
+    },
+    {
+      "name": "ENGL E646 VS",
+      "manufacturer": "Plugin Alliance",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "ENGL E765 RT",
+      "manufacturer": "Plugin Alliance",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Enigma",
+      "manufacturer": "Waves",
+      "img": "6445.jpg"
+    },
+    {
+      "name": "EP635 Fireball IR",
+      "manufacturer": "ENGL",
+      "category": "Amp Modeling Stomp Box"
+    },
+    {
+      "name": "EQP8",
+      "manufacturer": "Tek'it Audio",
+      "category": "EQ"
+    },
+    {
+      "name": "Equator2",
+      "manufacturer": "ROLI",
+      "img": "39053110.jpg"
+    },
+    {
+      "name": "EVE-MP5 Equalizer",
+      "manufacturer": "Kuassa",
+      "category": "Equalizer",
+      "img": "eve-mp5-equalizer.jpg"
+    },
+    {
+      "name": "Excalibur",
+      "manufacturer": "Exponential Audio",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "EZdrummer",
+      "manufacturer": "Toontrack",
+      "img": "4935.jpg"
+    },
+    {
+      "name": "EZkeys",
+      "manufacturer": "Toontrack",
+      "img": "6828.jpg"
+    },
+    {
+      "name": "Fazortan",
+      "manufacturer": "D16 Group",
+      "img": "2900.jpg"
+    },
+    {
+      "name": "Fearsome Drum n Bass Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Drum n Bass performances for Roland JP8080"
+    },
+    {
+      "name": "Field Control",
+      "manufacturer": "half light",
+      "category": "Delay"
+    },
+    {
+      "name": "FilterBank",
+      "manufacturer": "McDSP",
+      "img": "17578.jpg"
+    },
+    {
+      "name": "FilterFreak",
+      "manufacturer": "Soundtoys",
+      "img": "532.jpg"
+    },
+    {
+      "name": "FilterShaper 3",
+      "manufacturer": "Cableguys",
+      "img": "8881.jpg",
+      "aliases": [
+        "FilterShaper"
+      ]
+    },
+    {
+      "name": "Fink - Signatures",
+      "manufacturer": "Spitfire Audio",
+      "category": "Acoustic Guitar"
+    },
+    {
+      "name": "First Reflection",
+      "manufacturer": "zazz",
+      "category": "Delay"
+    },
+    {
+      "name": "FL Studio All Plugins Edition",
+      "manufacturer": "Image Line",
+      "category": "Virtual Studio"
+    },
+    {
+      "name": "Floof Station",
+      "manufacturer": "Floof Audio",
+      "category": "Plugin stacker"
+    },
+    {
+      "name": "Fluid Chords 2",
+      "manufacturer": "Pitch Innovations",
+      "category": "MPE FX / Utility"
+    },
+    {
+      "name": "Fluxion",
+      "manufacturer": "Vessel Audio",
+      "category": "Multiple Synths"
+    },
+    {
+      "name": "FM8",
+      "manufacturer": "Native Instruments",
+      "img": "130.jpg",
+      "category": "Synth (FM)"
+    },
+    {
+      "name": "Forbidden Gems",
+      "manufacturer": "Tone Sculptor Audio",
+      "category": "Sample Based Instrument"
+    },
+    {
+      "name": "Formanta P432",
+      "manufacturer": "UltraRare",
+      "category": "ROMpler",
+      "img": "formanta-p432.jpg"
+    },
+    {
+      "name": "Fracture",
+      "manufacturer": "Glitchmachines",
+      "img": "2924.jpg"
+    },
+    {
+      "name": "Free Effects",
+      "manufacturer": "Dead Duck Software",
+      "category": "Effects Suite"
+    },
+    {
+      "name": "freemp3_chungVST",
+      "manufacturer": "NGUYEN.Chung",
+      "category": "MP3 Player",
+      "aliases": [
+        "freemp3_chung"
+      ]
+    },
+    {
+      "name": "FreePiano4",
+      "manufacturer": "RDGAudio",
+      "category": "Piano"
+    },
+    {
+      "name": "FreqAnalyst",
+      "manufacturer": "Blue Cat Audio",
+      "img": "1385.jpg"
+    },
+    {
+      "name": "Frohmage",
+      "manufacturer": "Ohm Force",
+      "img": "1472.jpg"
+    },
+    {
+      "name": "Funky House Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "House performances for Roland JP8080",
+      "img": "funky-house-soundset-for-roland-jp8080-jp8000-je-8086.jpg"
+    },
+    {
+      "name": "Future MB",
+      "manufacturer": "Three-Body Technology",
+      "category": "Multiband Dynamics Processor"
+    },
+    {
+      "name": "FX Collection 2",
+      "manufacturer": "Arturia",
+      "img": "39010245.jpg",
+      "aliases": [
+        "FX Collection"
+      ]
+    },
+    {
+      "name": "G Piano",
+      "manufacturer": "Destronicx",
+      "category": "Piano Harmonics"
+    },
+    {
+      "name": "GComp2",
+      "manufacturer": "GVST",
+      "category": "Dynamics (Compressor / Limiter)"
+    },
+    {
+      "name": "GEM Comp670 Compressor Limiter",
+      "manufacturer": "Overloud",
+      "category": "Dynamics (Compressor / Limiter)"
+    },
+    {
+      "name": "GEM COMP76",
+      "manufacturer": "Overloud",
+      "category": "Compressor",
+      "img": "gem-comp76.jpg"
+    },
+    {
+      "name": "Gladiator2",
+      "manufacturer": "Tone2",
+      "img": "401.jpg"
+    },
+    {
+      "name": "GlissEQ",
+      "manufacturer": "Voxengo",
+      "img": "15596.jpg"
+    },
+    {
+      "name": "Glitch",
+      "manufacturer": "Illformed",
+      "img": "951.jpg",
+      "category": "FSU"
+    },
+    {
+      "name": "GrandThrift autoHarp²",
+      "manufacturer": "Sound Dust",
+      "category": "Sampled Autoharp and Grand Piano"
+    },
+    {
+      "name": "Grip",
+      "manufacturer": "Adam Baker",
+      "category": "Ableton Live Controller"
+    },
+    {
+      "name": "GTR Amp",
+      "manufacturer": "Waves",
+      "img": "246.jpg"
+    },
+    {
+      "name": "Guitar Rig",
+      "manufacturer": "Native Instruments",
+      "img": "549.jpg"
+    },
+    {
+      "name": "Guitarist",
+      "manufacturer": "Sugar Bytes",
+      "img": "33201.jpg"
+    },
+    {
+      "name": "Guitarix",
+      "manufacturer": "brummer",
+      "category": "Amp Simulator"
+    },
+    {
+      "name": "H-Delay",
+      "manufacturer": "Waves",
+      "img": "10715.jpg"
+    },
+    {
+      "name": "H-Reverb",
+      "manufacturer": "Waves",
+      "img": "789856.jpg"
+    },
+    {
+      "name": "HalfTime",
+      "manufacturer": "Cableguys",
+      "img": "38555572.jpg"
+    },
+    {
+      "name": "Halfwave Saturator",
+      "manufacturer": "zazz",
+      "category": "Saturation"
+    },
+    {
+      "name": "HarmonEQ",
+      "manufacturer": "Rave Generation",
+      "category": "EQ"
+    },
+    {
+      "name": "Harmonic Saturator",
+      "manufacturer": "Immanent Audio",
+      "category": "Saturation"
+    },
+    {
+      "name": "Harmor",
+      "manufacturer": "Image-Line",
+      "img": "24023.jpg"
+    },
+    {
+      "name": "Havoc Hardstyle Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Hardstyle presets for Roland JP8080"
+    },
+    {
+      "name": "Helm",
+      "manufacturer": "Matt Tytel",
+      "img": "1762026.jpg",
+      "category": "Synth (Subtractive)"
+    },
+    {
+      "name": "Higher Psytrance Soundset for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Psytrance presets for Adam Szabo JP6K"
+    },
+    {
+      "name": "Hive",
+      "manufacturer": "u-he",
+      "img": "46538.jpg"
+    },
+    {
+      "name": "HY-TP2",
+      "manufacturer": "HY-Plugins",
+      "category": "Tremolo",
+      "img": "hy-tp2.jpg"
+    },
+    {
+      "name": "Hz",
+      "manufacturer": "Cannery Coders",
+      "category": "DAW/IDE"
+    },
+    {
+      "name": "Icarus",
+      "manufacturer": "Tone2",
+      "img": "6753562.jpg"
+    },
+    {
+      "name": "iDrum",
+      "manufacturer": "iZotope",
+      "img": "15188.jpg"
+    },
+    {
+      "name": "Imager",
+      "manufacturer": "iZotope",
+      "img": "38540134.jpg"
+    },
+    {
+      "name": "Independence Free",
+      "manufacturer": "MAGIX",
+      "category": "Sampler/Sample Player"
+    },
+    {
+      "name": "inShaper",
+      "manufacturer": "Sound Particles",
+      "category": "Distortion"
+    },
+    {
+      "name": "Insight 2",
+      "manufacturer": "iZotope",
+      "img": "1403.jpg",
+      "aliases": [
+        "Insight"
+      ]
+    },
+    {
+      "name": "InTune Chorus",
+      "manufacturer": "Antelope Audio",
+      "category": "Pitch Correction / Vocal Multiplier"
+    },
+    {
+      "name": "Invisible Limiter",
+      "manufacturer": "A.O.M.",
+      "img": "8318.jpg"
+    },
+    {
+      "name": "IR-L Convolution Reverb",
+      "manufacturer": "Waves",
+      "img": "7803.jpg"
+    },
+    {
+      "name": "Iris",
+      "manufacturer": "iZotope",
+      "img": "205.jpg"
+    },
+    {
+      "name": "J37",
+      "manufacturer": "Waves",
+      "img": "16094.jpg"
+    },
+    {
+      "name": "Jensen Vintage Alnico P10Q",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet",
+      "img": "jensen-vintage-alnico-p10q.jpg"
+    },
+    {
+      "name": "Jensen Vintage Alnico P10R-F",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet",
+      "img": "jensen-vintage-alnico-p10r-f.jpg"
+    },
+    {
+      "name": "Jensen Vintage Alnico P12N",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet",
+      "img": "jensen-vintage-alnico-p12n.jpg"
+    },
+    {
+      "name": "Jensen Vintage Alnico P12Q",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet"
+    },
+    {
+      "name": "Jensen Vintage Alnico P12R",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet",
+      "img": "jensen-vintage-alnico-p12r.jpg"
+    },
+    {
+      "name": "Jensen Vintage Alnico P15N",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet"
+    },
+    {
+      "name": "Jensen Vintage Alnico P8R",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet"
+    },
+    {
+      "name": "Jensen Vintage P10R",
+      "manufacturer": "Overloud",
+      "category": "IR Library for TH-U SuperCabinet",
+      "img": "jensen-vintage-p10r.jpg"
+    },
+    {
+      "name": "JJP Strings & Keys",
+      "manufacturer": "Waves",
+      "img": "12184.jpg"
+    },
+    {
+      "name": "JJP Vocals",
+      "manufacturer": "Waves",
+      "img": "19048.jpg"
+    },
+    {
+      "name": "JP6K",
+      "manufacturer": "Adam Szabo",
+      "img": "18841.jpg",
+      "category": "Synth (Analogue / Subtractive)"
+    },
+    {
+      "name": "JP7A",
+      "manufacturer": "GTG Synths",
+      "category": "Synth (Analogue / Subtractive)",
+      "img": "jp7a.jpg"
+    },
+    {
+      "name": "Just 4 Kicks",
+      "manufacturer": "Just 4 Noise",
+      "category": "Kick Drum Generator"
+    },
+    {
+      "name": "KeyPad MIDI Controller",
+      "manufacturer": "discoDSP",
+      "category": "MIDI Controller"
+    },
+    {
+      "name": "Kick 101",
+      "manufacturer": "MIA Laboratories",
+      "category": "Kick Drum Synth"
     },
     {
       "name": "Kick 2",
@@ -1049,127 +1388,177 @@
       "img": "523.jpg"
     },
     {
-      "name": "Synplant",
-      "manufacturer": "Sonic Charge",
-      "img": "666.jpg"
+      "name": "Kickstart",
+      "manufacturer": "Cableguys",
+      "img": "211.jpg"
     },
     {
-      "name": "Piano One",
-      "manufacturer": "Sound Magic",
-      "img": "5167.jpg"
+      "name": "Komplete 15 Standard",
+      "manufacturer": "Native Instruments",
+      "category": "Various"
     },
     {
-      "name": "Crystallizer",
-      "manufacturer": "SoundToys",
-      "img": "331.jpg"
+      "name": "Kontakt",
+      "manufacturer": "Native Instruments",
+      "img": "33.jpg",
+      "category": "Sampler/Sample Player"
     },
     {
-      "name": "Decapitator",
-      "manufacturer": "SoundToys",
-      "img": "170.jpg"
+      "name": "Kore",
+      "manufacturer": "Native Instruments",
+      "img": "4943.jpg"
     },
     {
-      "name": "Devil-Loc",
-      "manufacturer": "SoundToys",
-      "img": "4565.jpg"
+      "name": "Kore Player",
+      "manufacturer": "Native Instruments",
+      "img": "38114.jpg"
     },
     {
-      "name": "EchoBoy",
-      "manufacturer": "SoundToys",
-      "img": "328.jpg"
+      "name": "KORG Collection 3",
+      "manufacturer": "KORG",
+      "img": "39027907.jpg",
+      "aliases": [
+        "KORG Collection"
+      ]
     },
     {
-      "name": "FilterFreak",
-      "manufacturer": "SoundToys",
-      "img": "532.jpg"
+      "name": "Korg Wavestate Selection Top10",
+      "manufacturer": "App Sound",
+      "category": "Sound Pack for Wavestate"
+    },
+    {
+      "name": "Kramer PIE",
+      "manufacturer": "Waves",
+      "img": "14838.jpg"
+    },
+    {
+      "name": "Kramer Tape",
+      "manufacturer": "Waves",
+      "img": "886.jpg"
+    },
+    {
+      "name": "KrystalClip",
+      "manufacturer": "Krystal Dynamics",
+      "category": "Clipper"
+    },
+    {
+      "name": "KrystalComp",
+      "manufacturer": "Krystal Dynamics",
+      "category": "Compressor"
+    },
+    {
+      "name": "KrystalField",
+      "manufacturer": "Krystal Dynamics",
+      "category": "Compressor"
+    },
+    {
+      "name": "KSHMR Essentials",
+      "manufacturer": "KSHMR",
+      "img": "38814837.jpg"
+    },
+    {
+      "name": "L1 Limiter",
+      "manufacturer": "Waves",
+      "img": "12135.jpg"
+    },
+    {
+      "name": "L3 Multimaximizer",
+      "manufacturer": "Waves",
+      "img": "7816.jpg"
+    },
+    {
+      "name": "Latency Delay",
+      "manufacturer": "Voxengo",
+      "img": "7441.jpg"
+    },
+    {
+      "name": "LaunchCodes",
+      "manufacturer": "Armory",
+      "category": "Synth"
+    },
+    {
+      "name": "LeadOff Jr",
+      "manufacturer": "DAWJunkie",
+      "category": "Synth"
+    },
+    {
+      "name": "Leveling Tool",
+      "manufacturer": "AdHd Audio Tools",
+      "category": "Dynamics (Compressor / Limiter)"
+    },
+    {
+      "name": "LexConcertHall",
+      "manufacturer": "Lexicon",
+      "img": "1058.jpg"
+    },
+    {
+      "name": "LexHall",
+      "manufacturer": "Lexicon",
+      "img": "1059.jpg"
+    },
+    {
+      "name": "Lexicon 224",
+      "manufacturer": "Universal Audio",
+      "img": "854.jpg",
+      "aliases": [
+        "Lexicon"
+      ]
+    },
+    {
+      "name": "Lexicon PSP42",
+      "manufacturer": "PSPaudioware",
+      "category": "Delay / Echo",
+      "img": "lexicon-psp42.jpg"
+    },
+    {
+      "name": "LFOTool",
+      "manufacturer": "Xfer Records",
+      "img": "265.jpg"
+    },
+    {
+      "name": "Lifter",
+      "manufacturer": "Ablaze",
+      "category": "Vocal Enhancer"
+    },
+    {
+      "name": "Lil Miss Doubler",
+      "manufacturer": "DAWJunkie",
+      "category": "Vocal Doubler"
+    },
+    {
+      "name": "LiquidRhythm",
+      "manufacturer": "WaveDNA",
+      "img": "7424.jpg"
     },
     {
       "name": "Little AlterBoy",
-      "manufacturer": "SoundToys",
+      "manufacturer": "Soundtoys",
       "img": "58066.jpg"
     },
     {
       "name": "Little Radiator",
-      "manufacturer": "SoundToys",
+      "manufacturer": "Soundtoys",
       "img": "678.jpg"
     },
     {
-      "name": "MicroShift",
-      "manufacturer": "SoundToys",
-      "img": "13608.jpg"
-    },
-    {
-      "name": "PanMan",
-      "manufacturer": "SoundToys",
-      "img": "233.jpg"
-    },
-    {
-      "name": "Tremolator",
-      "manufacturer": "SoundToys",
-      "img": "236.jpg"
-    },
-    {
-      "name": "Omnisphere",
-      "manufacturer": "Spectrasonics",
-      "img": "151.jpg"
-    },
-    {
-      "name": "Stylus RMX",
-      "manufacturer": "Spectrasonics",
-      "img": "2458.jpg"
-    },
-    {
-      "name": "Trilian",
-      "manufacturer": "Spectrasonics",
-      "img": "186.jpg"
-    },
-    {
-      "name": "Astra",
-      "manufacturer": "Splice",
-      "img": "38929864.jpg"
-    },
-    {
-      "name": "Beatmaker",
-      "manufacturer": "Splice",
-      "img": "38570321.jpg"
-    },
-    {
-      "name": "Bridge",
-      "manufacturer": "Splice",
-      "img": "38971787.jpg"
-    },
-    {
-      "name": "Virtual Guitarist 2",
-      "manufacturer": "Steinberg",
-      "img": "defaultavatarhuge.jpg",
+      "name": "Live 10 Lite",
+      "manufacturer": "Ableton",
+      "img": "live-10-lite.jpg",
       "aliases": [
-        "Virtual Guitarist"
-      ]
+        "Live",
+        "Live 10"
+      ],
+      "category": "Sequencer / Multitrack"
     },
     {
-      "name": "OvO RnB",
-      "manufacturer": "Studiolinked VST",
-      "img": "defaultavatarhuge.jpg"
+      "name": "LoAir",
+      "manufacturer": "Waves",
+      "img": "14164.jpg"
     },
     {
-      "name": "Artillery II Computer Music Edition",
-      "manufacturer": "Sugar Bytes",
-      "img": "4232.jpg"
-    },
-    {
-      "name": "Effectrix",
-      "manufacturer": "Sugar Bytes",
-      "img": "832.jpg"
-    },
-    {
-      "name": "Egoist",
-      "manufacturer": "Sugar Bytes",
-      "img": "21091.jpg"
-    },
-    {
-      "name": "Guitarist",
-      "manufacturer": "Sugar Bytes",
-      "img": "33201.jpg"
+      "name": "Logic Pro",
+      "manufacturer": "Apple",
+      "category": "Sequencer / Multitrack"
     },
     {
       "name": "Looperator",
@@ -1177,34 +1566,1314 @@
       "img": "41344.jpg"
     },
     {
+      "name": "Lossy",
+      "manufacturer": "Goodhertz",
+      "img": "31922.jpg"
+    },
+    {
+      "name": "LoudMax",
+      "manufacturer": "Thomas Mundt",
+      "img": "24164.jpg",
+      "category": "Dynamics (Compressor / Limiter)"
+    },
+    {
+      "name": "Lounge Lizard EP-4",
+      "manufacturer": "Applied Acoustics Systems",
+      "img": "3728.jpg"
+    },
+    {
+      "name": "Lounge Lizard Session",
+      "manufacturer": "Applied Acoustics Systems",
+      "img": "19866.jpg"
+    },
+    {
+      "name": "LP10",
+      "manufacturer": "DDMF",
+      "category": "EQ",
+      "img": "lp10.jpg"
+    },
+    {
+      "name": "LP10 CM",
+      "manufacturer": "Computer Music",
+      "category": "Equalizer"
+    },
+    {
+      "name": "Lucid Mastering Limiter",
+      "manufacturer": "Analog Legends",
+      "category": "Mastering Limiter"
+    },
+    {
+      "name": "Luftikus",
+      "manufacturer": "lkjb",
+      "img": "981.jpg",
+      "category": "EQ"
+    },
+    {
+      "name": "LuSH-101",
+      "manufacturer": "D16 Group",
+      "img": "1064.jpg"
+    },
+    {
+      "name": "M-EQ",
+      "manufacturer": "Techivation",
+      "category": "EQ"
+    },
+    {
+      "name": "M1",
+      "manufacturer": "KORG",
+      "img": "38937107.jpg"
+    },
+    {
+      "name": "M4L Granulator II",
+      "manufacturer": "Ableton",
+      "img": "784.jpg",
+      "aliases": [
+        "M4L Granulator"
+      ]
+    },
+    {
+      "name": "Maag EQ2",
+      "manufacturer": "Plugin Alliance",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Maag EQ4",
+      "manufacturer": "Plugin Alliance",
+      "img": "7958.jpg"
+    },
+    {
+      "name": "Magic AB",
+      "manufacturer": "Sample Magic",
+      "img": "7620.jpg"
+    },
+    {
+      "name": "MagniTune",
+      "manufacturer": "Sonus Immersivus",
+      "category": "Room Correction"
+    },
+    {
+      "name": "Manny Marroquin Reverb",
+      "manufacturer": "Waves",
+      "img": "12107.jpg"
+    },
+    {
+      "name": "Manny Marroquin Triple D",
+      "manufacturer": "Waves",
+      "img": "9129.jpg"
+    },
+    {
+      "name": "Marvel GEQ",
+      "manufacturer": "Voxengo",
+      "img": "12713.jpg"
+    },
+    {
+      "name": "Maschine 2",
+      "manufacturer": "Native Instruments",
+      "img": "815.jpg",
+      "aliases": [
+        "Maschine"
+      ],
+      "category": "Groove Box"
+    },
+    {
+      "name": "Maserati DRM",
+      "manufacturer": "Waves",
+      "img": "1017.jpg"
+    },
+    {
+      "name": "Maserati VX1",
+      "manufacturer": "Waves",
+      "img": "358.jpg"
+    },
+    {
+      "name": "Massive",
+      "manufacturer": "Native Instruments",
+      "img": "97.jpg",
+      "category": "Synth (Hybrid)"
+    },
+    {
+      "name": "Mathew Lane DrMS v4",
+      "manufacturer": "Mathew Lane",
+      "img": "22050.jpg",
+      "aliases": [
+        "Mathew Lane DrMS"
+      ]
+    },
+    {
+      "name": "Matrix Reverb",
+      "manufacturer": "Apple",
+      "img": "17659.jpg"
+    },
+    {
+      "name": "MaxxBass",
+      "manufacturer": "Waves",
+      "img": "346.jpg"
+    },
+    {
+      "name": "MDE-X",
+      "manufacturer": "KORG",
+      "img": "38937113.jpg"
+    },
+    {
+      "name": "Melodyne",
+      "manufacturer": "Celemony",
+      "img": "55.jpg"
+    },
+    {
+      "name": "MicroShift",
+      "manufacturer": "Soundtoys",
+      "img": "13608.jpg"
+    },
+    {
+      "name": "MIDI Guitar",
+      "manufacturer": "JamOrigin",
+      "category": "MIDI Guitar Controller"
+    },
+    {
+      "name": "MidiShaper",
+      "manufacturer": "Cableguys",
+      "img": "2160.jpg"
+    },
+    {
+      "name": "Miditronic",
+      "manufacturer": "MaksaNet",
+      "category": "Host / MIDI Utility / Monitor / Player"
+    },
+    {
+      "name": "MiGiC",
+      "manufacturer": "Dev code",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Millennia NSEQ-2",
+      "manufacturer": "Plugin Alliance",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Millennia TCL-2",
+      "manufacturer": "Plugin Alliance",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Minihost Modular",
+      "manufacturer": "Image-Line",
+      "img": "15331.jpg"
+    },
+    {
+      "name": "miniKORG 700S",
+      "manufacturer": "KORG",
+      "img": "39027910.jpg"
+    },
+    {
+      "name": "MiniSpillage",
+      "manufacturer": "AudioSpillage",
+      "img": "12286.jpg"
+    },
+    {
+      "name": "ML4000",
+      "manufacturer": "McDSP",
+      "img": "9645.jpg"
+    },
+    {
+      "name": "MondoMod",
+      "manufacturer": "Waves",
+      "img": "15809.jpg"
+    },
+    {
+      "name": "Mono/Poly",
+      "manufacturer": "KORG",
+      "img": "38937098.jpg"
+    },
+    {
+      "name": "Morphine",
+      "manufacturer": "Image-Line",
+      "img": "8766.jpg"
+    },
+    {
+      "name": "Morphoder",
+      "manufacturer": "Waves",
+      "img": "15971.jpg"
+    },
+    {
+      "name": "MOVEMENT",
+      "manufacturer": "Output",
+      "img": "6089454.jpg"
+    },
+    {
+      "name": "mp3play",
+      "manufacturer": "Askywhale",
+      "category": "MP3 Player"
+    },
+    {
+      "name": "mp3tomid_chung",
+      "manufacturer": "NGUYEN.Chung",
+      "category": "Audio to MIDI Converter"
+    },
+    {
+      "name": "MPC 2",
+      "manufacturer": "Akai",
+      "img": "7695.jpg",
+      "aliases": [
+        "MPC"
+      ]
+    },
+    {
+      "name": "Mr. Fuzzy Metal Octave Filter",
+      "manufacturer": "DamyFx",
+      "category": "VST 3"
+    },
+    {
+      "name": "MS-20",
+      "manufacturer": "KORG",
+      "img": "38937104.jpg"
+    },
+    {
+      "name": "MSED",
+      "manufacturer": "Voxengo",
+      "img": "14620.jpg"
+    },
+    {
+      "name": "MuLab App",
+      "manufacturer": "MuTools",
+      "category": "Sequencer / Multitrack"
+    },
+    {
+      "name": "MultiFXBlaster",
+      "manufacturer": "Audioblast",
+      "category": "Multi Effect"
+    },
+    {
+      "name": "MV2",
+      "manufacturer": "Waves",
+      "img": "15820.jpg"
+    },
+    {
+      "name": "Mystical Psytrance Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Psytrance performances for Roland JP8080"
+    },
+    {
+      "name": "NadIR",
+      "manufacturer": "Ignite Amps",
+      "category": "Convolver"
+    },
+    {
+      "name": "Nave",
+      "manufacturer": "Waldorf",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Nectar 3 Plus",
+      "manufacturer": "iZotope",
+      "img": "38931662.jpg"
+    },
+    {
+      "name": "Nectar Elements",
+      "manufacturer": "iZotope",
+      "img": "5029.jpg",
+      "aliases": [
+        "Nectar"
+      ]
+    },
+    {
+      "name": "Nemesis",
+      "manufacturer": "Tone2",
+      "img": "8803.jpg"
+    },
+    {
+      "name": "Neoverb",
+      "manufacturer": "iZotope",
+      "img": "38865384.jpg"
+    },
+    {
+      "name": "Nerve",
+      "manufacturer": "Xfer Records",
+      "img": "3103.jpg"
+    },
+    {
+      "name": "Newtone",
+      "manufacturer": "Image-Line",
+      "img": "25475.jpg"
+    },
+    {
+      "name": "Nexus",
+      "manufacturer": "reFX",
+      "img": "155.jpg"
+    },
+    {
+      "name": "Nightfall Synthwave Soundset for Adam Szabo JP6K",
+      "manufacturer": "Kulshan Studios",
+      "category": "Synthwave presets for Adam Szabo JP6K"
+    },
+    {
+      "name": "Nightride Synthwave Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Synthwave performances for Roland JP8080"
+    },
+    {
+      "name": "Nithonat",
+      "manufacturer": "D16 Group",
+      "img": "3135.jpg"
+    },
+    {
+      "name": "NLS Buss",
+      "manufacturer": "Waves",
+      "img": "22144.jpg"
+    },
+    {
+      "name": "NLS Channel",
+      "manufacturer": "Waves",
+      "img": "20663.jpg"
+    },
+    {
+      "name": "Nomonyx",
+      "manufacturer": "D1rty Duck",
+      "category": "Synth"
+    },
+    {
+      "name": "NS1",
+      "manufacturer": "Waves",
+      "img": "16026.jpg"
+    },
+    {
+      "name": "Nuxx",
+      "manufacturer": "Audiaire",
+      "img": "38734119.jpg"
+    },
+    {
+      "name": "OB-Xd - Virtual Analog Synthesizer",
+      "manufacturer": "discoDSP",
+      "category": "Synth"
+    },
+    {
+      "name": "Oddity",
+      "manufacturer": "GForce",
+      "img": "721.jpg"
+    },
+    {
+      "name": "Ohmicide",
+      "manufacturer": "Ohm Force",
+      "img": "269.jpg"
+    },
+    {
+      "name": "OldSkoolVerb",
+      "manufacturer": "Voxengo",
+      "img": "20449.jpg"
+    },
+    {
+      "name": "OMF Audio Extractor",
+      "manufacturer": "Estudio 528",
+      "category": "Tool"
+    },
+    {
+      "name": "Omnisphere 3",
+      "manufacturer": "Spectrasonics",
+      "category": "Synthesizer",
+      "img": "151.jpg",
+      "aliases": [
+        "Omnisphere"
+      ]
+    },
+    {
+      "name": "OneKnob Series",
+      "manufacturer": "Waves",
+      "img": "790.jpg"
+    },
+    {
+      "name": "OP-1 Drum Utility",
+      "manufacturer": "Xfer Records",
+      "img": "26589.jpg"
+    },
+    {
+      "name": "OPT4",
+      "manufacturer": "NIVIEM",
+      "category": "Compressor"
+    },
+    {
+      "name": "Originals - Cimbalom",
+      "manufacturer": "Spitfire Audio",
+      "category": "Percussion"
+    },
+    {
+      "name": "OrilRiver",
+      "manufacturer": "Denis Tihanov",
+      "category": "Reverb",
+      "img": "orilriver.jpg"
+    },
+    {
+      "name": "OTT",
+      "manufacturer": "Xfer Records",
+      "img": "3845.jpg",
+      "category": "Compressor"
+    },
+    {
+      "name": "OTTX",
+      "manufacturer": "Rave Generation",
+      "category": "Compressor"
+    },
+    {
+      "name": "Overtone GEQ",
+      "manufacturer": "Voxengo",
+      "img": "16712.jpg"
+    },
+    {
+      "name": "OvO RnB",
+      "manufacturer": "Studiolinked VST",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Ozone 9 + Neutron 3 Advanced",
+      "manufacturer": "iZotope",
+      "img": "38765946.jpg",
+      "aliases": [
+        "Neutron",
+        "Neutron 3",
+        "Neutron 3 Advanced",
+        "Ozone 9 + Neutron",
+        "Ozone 9 + Neutron 3"
+      ]
+    },
+    {
+      "name": "Ozone 9 + Neutron 3 Standard",
+      "manufacturer": "iZotope",
+      "img": "38765945.jpg",
+      "aliases": [
+        "Neutron",
+        "Neutron 3",
+        "Neutron 3 Standard",
+        "Ozone 9 + Neutron",
+        "Ozone 9 + Neutron 3"
+      ]
+    },
+    {
+      "name": "Ozone 9 Advanced",
+      "manufacturer": "iZotope",
+      "img": "38765941.jpg",
+      "aliases": [
+        "Ozone",
+        "Ozone 9"
+      ]
+    },
+    {
+      "name": "Ozone 9 Elements",
+      "manufacturer": "iZotope",
+      "img": "38774457.jpg",
+      "aliases": [
+        "Ozone",
+        "Ozone 9"
+      ]
+    },
+    {
+      "name": "Ozone 9 Standard",
+      "manufacturer": "iZotope",
+      "img": "38765938.jpg",
+      "aliases": [
+        "Ozone",
+        "Ozone 9"
+      ]
+    },
+    {
+      "name": "P11 Abyss",
+      "manufacturer": "Pulsar Modular",
+      "category": "Compressor",
+      "img": "p11-abyss.jpg"
+    },
+    {
+      "name": "P15",
+      "manufacturer": "Rhythmic Robot",
+      "category": "Analog"
+    },
+    {
+      "name": "P410 Joyride",
+      "manufacturer": "Pulsar Modular",
+      "category": "Graphic EQ"
+    },
+    {
+      "name": "P42 Climax MOD",
+      "manufacturer": "Pulsar Modular",
+      "category": "line amp"
+    },
+    {
+      "name": "P422 Fairuz",
+      "manufacturer": "Pulsar Modular",
+      "category": "EQ"
+    },
+    {
+      "name": "P44 Magnum",
+      "manufacturer": "Pulsar Modular",
+      "category": "Exciter / Enhancer"
+    },
+    {
+      "name": "P440 Sweet Spot",
+      "manufacturer": "Pulsar Modular",
+      "category": "EQ",
+      "img": "p440-sweet-spot.jpg"
+    },
+    {
+      "name": "P450 MDN EQ",
+      "manufacturer": "Pulsar Modular",
+      "category": "EQ"
+    },
+    {
+      "name": "P455 MDN Sidecar",
+      "manufacturer": "Pulsar Modular",
+      "category": "Summing"
+    },
+    {
+      "name": "P511",
+      "manufacturer": "Yarra Audio",
+      "category": "Kontakt Instrument"
+    },
+    {
+      "name": "P565 Siren Filter Set",
+      "manufacturer": "Pulsar Modular",
+      "category": "Filter / EQ",
+      "img": "p565-siren-filter-set.jpg"
+    },
+    {
+      "name": "P8000 Poly800 and DW8000 Library",
+      "manufacturer": "Synth Magic",
+      "category": "Kontakt Instrument"
+    },
+    {
+      "name": "P821 MDN Tape",
+      "manufacturer": "Pulsar Modular",
+      "category": "Tape",
+      "img": "p821-mdn-tape.jpg"
+    },
+    {
+      "name": "P83",
+      "manufacturer": "SKnote",
+      "category": "Phaser"
+    },
+    {
+      "name": "P915 Medusa",
+      "manufacturer": "Pulsar Modular",
+      "category": "Fixed Filter Bank",
+      "img": "p915-medusa.jpg"
+    },
+    {
+      "name": "P930 Lunar Lander",
+      "manufacturer": "Pulsar Modular",
+      "category": "audio effects processor",
+      "img": "p930-lunar-lander.jpg"
+    },
+    {
+      "name": "Pack EDU All II",
+      "manufacturer": "Sound Particles",
+      "category": "Sound Particles EDU Bundle"
+    },
+    {
+      "name": "PanCake",
+      "manufacturer": "Cableguys",
+      "img": "8378.jpg"
+    },
+    {
+      "name": "PanMan",
+      "manufacturer": "Soundtoys",
+      "img": "233.jpg"
+    },
+    {
+      "name": "Parallels",
+      "manufacturer": "Softube",
+      "img": "38707879.jpg"
+    },
+    {
+      "name": "PAZ Analyzer",
+      "manufacturer": "Waves",
+      "img": "364.jpg"
+    },
+    {
+      "name": "Pentimento (x TAETRO)",
+      "manufacturer": "dBdone",
+      "category": "Texture Creation"
+    },
+    {
+      "name": "pg-8x",
+      "manufacturer": "ML-VST",
+      "category": "Synthesizer"
+    },
+    {
+      "name": "Phase One",
+      "manufacturer": "NIVIEM",
+      "category": "Phaser"
+    },
+    {
+      "name": "Phaser 3",
+      "manufacturer": "Blue Cat Audio",
+      "img": "5302.jpg",
+      "aliases": [
+        "Phaser"
+      ]
+    },
+    {
+      "name": "Philharmonik",
+      "manufacturer": "IK Multimedia",
+      "img": "1012.jpg"
+    },
+    {
+      "name": "Phoscyon",
+      "manufacturer": "D16 Group",
+      "img": "2322.jpg"
+    },
+    {
+      "name": "Piano One",
+      "manufacturer": "Sound Magic",
+      "img": "5167.jpg"
+    },
+    {
+      "name": "PianoVerb",
+      "manufacturer": "PSPaudioware",
+      "img": "9172.jpg"
+    },
+    {
+      "name": "Pigments 3",
+      "manufacturer": "Arturia",
+      "img": "38677978.jpg",
+      "aliases": [
+        "Pigments"
+      ]
+    },
+    {
+      "name": "Pitcher",
+      "manufacturer": "Ablaze",
+      "category": "Pitch Shifter"
+    },
+    {
+      "name": "Pitchwheel",
+      "manufacturer": "Quickquak",
+      "img": "75.jpg"
+    },
+    {
+      "name": "PlastiCZ",
+      "manufacturer": "reFX",
+      "img": "9010.jpg"
+    },
+    {
+      "name": "Play",
+      "manufacturer": "East West",
+      "img": "5056.jpg"
+    },
+    {
+      "name": "PM-Chainer",
+      "manufacturer": "Plug and Mix",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Podolski",
+      "manufacturer": "u-he",
+      "category": "Synth (Analogue / Subtractive)"
+    },
+    {
+      "name": "Polysix",
+      "manufacturer": "KORG",
+      "img": "38937101.jpg"
+    },
+    {
+      "name": "PORTAL",
+      "manufacturer": "Output",
+      "img": "38587013.jpg"
+    },
+    {
+      "name": "PreBrowser",
+      "manufacturer": "Nice Stomps",
+      "category": "Channel Strip"
+    },
+    {
+      "name": "Predator",
+      "manufacturer": "Rob Papen",
+      "img": "218.jpg"
+    },
+    {
+      "name": "Pro-53",
+      "manufacturer": "Native Instruments",
+      "img": "1249.jpg"
+    },
+    {
+      "name": "Pro-DS",
+      "manufacturer": "FabFilter",
+      "img": "1677.jpg"
+    },
+    {
+      "name": "Pro-MB",
+      "manufacturer": "FabFilter",
+      "img": "4428.jpg"
+    },
+    {
+      "name": "Pro-Q 4",
+      "manufacturer": "FabFilter",
+      "category": "EQ",
+      "img": "128.jpg",
+      "aliases": [
+        "Pro-Q"
+      ]
+    },
+    {
+      "name": "Project Time",
+      "manufacturer": "HOFA",
+      "img": "5813.jpg"
+    },
+    {
+      "name": "Prophecy",
+      "manufacturer": "KORG",
+      "img": "39027913.jpg"
+    },
+    {
+      "name": "PSP 84",
+      "manufacturer": "PSPaudioware",
+      "img": "19228.jpg",
+      "aliases": [
+        "PSP"
+      ]
+    },
+    {
+      "name": "PSP Metra",
+      "manufacturer": "PSPaudioware",
+      "category": "Analyser"
+    },
+    {
+      "name": "PSP Tilt-Q",
+      "manufacturer": "PSPaudioware",
+      "category": "Tilt EQ"
+    },
+    {
+      "name": "Psylead SX4",
+      "manufacturer": "Eplex7 DSP",
+      "category": "Lead Synth"
+    },
+    {
+      "name": "PTEq-X",
+      "manufacturer": "Ignite Amps",
+      "category": "Tube EQ"
+    },
+    {
+      "name": "PuigChild 660 & 670",
+      "manufacturer": "Waves",
+      "img": "14539.jpg",
+      "aliases": [
+        "PuigChild 660 &"
+      ]
+    },
+    {
+      "name": "PuigTec EQP-1A",
+      "manufacturer": "Waves",
+      "img": "18515.jpg"
+    },
+    {
+      "name": "Punch",
+      "manufacturer": "Rob Papen",
+      "img": "220.jpg"
+    },
+    {
+      "name": "Punchbox",
+      "manufacturer": "D16 Group",
+      "img": "8806418.jpg"
+    },
+    {
+      "name": "PX P10",
+      "manufacturer": "UVI",
+      "category": "Vintage Synth"
+    },
+    {
+      "name": "Q1-Paragraphic EQ",
+      "manufacturer": "Waves",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "quadraSID",
+      "manufacturer": "reFX",
+      "img": "4361.jpg"
+    },
+    {
+      "name": "Rave Station 2",
+      "manufacturer": "Rave Generation",
+      "category": "Synth"
+    },
+    {
+      "name": "RC-20 Retro Color",
+      "manufacturer": "XLN Audio",
+      "img": "20283103.jpg"
+    },
+    {
+      "name": "Reaktor",
+      "manufacturer": "Native Instruments",
+      "img": "112.jpg",
+      "category": "Synth (Modular)"
+    },
+    {
+      "name": "REAPER",
+      "manufacturer": "Cockos",
+      "category": "Sequencer / Multitrack",
+      "img": "reaper.jpg"
+    },
+    {
+      "name": "Reason 13",
+      "manufacturer": "Reason Studios",
+      "category": "Virtual Studio"
+    },
+    {
+      "name": "Recorder",
+      "manufacturer": "Voxengo",
+      "img": "22349.jpg"
+    },
+    {
+      "name": "Recycled Beats",
+      "manufacturer": "Liam Makes Noise",
+      "category": "Trash"
+    },
+    {
+      "name": "Red 2 EQ",
+      "manufacturer": "Focusrite",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "Relay",
+      "manufacturer": "iZotope",
+      "img": "38650083.jpg"
+    },
+    {
+      "name": "Renaissance Channel",
+      "manufacturer": "Waves",
+      "img": "15892.jpg"
+    },
+    {
+      "name": "Renaissance Compressor",
+      "manufacturer": "Waves",
+      "img": "278.jpg"
+    },
+    {
+      "name": "Renaissance Equalizer",
+      "manufacturer": "Waves",
+      "img": "357.jpg"
+    },
+    {
+      "name": "Renaissance Reverb",
+      "manufacturer": "Waves",
+      "img": "397.jpg"
+    },
+    {
+      "name": "Renaissance Vox",
+      "manufacturer": "Waves",
+      "img": "172.jpg"
+    },
+    {
+      "name": "Renoise",
+      "manufacturer": "Renoise",
+      "category": "Tracker"
+    },
+    {
+      "name": "Replika",
+      "manufacturer": "Native Instruments",
+      "img": "46432.jpg"
+    },
+    {
+      "name": "Reverb",
+      "manufacturer": "ArtsAcoustic",
+      "img": "7817.jpg"
+    },
+    {
+      "name": "Revolver",
+      "manufacturer": "McDSP",
+      "img": "9668.jpg"
+    },
+    {
+      "name": "Rift",
+      "manufacturer": "Minimal Audio",
+      "img": "39041405.jpg"
+    },
+    {
+      "name": "RMP2",
+      "manufacturer": "Krakli",
+      "category": "Synth (Hybrid)",
+      "img": "rmp2.jpg"
+    },
+    {
       "name": "Robotronic",
       "manufacturer": "Sugar Bytes",
       "img": "5095.jpg"
     },
     {
-      "name": "Thesys",
-      "manufacturer": "Sugar Bytes",
-      "img": "5102.jpg"
+      "name": "Roland JP-8080 - Goa Psytrance soundset for Roland JP8000 series hardware synths",
+      "manufacturer": "123creative.com",
+      "category": "Presets for JP-80x0"
     },
     {
-      "name": "Turnado",
-      "manufacturer": "Sugar Bytes",
-      "img": "807.jpg"
+      "name": "RP2A03",
+      "manufacturer": "SocaLabs",
+      "category": "Synth",
+      "img": "rp2a03.jpg"
     },
     {
-      "name": "Unique",
-      "manufacturer": "Sugar Bytes",
-      "img": "3681.jpg"
+      "name": "Rumble Techno Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Techno performances for Roland JP8080",
+      "img": "rumble-techno-soundset-for-roland-jp8080-jp8000-je-8086.jpg"
     },
     {
-      "name": "WOW",
-      "manufacturer": "Sugar Bytes",
-      "img": "270.jpg"
+      "name": "RX 11 Standard",
+      "manufacturer": "iZotope",
+      "category": "Audio Repair"
     },
     {
-      "name": "Dune",
-      "manufacturer": "Synapse",
-      "img": "695.jpg"
+      "name": "RX 9 Standard",
+      "manufacturer": "iZotope",
+      "img": "39088948.jpg",
+      "aliases": [
+        "RX",
+        "RX 9"
+      ]
+    },
+    {
+      "name": "RZ Mobile",
+      "manufacturer": "ZAK Sound",
+      "category": "MIDI Controller"
+    },
+    {
+      "name": "S1 Shuffler",
+      "manufacturer": "Waves",
+      "img": "15829.jpg"
+    },
+    {
+      "name": "Sakura",
+      "manufacturer": "Image-Line",
+      "img": "7954.jpg"
+    },
+    {
+      "name": "Sample",
+      "manufacturer": "Serato",
+      "img": "36938854.jpg"
+    },
+    {
+      "name": "Saturation Knob",
+      "manufacturer": "Softube",
+      "img": "46347.jpg"
+    },
+    {
+      "name": "Saturn",
+      "manufacturer": "FabFilter",
+      "img": "245.jpg"
+    },
+    {
+      "name": "Sausage Fattener",
+      "manufacturer": "Dada Life",
+      "img": "187.jpg"
+    },
+    {
+      "name": "SCI-FI MLD REVERB",
+      "manufacturer": "TampG",
+      "category": "Reverb"
+    },
+    {
+      "name": "Serum 2",
+      "manufacturer": "Xfer Records",
+      "category": "Synth",
+      "img": "15493.jpg",
+      "aliases": [
+        "Serum"
+      ]
+    },
+    {
+      "name": "SG-626 (URSA Major Stargate 626 Recreation)",
+      "manufacturer": "Temecula DSP",
+      "category": "Reverb"
+    },
+    {
+      "name": "SH-MAX",
+      "manufacturer": "Cherry Audio",
+      "category": "Synth"
+    },
+    {
+      "name": "Shine 4 (Free Standalone)",
+      "manufacturer": "Rockheyday",
+      "category": "Harmonic Exciter",
+      "aliases": [
+        "Shine 4"
+      ]
+    },
+    {
+      "name": "Shockline Lite VST Plugin",
+      "manufacturer": "Vessel Audio",
+      "category": "Synth",
+      "aliases": [
+        "Shockline"
+      ]
+    },
+    {
+      "name": "Shout! Hands Up Soundset for Roland JP8080 & JP8000 & JE-8086",
+      "manufacturer": "Kulshan Studios",
+      "category": "Hands Up performances for Roland JP8080"
+    },
+    {
+      "name": "Sigma Engine",
+      "manufacturer": "Vessel Audio",
+      "category": "Multiple Synths"
+    },
+    {
+      "name": "Slayer2",
+      "manufacturer": "reFX",
+      "img": "4353.jpg"
+    },
+    {
+      "name": "SlowShade (Free Standalone)",
+      "manufacturer": "Rockheyday",
+      "category": "Slowdown+Tone Shaper",
+      "aliases": [
+        "SlowShade"
+      ]
+    },
+    {
+      "name": "SnappySnap Lite",
+      "manufacturer": "Electric Smudge",
+      "category": "Snapshot Manager",
+      "img": "snappysnap-lite.jpg",
+      "aliases": [
+        "SnappySnap"
+      ]
+    },
+    {
+      "name": "Snare Bomb",
+      "manufacturer": "Ablaze",
+      "category": "Synth"
+    },
+    {
+      "name": "Sound Delay",
+      "manufacturer": "Voxengo",
+      "img": "1529.jpg"
+    },
+    {
+      "name": "Sound Particles 3 Artist (Perpetual)",
+      "manufacturer": "Sound Particles",
+      "category": "Sound Particles"
+    },
+    {
+      "name": "Sound Particles 3 Enterprise (Perpetual)",
+      "manufacturer": "Sound Particles",
+      "category": "Sound Particles"
+    },
+    {
+      "name": "Sound Particles 3 Professional (Perpetual)",
+      "manufacturer": "Sound Particles",
+      "category": "Sound Particles"
+    },
+    {
+      "name": "SoundShifter",
+      "manufacturer": "Waves",
+      "img": "12151.jpg"
+    },
+    {
+      "name": "SP1000",
+      "manufacturer": "Stuart Pryer",
+      "category": "Roland SH-1000 Emulation"
+    },
+    {
+      "name": "SP140 Plate Reverb",
+      "manufacturer": "Iconic Instruments",
+      "category": "Plate Reverb",
+      "img": "sp140-plate-reverb.jpg"
+    },
+    {
+      "name": "SP2016 Reverb",
+      "manufacturer": "Eventide",
+      "category": "Reverb"
+    },
+    {
+      "name": "SP2016-Classics for Eventide SP2016 Reverb",
+      "manufacturer": "Synth-Presets.com",
+      "category": "Presets for SP2016"
+    },
+    {
+      "name": "SP950",
+      "manufacturer": "waveTracing",
+      "category": "Lo-Fi",
+      "img": "sp950.jpg"
+    },
+    {
+      "name": "SPAN Plus",
+      "manufacturer": "Voxengo",
+      "img": "19328.jpg",
+      "category": "Analyser / Monitor",
+      "aliases": [
+        "SPAN"
+      ]
+    },
+    {
+      "name": "Spawn",
+      "manufacturer": "Sauceware Audio",
+      "category": "MIDI Generator"
+    },
+    {
+      "name": "Spectrum Analyzer",
+      "manufacturer": "Seven Phases",
+      "img": "21906.jpg"
+    },
+    {
+      "name": "Spire",
+      "manufacturer": "Reveal Sound",
+      "img": "965.jpg"
+    },
+    {
+      "name": "SPL Bass Ranger",
+      "manufacturer": "Plugin Alliance",
+      "img": "792.jpg"
+    },
+    {
+      "name": "SPL De-Verb",
+      "manufacturer": "Plugin Alliance",
+      "img": "12159.jpg"
+    },
+    {
+      "name": "SPL Free Ranger",
+      "manufacturer": "Plugin Alliance",
+      "img": "797.jpg"
+    },
+    {
+      "name": "SPL Transient Designer",
+      "manufacturer": "Plugin Alliance",
+      "img": "129.jpg"
+    },
+    {
+      "name": "SQ8L / SQ8X",
+      "manufacturer": "Siegfried Kullmann",
+      "category": "Synth (Hybrid)"
+    },
+    {
+      "name": "SSL Channel",
+      "manufacturer": "Waves",
+      "img": "12148.jpg"
+    },
+    {
+      "name": "SSL EQ",
+      "manufacturer": "Waves",
+      "img": "398.jpg"
+    },
+    {
+      "name": "SSL G-Channel",
+      "manufacturer": "Waves",
+      "img": "935.jpg"
+    },
+    {
+      "name": "Stereo Tool",
+      "manufacturer": "Flux",
+      "img": "25273.jpg"
+    },
+    {
+      "name": "Stereo Touch",
+      "manufacturer": "Voxengo",
+      "img": "2446.jpg"
+    },
+    {
+      "name": "Strymon NightSky",
+      "manufacturer": "Strymon",
+      "category": "Ambient Reverb"
+    },
+    {
+      "name": "Studio One 5 Professional",
+      "manufacturer": "PreSonus",
+      "img": "38892279.jpg",
+      "aliases": [
+        "Studio One",
+        "Studio One 5"
+      ]
+    },
+    {
+      "name": "Studio One Professional",
+      "manufacturer": "PreSonus",
+      "category": "Sequencer / Multitrack"
+    },
+    {
+      "name": "Stutter Edit 2",
+      "manufacturer": "iZotope",
+      "img": "38893042.jpg",
+      "aliases": [
+        "Stutter Edit"
+      ]
+    },
+    {
+      "name": "Stylus RMX",
+      "manufacturer": "Spectrasonics",
+      "img": "2458.jpg"
+    },
+    {
+      "name": "SubBoomBass",
+      "manufacturer": "Rob Papen",
+      "img": "61.jpg"
+    },
+    {
+      "name": "Sulfur Snare",
+      "manufacturer": "Pro Audio Elements",
+      "category": "Snare"
+    },
+    {
+      "name": "Super Reverb",
+      "manufacturer": "Rave Generation",
+      "category": "Reverb"
+    },
+    {
+      "name": "Superior Drummer",
+      "manufacturer": "Toontrack",
+      "img": "23764.jpg"
+    },
+    {
+      "name": "Superwave P8",
+      "manufacturer": "SuperWave",
+      "category": "Synth (Analogue / Subtractive)"
+    },
+    {
+      "name": "Supreme Drums Blue",
+      "manufacturer": "Sound Magic",
+      "category": "Acoustic Drums",
+      "img": "supreme-drums-blue.jpg"
+    },
+    {
+      "name": "SURGE",
+      "manufacturer": "Vember Audio",
+      "img": "2465.jpg"
+    },
+    {
+      "name": "Surge XT",
+      "manufacturer": "Surge Synth Team",
+      "category": "Synth (Hybrid)"
+    },
+    {
+      "name": "SWRL Lite",
+      "manufacturer": "FRCTL",
+      "category": "Effect Plugin",
+      "img": "swrl-lite.jpg",
+      "aliases": [
+        "SWRL"
+      ]
+    },
+    {
+      "name": "Sylenth1",
+      "manufacturer": "LennarDigital",
+      "img": "31.jpg",
+      "category": "Synth (Analogue / Subtractive)"
+    },
+    {
+      "name": "Symptohm PE",
+      "manufacturer": "Ohm Force",
+      "img": "96.jpg"
+    },
+    {
+      "name": "Synplant",
+      "manufacturer": "Sonic Charge",
+      "img": "666.jpg"
+    },
+    {
+      "name": "Synth1",
+      "manufacturer": "Ichiro Toda",
+      "img": "synth1.jpg",
+      "category": "Synth (Analogue / Subtractive)"
+    },
+    {
+      "name": "SynthMaster",
+      "manufacturer": "KV331Audio",
+      "img": "6743.jpg"
+    },
+    {
+      "name": "T-RackS CS",
+      "manufacturer": "IK Multimedia",
+      "img": "849.jpg"
     },
     {
       "name": "TAL Reverb II",
@@ -1225,7 +2894,8 @@
     {
       "name": "TAL-BassLine",
       "manufacturer": "TAL-Togu Audio Line",
-      "img": "367.jpg"
+      "img": "367.jpg",
+      "category": "Synth (Analogue / Subtractive)"
     },
     {
       "name": "TAL-Bitcrusher",
@@ -1240,7 +2910,8 @@
     {
       "name": "TAL-Chorus-LX",
       "manufacturer": "TAL-Togu Audio Line",
-      "img": "3603.jpg"
+      "img": "3603.jpg",
+      "category": "Modulation (Flanger / Phaser / Chorus / Tremolo)"
     },
     {
       "name": "TAL-Dub",
@@ -1260,7 +2931,8 @@
     {
       "name": "TAL-Elek7ro",
       "manufacturer": "TAL-Togu Audio Line",
-      "img": "5669.jpg"
+      "img": "5669.jpg",
+      "category": "Synth (Analogue / Subtractive)"
     },
     {
       "name": "TAL-Filter-II",
@@ -1275,7 +2947,8 @@
     {
       "name": "TAL-NoiseMaker",
       "manufacturer": "TAL-Togu Audio Line",
-      "img": "783.jpg"
+      "img": "783.jpg",
+      "category": "Synth (Analogue / Subtractive)"
     },
     {
       "name": "TAL-Tube",
@@ -1285,7 +2958,8 @@
     {
       "name": "TAL-U-NO-62",
       "manufacturer": "TAL-Togu Audio Line",
-      "img": "2467.jpg"
+      "img": "2467.jpg",
+      "category": "Synth (Analogue / Subtractive)"
     },
     {
       "name": "TAL-U-NO-LX",
@@ -1303,87 +2977,171 @@
       "img": "3606.jpg"
     },
     {
-      "name": "VStation-Powercore",
-      "manufacturer": "TC Electronic",
+      "name": "Tantra",
+      "manufacturer": "Dmitry Sches",
       "img": "defaultavatarhuge.jpg"
     },
     {
-      "name": "BeatCounter",
-      "manufacturer": "Teragon Audio",
-      "img": "5216.jpg"
+      "name": "TDR Feedback Compressor II",
+      "manufacturer": "Tokyo Dawn Labs",
+      "category": "Compressor"
     },
     {
-      "name": "DualComp",
-      "manufacturer": "Teragon Audio",
-      "img": "defaultavatarhuge.jpg"
+      "name": "TDR Kotelnikov",
+      "manufacturer": "Tokyo Dawn Labs",
+      "category": "Mastering Buss Compressor"
     },
     {
-      "name": "LoudMax",
-      "manufacturer": "Thomas Mundt",
-      "img": "24164.jpg"
+      "name": "TDR Nova",
+      "manufacturer": "Tokyo Dawn Labs",
+      "category": "Dynamic Equalizer"
     },
     {
-      "name": "AkustiX Enhancer",
-      "manufacturer": "Tone2",
-      "img": "973.jpg"
+      "name": "TDR VOS SlickEQ",
+      "manufacturer": "Tokyo Dawn Labs",
+      "category": "Equalizer"
     },
     {
-      "name": "BiFilter2",
-      "manufacturer": "Tone2",
-      "img": "2632.jpg"
+      "name": "TeAr - The Text Arpeggiator",
+      "manufacturer": "FX-Mechanics",
+      "category": "Arpeggiator"
     },
     {
-      "name": "Electra2",
-      "manufacturer": "Tone2",
-      "img": "722.jpg"
+      "name": "Tekturon",
+      "manufacturer": "D16 Group",
+      "img": "38516775.jpg"
     },
     {
-      "name": "Gladiator2",
-      "manufacturer": "Tone2",
-      "img": "401.jpg"
+      "name": "The Anvil",
+      "manufacturer": "Ignite Amps",
+      "img": "27164.jpg"
     },
     {
-      "name": "Icarus",
-      "manufacturer": "Tone2",
-      "img": "6753562.jpg"
+      "name": "The Dark Amp",
+      "manufacturer": "Watts Audio",
+      "category": "Amp Simulator"
     },
     {
-      "name": "Nemesis",
-      "manufacturer": "Tone2",
-      "img": "8803.jpg"
+      "name": "The Glue",
+      "manufacturer": "Cytomic",
+      "img": "163.jpg"
     },
     {
-      "name": "Warmverb Multi-FX",
-      "manufacturer": "Tone2",
-      "img": "803.jpg"
+      "name": "The T-Pain Effect",
+      "manufacturer": "iZotope",
+      "img": "5186.jpg"
     },
     {
-      "name": "EZdrummer",
-      "manufacturer": "Toontrack",
-      "img": "4935.jpg"
+      "name": "THERMAL",
+      "manufacturer": "Output",
+      "img": "38897818.jpg"
     },
     {
-      "name": "EZkeys",
-      "manufacturer": "Toontrack",
-      "img": "6828.jpg"
+      "name": "Thesys",
+      "manufacturer": "Sugar Bytes",
+      "img": "5102.jpg"
     },
     {
-      "name": "Superior Drummer",
-      "manufacturer": "Toontrack",
-      "img": "23764.jpg"
-    },
-    {
-      "name": "EL7 FATSO",
-      "manufacturer": "Universal Audio",
-      "img": "80.jpg"
-    },
-    {
-      "name": "Lexicon 224",
-      "manufacturer": "Universal Audio",
-      "img": "854.jpg",
+      "name": "Toraverb 2",
+      "manufacturer": "D16 Group",
+      "img": "38542705.jpg",
       "aliases": [
-        "Lexicon"
+        "Toraverb"
       ]
+    },
+    {
+      "name": "TR Meter",
+      "manufacturer": "IK Multimedia",
+      "img": "852.jpg"
+    },
+    {
+      "name": "TrackSpacer",
+      "manufacturer": "Wavesfactory",
+      "img": "3463.jpg"
+    },
+    {
+      "name": "Transient Master",
+      "manufacturer": "Native Instruments",
+      "img": "814.jpg"
+    },
+    {
+      "name": "Transient Shaper",
+      "manufacturer": "Schaack Audio Technologies",
+      "img": "258.jpg"
+    },
+    {
+      "name": "TransX",
+      "manufacturer": "Waves",
+      "img": "14553.jpg"
+    },
+    {
+      "name": "Trash",
+      "manufacturer": "iZotope",
+      "img": "365.jpg"
+    },
+    {
+      "name": "Tremolator",
+      "manufacturer": "Soundtoys",
+      "img": "236.jpg"
+    },
+    {
+      "name": "Trilian",
+      "manufacturer": "Spectrasonics",
+      "img": "186.jpg"
+    },
+    {
+      "name": "Triple Cheese",
+      "manufacturer": "u-he",
+      "img": "5606.jpg",
+      "category": "Synth"
+    },
+    {
+      "name": "Triple EQ 4",
+      "manufacturer": "Blue Cat Audio",
+      "img": "1395.jpg",
+      "aliases": [
+        "Triple EQ"
+      ]
+    },
+    {
+      "name": "TRITON",
+      "manufacturer": "KORG",
+      "img": "38794189.jpg"
+    },
+    {
+      "name": "TRITON Extreme",
+      "manufacturer": "KORG",
+      "img": "39029501.jpg"
+    },
+    {
+      "name": "Tube Amp",
+      "manufacturer": "Voxengo",
+      "img": "1494.jpg"
+    },
+    {
+      "name": "Tune It",
+      "manufacturer": "Aglae Software",
+      "img": "15326.jpg"
+    },
+    {
+      "name": "Turnado",
+      "manufacturer": "Sugar Bytes",
+      "img": "807.jpg"
+    },
+    {
+      "name": "TurnTableSaw",
+      "manufacturer": "Armory",
+      "category": "Scratch Tool"
+    },
+    {
+      "name": "Tyrell N6",
+      "manufacturer": "u-he",
+      "img": "751.jpg"
+    },
+    {
+      "name": "Tyrell Nexus 6",
+      "manufacturer": "u-he",
+      "category": "Synth (Analogue / Subtractive)"
     },
     {
       "name": "UAD Ampex ATR-102",
@@ -1436,22 +3194,48 @@
       "img": "181.jpg"
     },
     {
+      "name": "UAPMD",
+      "manufacturer": "The AAP Project (Audio Plugins For Android)",
+      "category": "MIDI 2.0"
+    },
+    {
+      "name": "Ultra Analog VA-2",
+      "manufacturer": "Applied Acoustics Systems",
+      "img": "903.jpg"
+    },
+    {
+      "name": "Ultradaw",
+      "manufacturer": "MaksaNet",
+      "category": "Sequencer / Multitrack / Tracker"
+    },
+    {
+      "name": "Unique",
+      "manufacturer": "Sugar Bytes",
+      "img": "3681.jpg"
+    },
+    {
       "name": "Universal Audio UAD Fairchild 670 Legacy",
       "manufacturer": "Universal Audio",
       "img": "356.jpg"
     },
     {
-      "name": "dbx 160",
-      "manufacturer": "Universal Audio",
-      "img": "222.jpg",
+      "name": "UVI Workstation",
+      "manufacturer": "UVI",
+      "category": "Sound Module"
+    },
+    {
+      "name": "V Collection 8",
+      "manufacturer": "Arturia",
+      "img": "38946150.jpg",
       "aliases": [
-        "dbx"
+        "V Collection"
       ]
     },
     {
       "name": "ValhallaFreqEcho",
       "manufacturer": "Valhalla DSP",
-      "img": "20481.jpg"
+      "img": "valhallafreqecho.jpg",
+      "category": "Delay / Echo"
     },
     {
       "name": "ValhallaRoom",
@@ -1464,6 +3248,11 @@
       "img": "698.jpg"
     },
     {
+      "name": "ValhallaSupermassive",
+      "manufacturer": "Valhalla DSP",
+      "category": "Reverb"
+    },
+    {
       "name": "ValhallaUberMod",
       "manufacturer": "Valhalla DSP",
       "img": "2549.jpg"
@@ -1471,390 +3260,13 @@
     {
       "name": "ValhallaVintageVerb",
       "manufacturer": "Valhalla DSP",
-      "img": "984.jpg"
+      "img": "984.jpg",
+      "category": "Reverb"
     },
     {
-      "name": "SURGE",
-      "manufacturer": "Vember Audio",
-      "img": "2465.jpg"
-    },
-    {
-      "name": "AnSpec",
-      "manufacturer": "Voxengo",
-      "img": "6136.jpg"
-    },
-    {
-      "name": "Beeper",
-      "manufacturer": "Voxengo",
-      "img": "7439.jpg"
-    },
-    {
-      "name": "Boogex",
-      "manufacturer": "Voxengo",
-      "img": "44649.jpg"
-    },
-    {
-      "name": "GlissEQ",
-      "manufacturer": "Voxengo",
-      "img": "15596.jpg"
-    },
-    {
-      "name": "Latency Delay",
-      "manufacturer": "Voxengo",
-      "img": "7441.jpg"
-    },
-    {
-      "name": "MSED",
-      "manufacturer": "Voxengo",
-      "img": "14620.jpg"
-    },
-    {
-      "name": "Marvel GEQ",
-      "manufacturer": "Voxengo",
-      "img": "12713.jpg"
-    },
-    {
-      "name": "OldSkoolVerb",
-      "manufacturer": "Voxengo",
-      "img": "20449.jpg"
-    },
-    {
-      "name": "Overtone GEQ",
-      "manufacturer": "Voxengo",
-      "img": "16712.jpg"
-    },
-    {
-      "name": "Recorder",
-      "manufacturer": "Voxengo",
-      "img": "22349.jpg"
-    },
-    {
-      "name": "SPAN",
-      "manufacturer": "Voxengo",
-      "img": "1022.jpg"
-    },
-    {
-      "name": "SPAN Plus",
-      "manufacturer": "Voxengo",
-      "img": "19328.jpg"
-    },
-    {
-      "name": "Sound Delay",
-      "manufacturer": "Voxengo",
-      "img": "1529.jpg"
-    },
-    {
-      "name": "Stereo Touch",
-      "manufacturer": "Voxengo",
-      "img": "2446.jpg"
-    },
-    {
-      "name": "Tube Amp",
-      "manufacturer": "Voxengo",
-      "img": "1494.jpg"
-    },
-    {
-      "name": "Voxformer",
-      "manufacturer": "Voxengo",
-      "img": "16157.jpg"
-    },
-    {
-      "name": "Nave",
-      "manufacturer": "Waldorf",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "LiquidRhythm",
-      "manufacturer": "WaveDNA",
-      "img": "7424.jpg"
-    },
-    {
-      "name": "API-2500",
-      "manufacturer": "Waves",
-      "img": "9181.jpg"
-    },
-    {
-      "name": "API-550",
-      "manufacturer": "Waves",
-      "img": "145.jpg"
-    },
-    {
-      "name": "Aphex Vintage Exciter",
-      "manufacturer": "Waves",
-      "img": "274.jpg"
-    },
-    {
-      "name": "Bass Rider",
-      "manufacturer": "Waves",
-      "img": "932.jpg"
-    },
-    {
-      "name": "C1 Compressor",
-      "manufacturer": "Waves",
-      "img": "13900.jpg"
-    },
-    {
-      "name": "C1 Gate",
-      "manufacturer": "Waves",
-      "img": "14770.jpg"
-    },
-    {
-      "name": "C6 Multiband Compressor",
-      "manufacturer": "Waves",
-      "img": "6392.jpg"
-    },
-    {
-      "name": "CLA Bass",
-      "manufacturer": "Waves",
-      "img": "347.jpg"
-    },
-    {
-      "name": "CLA Drums",
-      "manufacturer": "Waves",
-      "img": "275.jpg"
-    },
-    {
-      "name": "CLA Guitars",
-      "manufacturer": "Waves",
-      "img": "9067.jpg"
-    },
-    {
-      "name": "CLA Unplugged",
-      "manufacturer": "Waves",
-      "img": "13906.jpg"
-    },
-    {
-      "name": "CLA Vocals",
-      "manufacturer": "Waves",
-      "img": "14744.jpg"
-    },
-    {
-      "name": "CLA-2A",
-      "manufacturer": "Waves",
-      "img": "14745.jpg"
-    },
-    {
-      "name": "CLA-3A",
-      "manufacturer": "Waves",
-      "img": "15793.jpg"
-    },
-    {
-      "name": "Center",
-      "manufacturer": "Waves",
-      "img": "8053.jpg"
-    },
-    {
-      "name": "Codex",
-      "manufacturer": "Waves",
-      "img": "36170.jpg"
-    },
-    {
-      "name": "DeEsser",
-      "manufacturer": "Waves",
-      "img": "263.jpg"
-    },
-    {
-      "name": "Enigma",
-      "manufacturer": "Waves",
-      "img": "6445.jpg"
-    },
-    {
-      "name": "GTR Amp",
-      "manufacturer": "Waves",
-      "img": "246.jpg"
-    },
-    {
-      "name": "H-Delay",
-      "manufacturer": "Waves",
-      "img": "10715.jpg"
-    },
-    {
-      "name": "H-Reverb",
-      "manufacturer": "Waves",
-      "img": "789856.jpg"
-    },
-    {
-      "name": "IR-L Convolution Reverb",
-      "manufacturer": "Waves",
-      "img": "7803.jpg"
-    },
-    {
-      "name": "J37",
-      "manufacturer": "Waves",
-      "img": "16094.jpg"
-    },
-    {
-      "name": "JJP Strings & Keys",
-      "manufacturer": "Waves",
-      "img": "12184.jpg"
-    },
-    {
-      "name": "JJP Vocals",
-      "manufacturer": "Waves",
-      "img": "19048.jpg"
-    },
-    {
-      "name": "Kramer PIE",
-      "manufacturer": "Waves",
-      "img": "14838.jpg"
-    },
-    {
-      "name": "Kramer Tape",
-      "manufacturer": "Waves",
-      "img": "886.jpg"
-    },
-    {
-      "name": "L1 Limiter",
-      "manufacturer": "Waves",
-      "img": "12135.jpg"
-    },
-    {
-      "name": "L3 Multimaximizer",
-      "manufacturer": "Waves",
-      "img": "7816.jpg"
-    },
-    {
-      "name": "LoAir",
-      "manufacturer": "Waves",
-      "img": "14164.jpg"
-    },
-    {
-      "name": "MV2",
-      "manufacturer": "Waves",
-      "img": "15820.jpg"
-    },
-    {
-      "name": "Manny Marroquin Reverb",
-      "manufacturer": "Waves",
-      "img": "12107.jpg"
-    },
-    {
-      "name": "Manny Marroquin Triple D",
-      "manufacturer": "Waves",
-      "img": "9129.jpg"
-    },
-    {
-      "name": "Maserati DRM",
-      "manufacturer": "Waves",
-      "img": "1017.jpg"
-    },
-    {
-      "name": "Maserati VX1",
-      "manufacturer": "Waves",
-      "img": "358.jpg"
-    },
-    {
-      "name": "MaxxBass",
-      "manufacturer": "Waves",
-      "img": "346.jpg"
-    },
-    {
-      "name": "MondoMod",
-      "manufacturer": "Waves",
-      "img": "15809.jpg"
-    },
-    {
-      "name": "Morphoder",
-      "manufacturer": "Waves",
-      "img": "15971.jpg"
-    },
-    {
-      "name": "NLS Buss",
-      "manufacturer": "Waves",
-      "img": "22144.jpg"
-    },
-    {
-      "name": "NLS Channel",
-      "manufacturer": "Waves",
-      "img": "20663.jpg"
-    },
-    {
-      "name": "NS1",
-      "manufacturer": "Waves",
-      "img": "16026.jpg"
-    },
-    {
-      "name": "OneKnob Series",
-      "manufacturer": "Waves",
-      "img": "790.jpg"
-    },
-    {
-      "name": "PAZ Analyzer",
-      "manufacturer": "Waves",
-      "img": "364.jpg"
-    },
-    {
-      "name": "PuigChild 660 & 670",
-      "manufacturer": "Waves",
-      "img": "14539.jpg",
-      "aliases": [
-        "PuigChild 660 &"
-      ]
-    },
-    {
-      "name": "PuigTec EQP-1A",
-      "manufacturer": "Waves",
-      "img": "18515.jpg"
-    },
-    {
-      "name": "Q1-Paragraphic EQ",
-      "manufacturer": "Waves",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Renaissance Channel",
-      "manufacturer": "Waves",
-      "img": "15892.jpg"
-    },
-    {
-      "name": "Renaissance Compressor",
-      "manufacturer": "Waves",
-      "img": "278.jpg"
-    },
-    {
-      "name": "Renaissance Equalizer",
-      "manufacturer": "Waves",
-      "img": "357.jpg"
-    },
-    {
-      "name": "Renaissance Reverb",
-      "manufacturer": "Waves",
-      "img": "397.jpg"
-    },
-    {
-      "name": "Renaissance Vox",
-      "manufacturer": "Waves",
-      "img": "172.jpg"
-    },
-    {
-      "name": "S1 Shuffler",
-      "manufacturer": "Waves",
-      "img": "15829.jpg"
-    },
-    {
-      "name": "SSL Channel",
-      "manufacturer": "Waves",
-      "img": "12148.jpg"
-    },
-    {
-      "name": "SSL EQ",
-      "manufacturer": "Waves",
-      "img": "398.jpg"
-    },
-    {
-      "name": "SSL G-Channel",
-      "manufacturer": "Waves",
-      "img": "935.jpg"
-    },
-    {
-      "name": "SoundShifter",
-      "manufacturer": "Waves",
-      "img": "12151.jpg"
-    },
-    {
-      "name": "TransX",
-      "manufacturer": "Waves",
-      "img": "14553.jpg"
+      "name": "Vanguard",
+      "manufacturer": "reFX",
+      "img": "985.jpg"
     },
     {
       "name": "VComp",
@@ -1862,9 +3274,68 @@
       "img": "12328.jpg"
     },
     {
+      "name": "VelorX (Free Standalone)",
+      "manufacturer": "Rockheyday",
+      "category": "Reverb"
+    },
+    {
       "name": "VEQ3",
       "manufacturer": "Waves",
       "img": "15828.jpg"
+    },
+    {
+      "name": "VerbSuite Classics",
+      "manufacturer": "Slate Digital",
+      "img": "19359457.jpg"
+    },
+    {
+      "name": "Vertigo VSM-3",
+      "manufacturer": "Plugin Alliance",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "VG Wind Ensemble VI",
+      "manufacturer": "VG Trumpet",
+      "category": "Wind Ensemble"
+    },
+    {
+      "name": "Vienna Ensemble Pro 8V",
+      "manufacturer": "Vienna Symphonic Library (VSL)",
+      "category": "MIDI and Audio LAN mixing host"
+    },
+    {
+      "name": "VintageMeter",
+      "manufacturer": "PSPaudioware",
+      "img": "22484.jpg"
+    },
+    {
+      "name": "Vinyl",
+      "manufacturer": "iZotope",
+      "img": "1847.jpg",
+      "category": "Lo-Fi"
+    },
+    {
+      "name": "Virtual Guitarist 2",
+      "manufacturer": "Steinberg",
+      "img": "defaultavatarhuge.jpg",
+      "aliases": [
+        "Virtual Guitarist"
+      ]
+    },
+    {
+      "name": "Virtual Mix Rack",
+      "manufacturer": "Slate Digital",
+      "img": "41319.jpg"
+    },
+    {
+      "name": "Virtual Mixbuss",
+      "manufacturer": "Slate Digital",
+      "img": "22248.jpg"
+    },
+    {
+      "name": "Vital",
+      "manufacturer": "Matt Tytel",
+      "category": "Wavetable Synth"
     },
     {
       "name": "Vitamin",
@@ -1872,9 +3343,111 @@
       "img": "16184.jpg"
     },
     {
+      "name": "VLINN",
+      "manufacturer": "AlyJamesLab",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
       "name": "Vocal Rider",
       "manufacturer": "Waves",
       "img": "20189.jpg"
+    },
+    {
+      "name": "VocalSynth 2",
+      "manufacturer": "iZotope",
+      "img": "38599625.jpg",
+      "aliases": [
+        "VocalSynth"
+      ]
+    },
+    {
+      "name": "Volcano",
+      "manufacturer": "FabFilter",
+      "img": "696.jpg"
+    },
+    {
+      "name": "VolumeShaper 4",
+      "manufacturer": "Cableguys",
+      "img": "37049.jpg",
+      "aliases": [
+        "VolumeShaper"
+      ]
+    },
+    {
+      "name": "Vox Samples AI Studio",
+      "manufacturer": "Vox Samples",
+      "category": "AI Music Generator"
+    },
+    {
+      "name": "Voxformer",
+      "manufacturer": "Voxengo",
+      "img": "16157.jpg"
+    },
+    {
+      "name": "VPS Scope",
+      "manufacturer": "keilwerthAudio",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "VStation-Powercore",
+      "manufacturer": "TC Electronic",
+      "img": "defaultavatarhuge.jpg"
+    },
+    {
+      "name": "VSTHost",
+      "manufacturer": "Hermann Seib",
+      "category": "Test Host"
+    },
+    {
+      "name": "Vulf Compressor",
+      "manufacturer": "Goodhertz",
+      "img": "37417.jpg"
+    },
+    {
+      "name": "W1 Limiter",
+      "manufacturer": "George Yohng",
+      "img": "670.jpg"
+    },
+    {
+      "name": "Wah Pedal",
+      "manufacturer": "Dystopian Waves",
+      "category": "Wah pedal effect"
+    },
+    {
+      "name": "Warmverb Multi-FX",
+      "manufacturer": "Tone2",
+      "img": "803.jpg"
+    },
+    {
+      "name": "Waveform Pro 13",
+      "manufacturer": "Tracktion Software",
+      "category": "DAW"
+    },
+    {
+      "name": "WaveShaper",
+      "manufacturer": "MeldaProduction",
+      "img": "8177.jpg"
+    },
+    {
+      "name": "WAVESTATION",
+      "manufacturer": "KORG",
+      "img": "38937110.jpg"
+    },
+    {
+      "name": "Weiss DS5 Multiband Compressor",
+      "manufacturer": "Softube",
+      "category": "Dynamics"
+    },
+    {
+      "name": "WOW",
+      "manufacturer": "Sugar Bytes",
+      "img": "270.jpg"
+    },
+    {
+      "name": "Wusik SP22",
+      "manufacturer": "Wusik",
+      "category": "Sampler (Loop Tool / Slicer)",
+      "img": "wusik-sp22.jpg"
     },
     {
       "name": "X-Hum",
@@ -1887,32 +3460,9 @@
       "img": "21052.jpg"
     },
     {
-      "name": "Z-Noise",
-      "manufacturer": "Waves",
-      "img": "15992.jpg"
-    },
-    {
-      "name": "TrackSpacer",
-      "manufacturer": "Wavesfactory",
-      "img": "3463.jpg"
-    },
-    {
-      "name": "Addictive Drums 2",
-      "manufacturer": "XLN Audio",
-      "img": "26511.jpg",
-      "aliases": [
-        "Addictive Drums"
-      ]
-    },
-    {
-      "name": "Addictive Keys Complete Collection",
-      "manufacturer": "XLN Audio",
-      "img": "38962957.jpg"
-    },
-    {
-      "name": "RC-20 Retro Color",
-      "manufacturer": "XLN Audio",
-      "img": "20283103.jpg"
+      "name": "Xendra One VST",
+      "manufacturer": "Vessel Audio",
+      "category": "Multiple Synths"
     },
     {
       "name": "XO",
@@ -1920,293 +3470,49 @@
       "img": "38536865.jpg"
     },
     {
-      "name": "8-Bit Shaper",
-      "manufacturer": "Xfer Records",
-      "img": "17477.jpg"
-    },
-    {
-      "name": "Cthulhu",
-      "manufacturer": "Xfer Records",
-      "img": "918.jpg"
-    },
-    {
-      "name": "DJMFilter",
-      "manufacturer": "Xfer Records",
-      "img": "5131.jpg"
-    },
-    {
-      "name": "DeltaModulator",
-      "manufacturer": "Xfer Records",
-      "img": "16381.jpg"
-    },
-    {
-      "name": "Dimension Expander",
-      "manufacturer": "Xfer Records",
-      "img": "1524.jpg"
-    },
-    {
-      "name": "LFOTool",
-      "manufacturer": "Xfer Records",
-      "img": "265.jpg"
-    },
-    {
-      "name": "Nerve",
-      "manufacturer": "Xfer Records",
-      "img": "3103.jpg"
-    },
-    {
-      "name": "OP-1 Drum Utility",
-      "manufacturer": "Xfer Records",
-      "img": "26589.jpg"
-    },
-    {
-      "name": "OTT",
-      "manufacturer": "Xfer Records",
-      "img": "3845.jpg"
-    },
-    {
-      "name": "Serum",
-      "manufacturer": "Xfer Records",
-      "img": "15493.jpg"
-    },
-    {
-      "name": "Alloy",
-      "manufacturer": "iZotope",
-      "img": "224.jpg"
-    },
-    {
-      "name": "BreakTweaker",
-      "manufacturer": "iZotope",
-      "img": "1023.jpg"
-    },
-    {
-      "name": "Imager",
-      "manufacturer": "iZotope",
-      "img": "38540134.jpg"
-    },
-    {
-      "name": "Insight 2",
-      "manufacturer": "iZotope",
-      "img": "1403.jpg",
-      "aliases": [
-        "Insight"
-      ]
-    },
-    {
-      "name": "Iris",
-      "manufacturer": "iZotope",
-      "img": "205.jpg"
-    },
-    {
-      "name": "Nectar 3 Plus",
-      "manufacturer": "iZotope",
-      "img": "38931662.jpg"
-    },
-    {
-      "name": "Nectar Elements",
-      "manufacturer": "iZotope",
-      "img": "5029.jpg",
-      "aliases": [
-        "Nectar"
-      ]
-    },
-    {
-      "name": "Neoverb",
-      "manufacturer": "iZotope",
-      "img": "38865384.jpg"
-    },
-    {
-      "name": "Neutron 3 Advanced",
-      "manufacturer": "iZotope",
-      "img": "38728961.jpg",
-      "aliases": [
-        "Neutron",
-        "Neutron 3"
-      ]
-    },
-    {
-      "name": "Neutron 3 Standard",
-      "manufacturer": "iZotope",
-      "img": "38728958.jpg",
-      "aliases": [
-        "Neutron",
-        "Neutron 3"
-      ]
-    },
-    {
-      "name": "Ozone 9 + Neutron 3 Advanced",
-      "manufacturer": "iZotope",
-      "img": "38765946.jpg",
-      "aliases": [
-        "Ozone 9 + Neutron",
-        "Ozone 9 + Neutron 3"
-      ]
-    },
-    {
-      "name": "Ozone 9 + Neutron 3 Standard",
-      "manufacturer": "iZotope",
-      "img": "38765945.jpg",
-      "aliases": [
-        "Ozone 9 + Neutron",
-        "Ozone 9 + Neutron 3"
-      ]
-    },
-    {
-      "name": "Ozone 9 Advanced",
-      "manufacturer": "iZotope",
-      "img": "38765941.jpg",
-      "aliases": [
-        "Ozone",
-        "Ozone 9"
-      ]
-    },
-    {
-      "name": "Ozone 9 Elements",
-      "manufacturer": "iZotope",
-      "img": "38774457.jpg",
-      "aliases": [
-        "Ozone",
-        "Ozone 9"
-      ]
-    },
-    {
-      "name": "Ozone 9 Standard",
-      "manufacturer": "iZotope",
-      "img": "38765938.jpg",
-      "aliases": [
-        "Ozone",
-        "Ozone 9"
-      ]
-    },
-    {
-      "name": "RX 9 Standard",
-      "manufacturer": "iZotope",
-      "img": "39088948.jpg",
-      "aliases": [
-        "RX",
-        "RX 9"
-      ]
-    },
-    {
-      "name": "Relay",
-      "manufacturer": "iZotope",
-      "img": "38650083.jpg"
-    },
-    {
-      "name": "Stutter Edit",
-      "manufacturer": "iZotope",
-      "img": "197.jpg"
-    },
-    {
-      "name": "Stutter Edit 2",
-      "manufacturer": "iZotope",
-      "img": "38893042.jpg",
-      "aliases": [
-        "Stutter Edit"
-      ]
-    },
-    {
-      "name": "The T-Pain Effect",
-      "manufacturer": "iZotope",
-      "img": "5186.jpg"
-    },
-    {
-      "name": "Trash",
-      "manufacturer": "iZotope",
-      "img": "365.jpg"
-    },
-    {
-      "name": "Vinyl",
-      "manufacturer": "iZotope",
-      "img": "1847.jpg"
-    },
-    {
-      "name": "VocalSynth 2",
-      "manufacturer": "iZotope",
-      "img": "38599625.jpg",
-      "aliases": [
-        "VocalSynth"
-      ]
-    },
-    {
-      "name": "iDrum",
-      "manufacturer": "iZotope",
-      "img": "15188.jpg"
-    },
-    {
-      "name": "VPS Scope",
-      "manufacturer": "keilwerthAudio",
-      "img": "defaultavatarhuge.jpg"
-    },
-    {
-      "name": "Luftikus",
-      "manufacturer": "lkjb",
-      "img": "981.jpg"
-    },
-    {
-      "name": "Nexus",
-      "manufacturer": "reFX",
-      "img": "155.jpg"
-    },
-    {
-      "name": "PlastiCZ",
-      "manufacturer": "reFX",
-      "img": "9010.jpg"
-    },
-    {
-      "name": "Slayer2",
-      "manufacturer": "reFX",
-      "img": "4353.jpg"
-    },
-    {
-      "name": "Vanguard",
-      "manufacturer": "reFX",
-      "img": "985.jpg"
-    },
-    {
       "name": "Xphraze",
       "manufacturer": "reFX",
       "img": "19507.jpg"
     },
     {
-      "name": "quadraSID",
-      "manufacturer": "reFX",
-      "img": "4361.jpg"
+      "name": "Z-Noise",
+      "manufacturer": "Waves",
+      "img": "15992.jpg"
     },
     {
-      "name": "ACE",
-      "manufacturer": "u-he",
-      "img": "680.jpg"
+      "name": "Z3TA+ 2",
+      "manufacturer": "Cakewalk",
+      "img": "785.jpg",
+      "aliases": [
+        "Z3TA+"
+      ]
     },
     {
-      "name": "Diva",
-      "manufacturer": "u-he",
-      "img": "827.jpg"
-    },
-    {
-      "name": "Hive",
-      "manufacturer": "u-he",
-      "img": "46538.jpg"
-    },
-    {
-      "name": "Triple Cheese",
-      "manufacturer": "u-he",
-      "img": "5606.jpg"
-    },
-    {
-      "name": "Tyrell N6",
-      "manufacturer": "u-he",
-      "img": "751.jpg"
+      "name": "Zap",
+      "manufacturer": "Sinevibes",
+      "img": "defaultavatarhuge.jpg"
     },
     {
       "name": "Zebra",
       "manufacturer": "u-he",
-      "img": "671.jpg"
+      "img": "zebra.jpg",
+      "category": "Synth (Modular)"
     },
     {
       "name": "Zebralette",
       "manufacturer": "u-he",
-      "img": "1602.jpg"
+      "img": "1602.jpg",
+      "category": "Synth (Modular)"
+    },
+    {
+      "name": "Zenith",
+      "manufacturer": "Audiaire",
+      "img": "38786250.jpg"
+    },
+    {
+      "name": "Zone",
+      "manufacturer": "Audiaire",
+      "img": "38651584.jpg"
     }
   ]
 }

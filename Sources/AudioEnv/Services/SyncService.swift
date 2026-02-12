@@ -221,6 +221,54 @@ class SyncService: ObservableObject {
         }
     }
 
+    /// Pull S3 backup config from the backend and save to Keychain.
+    /// Returns true if config was restored successfully.
+    func fetchS3Config(token: String, userId: String) async -> Bool {
+        let url = URL(string: "\(baseURL)/api/backup/config/full")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard statusCode == 200 else {
+                logger.warning("Fetch S3 config returned status \(statusCode)")
+                return false
+            }
+
+            struct ConfigResponse: Decodable {
+                let configured: Bool
+                let bucket_name: String?
+                let region: String?
+                let access_key: String?
+                let secret_key: String?
+            }
+
+            let config = try JSONDecoder().decode(ConfigResponse.self, from: data)
+            guard config.configured,
+                  let bucket = config.bucket_name,
+                  let region = config.region,
+                  let accessKey = config.access_key,
+                  let secretKey = config.secret_key else {
+                return false
+            }
+
+            KeychainHelper.shared.saveS3Config(
+                bucket: bucket,
+                accessKeyId: accessKey,
+                secretKey: secretKey,
+                region: region,
+                forUser: userId
+            )
+            logger.info("S3 config restored from backend")
+            return true
+        } catch {
+            logger.error("Failed to fetch S3 config: \(error)")
+            return false
+        }
+    }
+
     // MARK: - Backup Manifest Sync
 
     /// Sync a backup manifest to the backend after successful backup.

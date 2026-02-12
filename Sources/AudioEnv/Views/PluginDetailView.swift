@@ -23,7 +23,7 @@ struct PluginDetailView: View {
             }
             .padding(24)
         }
-        .frame(minWidth: 380)
+        .frame(minWidth: 340)
     }
 
     private func header() -> some View {
@@ -34,16 +34,23 @@ struct PluginDetailView: View {
                 Text(plugin.name)
                     .font(.title2)
                     .fontWeight(.bold)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(plugin.format.rawValue)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                if let manufacturer = entry?.manufacturer {
-                    Text(manufacturer)
+                    .lineLimit(1)
+                let resolvedMfr = ManufacturerResolver.displayManufacturer(
+                    plugin: plugin, catalogManufacturer: entry?.manufacturer)
+                if resolvedMfr != "Unknown" {
+                    Text(resolvedMfr)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
-            Spacer()
+            Spacer(minLength: 8)
             if let iconImage {
                 Image(nsImage: iconImage)
                     .resizable()
@@ -76,6 +83,9 @@ struct PluginDetailView: View {
                 Text(plugin.path)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(plugin.path)
             }
             GridRow {
                 Text("Bundle ID")
@@ -83,6 +93,8 @@ struct PluginDetailView: View {
                     .foregroundColor(.secondary)
                 Text(plugin.bundleID ?? "Unknown")
                     .font(.subheadline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             GridRow {
                 Text("Version")
@@ -95,16 +107,11 @@ struct PluginDetailView: View {
                 Text("Manufacturer")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                Text(displayManufacturer(entry: entry))
+                Text(ManufacturerResolver.displayManufacturer(
+                    plugin: plugin, catalogManufacturer: entry?.manufacturer))
                     .font(.subheadline)
             }
         }
-    }
-
-    private func displayManufacturer(entry: PluginCatalogEntry?) -> String {
-        if let m = entry?.manufacturer, !m.isEmpty { return m }
-        if let m = plugin.manufacturer, !m.isEmpty, m.uppercased() != "BNDL" { return m }
-        return "Manufacturer not found"
     }
 
     private func licensingHints() -> some View {
@@ -123,9 +130,12 @@ struct PluginDetailView: View {
                         Text(item.key)
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
                         Spacer()
                         Text(item.value)
                             .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
             }
@@ -307,6 +317,7 @@ struct PluginDetailView: View {
             Button("Copy Bundle ID") { copyBundleID() }
                 .buttonStyle(.bordered)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func licenseMetadataHints() -> [(key: String, value: String)] {

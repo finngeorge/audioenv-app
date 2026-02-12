@@ -12,7 +12,7 @@ struct ScanCache: Codable {
 }
 
 final class ScanCacheStore {
-    private static let currentVersion = 2
+    private static let currentVersion = 3
     private let fm = FileManager.default
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder

@@ -19,19 +19,22 @@ struct AudioPlugin: Identifiable, Hashable, Codable {
     let name:         String          /// display name (bundle filename sans extension)
     let path:         String          /// full path on disk
     let format:       PluginFormat
-    let bundleID:     String?         /// CFBundleIdentifier from Info.plist
-    let version:      String?         /// CFBundleShortVersionString
-    let manufacturer: String?         /// CFBundlePackageType (best-effort)
+    let bundleID:            String?  /// CFBundleIdentifier from Info.plist
+    let version:             String?  /// CFBundleShortVersionString
+    let manufacturer:        String?  /// CFBundlePackageType (best-effort)
+    let auManufacturerCode:  String?  /// AudioComponents[0].manufacturer (AU 4-char code)
 
     init(name: String, path: String, format: PluginFormat,
-         bundleID: String? = nil, version: String? = nil, manufacturer: String? = nil) {
-        self.id           = UUID()
-        self.name         = name
-        self.path         = path
-        self.format       = format
-        self.bundleID     = bundleID
-        self.version      = version
-        self.manufacturer = manufacturer
+         bundleID: String? = nil, version: String? = nil,
+         manufacturer: String? = nil, auManufacturerCode: String? = nil) {
+        self.id                 = UUID()
+        self.name               = name
+        self.path               = path
+        self.format             = format
+        self.bundleID           = bundleID
+        self.version            = version
+        self.manufacturer       = manufacturer
+        self.auManufacturerCode = auManufacturerCode
     }
 
     // Equality / hashing driven by on-disk path (stable identity)

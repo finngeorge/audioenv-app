@@ -470,12 +470,13 @@ class ScannerService: ObservableObject {
                 let info     = readBundleInfo(at: full)
 
                 results.append(AudioPlugin(
-                    name:         baseName,
-                    path:         full,
-                    format:       formatFor(ext),
-                    bundleID:     info.bundleID,
-                    version:      info.version,
-                    manufacturer: info.manufacturer
+                    name:               baseName,
+                    path:               full,
+                    format:             formatFor(ext),
+                    bundleID:           info.bundleID,
+                    version:            info.version,
+                    manufacturer:       info.manufacturer,
+                    auManufacturerCode: info.auManufacturerCode
                 ))
             }
         }
@@ -493,18 +494,28 @@ class ScannerService: ObservableObject {
     }
 
     /// Best-effort read of a macOS bundle's Info.plist.
-    private func readBundleInfo(at path: String) -> (bundleID: String?, version: String?, manufacturer: String?) {
+    private func readBundleInfo(at path: String) -> (bundleID: String?, version: String?, manufacturer: String?, auManufacturerCode: String?) {
         let plistPath = (path as NSString).appendingPathComponent("Contents/Info.plist")
         guard let data = FileManager.default.contents(atPath: plistPath),
               let dict = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
-        else { return (nil, nil, nil) }
+        else { return (nil, nil, nil, nil) }
 
         let rawManufacturer = dict["CFBundlePackageType"] as? String
         let manufacturer = (rawManufacturer?.uppercased() == "BNDL") ? nil : rawManufacturer
+
+        // Extract AU 4-char manufacturer code from AudioComponents array
+        var auCode: String? = nil
+        if let components = dict["AudioComponents"] as? [[String: Any]],
+           let first = components.first,
+           let mfr = first["manufacturer"] as? String {
+            auCode = mfr
+        }
+
         return (
-            bundleID:     dict["CFBundleIdentifier"]            as? String,
-            version:      dict["CFBundleShortVersionString"]    as? String,
-            manufacturer: manufacturer
+            bundleID:            dict["CFBundleIdentifier"]            as? String,
+            version:             dict["CFBundleShortVersionString"]    as? String,
+            manufacturer:        manufacturer,
+            auManufacturerCode:  auCode
         )
     }
 

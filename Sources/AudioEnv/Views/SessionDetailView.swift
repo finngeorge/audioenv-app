@@ -32,7 +32,7 @@ struct SessionDetailView: View {
             }
             .padding(24)
         }
-        .frame(minWidth: 380)
+        .frame(minWidth: 340)
         .sheet(isPresented: $showSampleCollection) {
             SampleCollectionView(session: session)
                 .environmentObject(sampleCollector)
@@ -47,16 +47,20 @@ struct SessionDetailView: View {
                 Text(session.name)
                     .font(.title)
                     .fontWeight(.bold)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(session.format.rawValue)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
                 if session.isBackup {
                     Text("Backup session")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
             }
-            Spacer()
+            Spacer(minLength: 8)
             // Use session-specific DAW icon
             if let sessionIcon = DAWIconLoader.sessionIcon(for: session.format) {
                 Image(nsImage: sessionIcon)
@@ -97,9 +101,13 @@ struct SessionDetailView: View {
                     Text("Path")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
+                        .gridColumnAlignment(.leading)
                     Text(session.path)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(session.path)
                 }
                 GridRow {
                     Text("Modified")
@@ -126,6 +134,7 @@ struct SessionDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 
@@ -149,15 +158,19 @@ struct AbletonDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             // Quick-stat cards
-            HStack(spacing: 12) {
-                QuickStat(label: "Tempo",   value: "\(Int(project.tempo)) BPM",                          icon: "metronome")
-                QuickStat(label: "Tracks",  value: "\(project.tracks.count)",                           icon: "waveform")
-                QuickStat(label: "Clips",   value: "\(project.tracks.reduce(0) { $0 + $1.clips.count })", icon: "rectangle.stack")
-                QuickStat(label: "Samples", value: "\(project.samplePaths.count)",                      icon: "music.note")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    QuickStat(label: "Tempo",   value: "\(Int(project.tempo)) BPM",                          icon: "metronome")
+                    QuickStat(label: "Tracks",  value: "\(project.tracks.count)",                           icon: "waveform")
+                    QuickStat(label: "Clips",   value: "\(project.tracks.reduce(0) { $0 + $1.clips.count })", icon: "rectangle.stack")
+                    QuickStat(label: "Samples", value: "\(project.samplePaths.count)",                      icon: "music.note")
+                }
+                .fixedSize(horizontal: true, vertical: false)
             }
             Text("Live \(project.version) · \(project.usedPlugins.count) plugin(s)")
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .lineLimit(1)
 
             // ── Plugins used ──────────────────────────────────
             if !project.usedPlugins.isEmpty {
@@ -165,14 +178,16 @@ struct AbletonDetailView: View {
                     .font(.headline)
                     .fontWeight(.semibold)
 
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                LazyVGrid(columns: [GridItem(.flexible(minimum: 140)), GridItem(.flexible(minimum: 140))], spacing: 6) {
                     ForEach(project.usedPlugins, id: \.self) { name in
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(Color.accentColor)
-                                .frame(width: 6)
+                                .frame(width: 6, height: 6)
                             Text(name)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                     }
                 }
@@ -229,6 +244,8 @@ struct AbletonDetailView: View {
                                 .frame(width: 16)
                             Text((project.samplePaths[i] as NSString).lastPathComponent)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Spacer()
                         }
                         .padding(.vertical, 6)
@@ -249,6 +266,8 @@ struct AbletonDetailView: View {
                         Text((path as NSString).lastPathComponent)
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -265,6 +284,8 @@ struct AbletonDetailView: View {
                         Text((path as NSString).lastPathComponent)
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -285,11 +306,14 @@ struct ProToolsDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Quick-stat cards
-            HStack(spacing: 12) {
-                QuickStat(label: "Sample Rate", value: project.sampleRate.map { "\($0) Hz" } ?? "\u{2014}", icon: "waveform")
-                QuickStat(label: "Audio Files", value: "\(project.audioFiles.count)", icon: "speaker.wave.2")
-                QuickStat(label: "Plugins", value: project.pluginNames.isEmpty ? "\u{2014}" : "\(project.pluginNames.count)", icon: "puzzlepiece")
-                QuickStat(label: "Size", value: ByteCountFormatter.string(fromByteCount: Int64(project.byteLength), countStyle: .file), icon: "doc")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    QuickStat(label: "Sample Rate", value: project.sampleRate.map { "\($0) Hz" } ?? "\u{2014}", icon: "waveform")
+                    QuickStat(label: "Audio Files", value: "\(project.audioFiles.count)", icon: "speaker.wave.2")
+                    QuickStat(label: "Plugins", value: project.pluginNames.isEmpty ? "\u{2014}" : "\(project.pluginNames.count)", icon: "puzzlepiece")
+                    QuickStat(label: "Size", value: ByteCountFormatter.string(fromByteCount: Int64(project.byteLength), countStyle: .file), icon: "doc")
+                }
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
@@ -308,14 +332,16 @@ struct ProToolsDetailView: View {
                 Text("Plugin Hints")
                     .font(.headline)
                     .fontWeight(.semibold)
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                LazyVGrid(columns: [GridItem(.flexible(minimum: 140)), GridItem(.flexible(minimum: 140))], spacing: 6) {
                     ForEach(project.pluginNames, id: \.self) { name in
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(Color.purple)
-                                .frame(width: 6)
+                                .frame(width: 6, height: 6)
                             Text(name)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                     }
                 }
@@ -334,6 +360,8 @@ struct ProToolsDetailView: View {
                                 .frame(width: 16)
                             Text((path as NSString).lastPathComponent)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Spacer()
                         }
                         .padding(.vertical, 5)
@@ -362,6 +390,8 @@ struct ProToolsDetailView: View {
                                 .frame(width: 16)
                             Text((path as NSString).lastPathComponent)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Spacer()
                         }
                         .padding(.vertical, 5)
@@ -390,6 +420,8 @@ struct ProToolsDetailView: View {
                                 .frame(width: 16)
                             Text((path as NSString).lastPathComponent)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Spacer()
                         }
                         .padding(.vertical, 5)
@@ -418,6 +450,8 @@ struct ProToolsDetailView: View {
                                 .frame(width: 16)
                             Text((path as NSString).lastPathComponent)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Spacer()
                         }
                         .padding(.vertical, 5)
@@ -446,25 +480,30 @@ struct LogicDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Quick-stat cards
-            HStack(spacing: 12) {
-                QuickStat(label: "Tempo",       value: project.tempo.map      { "\(Int($0)) BPM" } ?? "—", icon: "metronome")
-                QuickStat(label: "Sample Rate", value: project.sampleRate.map { "\($0) Hz" }       ?? "—", icon: "waveform")
-                QuickStat(label: "Media",       value: "\(project.mediaFiles.count)",                       icon: "speaker.wave.2")
-                QuickStat(label: "MIDI",        value: "\(project.midiFiles.count)",                        icon: "piano")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    QuickStat(label: "Tempo",       value: project.tempo.map      { "\(Int($0)) BPM" } ?? "—", icon: "metronome")
+                    QuickStat(label: "Sample Rate", value: project.sampleRate.map { "\($0) Hz" }       ?? "—", icon: "waveform")
+                    QuickStat(label: "Media",       value: "\(project.mediaFiles.count)",                       icon: "speaker.wave.2")
+                    QuickStat(label: "MIDI",        value: "\(project.midiFiles.count)",                        icon: "piano")
+                }
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             if !project.pluginHints.isEmpty {
                 Text("AU Plugin Hints")
                     .font(.headline)
                     .fontWeight(.semibold)
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                LazyVGrid(columns: [GridItem(.flexible(minimum: 140)), GridItem(.flexible(minimum: 140))], spacing: 6) {
                     ForEach(project.pluginHints, id: \.self) { hint in
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(Color.accentColor)
-                                .frame(width: 6)
+                                .frame(width: 6, height: 6)
                             Text(hint)
                                 .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                     }
                 }
@@ -528,6 +567,8 @@ struct LogicDetailView: View {
                                 .frame(width: 16)
                             Text((project.mediaFiles[i] as NSString).lastPathComponent)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Spacer()
                         }
                         .padding(.vertical, 5)
@@ -554,6 +595,8 @@ struct LogicDetailView: View {
                                 .frame(width: 16)
                             Text((project.midiFiles[i] as NSString).lastPathComponent)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Spacer()
                         }
                         .padding(.vertical, 5)
@@ -579,6 +622,8 @@ struct LogicDetailView: View {
                                 .frame(width: 16)
                             Text((project.bouncedFiles[i] as NSString).lastPathComponent)
                                 .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Spacer()
                         }
                         .padding(.vertical, 5)
@@ -645,9 +690,12 @@ struct QuickStat: View {
             Text(value)
                 .font(.body)
                 .fontWeight(.semibold)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             Text(label)
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
         .padding(10)
@@ -670,10 +718,14 @@ struct TrackRow: View {
                 Text(track.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 if !captionText.isEmpty {
                     Text(captionText)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
 

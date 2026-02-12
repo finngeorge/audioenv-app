@@ -55,6 +55,9 @@ cat > "$PLIST_DIR/Info.plist" << 'EOF'
 </plist>
 EOF
 
+echo "Codesigning with entitlements..."
+codesign --force --sign - --entitlements AudioEnv-adhoc.entitlements --deep "$APP_NAME"
+
 echo ""
 echo "✅ $APP_NAME created successfully!"
 echo ""

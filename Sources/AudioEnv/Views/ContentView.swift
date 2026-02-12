@@ -75,7 +75,7 @@ struct ContentView: View {
                     .tag(AppSection.profile)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 210)
+            .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 220)
             .navigationTitle("AudioEnv")
 
         } content: {
@@ -104,7 +104,9 @@ struct ContentView: View {
                     Spacer()
                 }
             }
-            .navigationSplitViewColumnWidth(min: 350, ideal: 380)
+            .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 450)
+            .navigationTitle("")
+            .toolbarTitleDisplayMode(.inline)
             // Clear detail selection whenever the sidebar category changes.
             .onChange(of: section) { oldValue, newValue in
                 // Only clear selections if we're actually changing sections
@@ -146,7 +148,13 @@ struct ContentView: View {
                 Color.clear
             }
         }
-        .frame(minWidth: 1000, idealWidth: 1200, minHeight: 550, idealHeight: 700)
+        .frame(minWidth: 1200, idealWidth: 1360, minHeight: 620, idealHeight: 780)
+        .onChange(of: columnVisibility) { _, newValue in
+            // Prevent macOS from auto-collapsing the sidebar
+            if newValue != .all {
+                columnVisibility = .all
+            }
+        }
         .toolbar {
             // Only show scan buttons on the Scan page
             if section == .scan {
@@ -278,6 +286,7 @@ struct ContentView: View {
                     Text("Quick insights about your audio production environment")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
                 .padding(.bottom, 8)
 
@@ -352,6 +361,7 @@ struct ContentView: View {
                     Text("Overview of discovered audio plugins and sessions")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
                 .padding(.bottom, 8)
 

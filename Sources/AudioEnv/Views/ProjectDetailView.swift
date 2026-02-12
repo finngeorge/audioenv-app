@@ -22,17 +22,20 @@ struct ProjectDetailView: View {
             HStack(spacing: 12) {
                 Toggle("Show Backups", isOn: $showBackups)
                     .toggleStyle(.switch)
+                    .fixedSize()
                 Spacer()
                 if unparsedCount > 0 {
-                    Button("Parse \(unparsedCount) Unparsed Session\(unparsedCount == 1 ? "" : "s")") {
+                    Button("Parse \(unparsedCount) Unparsed") {
                         parseUnparsedSessions()
                     }
                     .buttonStyle(.bordered)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
                 if !showBackups && project.backups.count > 0 {
                     Text("Backups hidden")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
             }
             .padding(.horizontal, 16)
@@ -45,7 +48,7 @@ struct ProjectDetailView: View {
                     SessionRow(session: session)
                         .tag(session)
                 }
-                .frame(minWidth: 260)
+                .frame(minWidth: 240, idealWidth: 300)
 
                 Divider()
 
@@ -67,32 +70,38 @@ struct ProjectDetailView: View {
     }
 
     private func header() -> some View {
-        HStack {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(project.name)
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(project.format.rawValue)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
-            Spacer()
+
+            Spacer(minLength: 8)
+
             if project.backups.count > 0 {
                 Text("\(project.backups.count) backup\(project.backups.count == 1 ? "" : "s")")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
+
+            HStack(spacing: 8) {
+                Button("Show Folder") { showProjectFolder() }
+                    .buttonStyle(.bordered)
+                Button("Copy Path") { copyProjectPath() }
+                    .buttonStyle(.bordered)
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(16)
-        .overlay(alignment: .trailing) {
-            HStack(spacing: 8) {
-                Button("Show Project Folder") { showProjectFolder() }
-                    .buttonStyle(.bordered)
-                Button("Copy Project Path") { copyProjectPath() }
-                    .buttonStyle(.bordered)
-            }
-            .padding(.trailing, 16)
-        }
     }
 
     private func emptyDetail() -> some View {
@@ -161,7 +170,9 @@ private struct SessionRow: View {
                 Text(session.name)
                     .font(.body)
                     .fontWeight(.medium)
-                Spacer()
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
                 if session.isBackup {
                     Text("Backup")
                         .font(.caption2)
@@ -169,6 +180,7 @@ private struct SessionRow: View {
                         .padding(.init(top: 2, leading: 6, bottom: 2, trailing: 6))
                         .background(Color.secondary.opacity(0.15))
                         .cornerRadius(4)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 Text(session.format.rawValue)
                     .font(.caption)
@@ -176,20 +188,25 @@ private struct SessionRow: View {
                     .background(fmtColor.opacity(0.15))
                     .foregroundColor(fmtColor)
                     .cornerRadius(4)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
             HStack(spacing: 12) {
                 Text(Self.dateFormatter.string(from: session.modifiedDate))
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
                 Text(sizeString)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
 
                 if case .ableton(let p) = session.project {
-                    Text("\(p.tracks.count) tracks · \(p.samplePaths.count) samples · \(Int(p.tempo)) BPM")
+                    Text("\(p.tracks.count) trk · \(p.samplePaths.count) smp · \(Int(p.tempo)) BPM")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
         }

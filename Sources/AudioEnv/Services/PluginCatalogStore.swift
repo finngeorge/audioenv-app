@@ -11,12 +11,31 @@ struct PluginCatalogEntry: Codable {
     let manufacturer: String?
     let img: String?
     let aliases: [String]?
+    let category: String?
+    let description: String?
+    let price: String?
+    let formats: [String]?
+    let bundleIdHint: String?
 }
 
 final class PluginCatalogStore {
     private var byName: [String: PluginCatalogEntry] = [:]
     private var byNormalized: [String: PluginCatalogEntry] = [:]
     private(set) var pluginCount: Int = 0
+
+    /// SwiftPM resource bundle — `Bundle.module` works for `swift run`,
+    /// but for .app bundles the resources live inside a nested bundle.
+    private static let resourceBundle: Bundle = {
+        // For .app bundles: Contents/Resources/AudioEnv_AudioEnv.bundle
+        if let resourceURL = Bundle.main.resourceURL {
+            let nested = resourceURL.appendingPathComponent("AudioEnv_AudioEnv.bundle")
+            if let bundle = Bundle(path: nested.path) {
+                return bundle
+            }
+        }
+        // Fallback: Bundle.module works for `swift run` / build directory
+        return Bundle.module
+    }()
 
     init() {
         load()
@@ -41,22 +60,26 @@ final class PluginCatalogStore {
     }
 
     func imageURL(named filename: String) -> URL? {
+        let bundle = Self.resourceBundle
         let base = (filename as NSString).deletingPathExtension
         let ext = (filename as NSString).pathExtension
+        // SwiftPM .process() flattens plugin_imgs/ so images are at bundle root
         if !ext.isEmpty,
-           let url = Bundle.main.url(forResource: base, withExtension: ext, subdirectory: "plugin_imgs") {
+           let url = bundle.url(forResource: base, withExtension: ext) {
             return url
         }
+        // Also try with subdirectory (for non-SwiftPM bundles)
         if !ext.isEmpty,
-           let url = Bundle.main.url(forResource: base, withExtension: ext) {
+           let url = bundle.url(forResource: base, withExtension: ext, subdirectory: "plugin_imgs") {
             return url
         }
-        return Bundle.main.url(forResource: filename, withExtension: nil, subdirectory: "plugin_imgs")
-            ?? Bundle.main.url(forResource: filename, withExtension: nil)
+        return bundle.url(forResource: filename, withExtension: nil)
+            ?? bundle.url(forResource: filename, withExtension: nil, subdirectory: "plugin_imgs")
     }
 
     private func load() {
-        guard let url = Bundle.main.url(forResource: "plugin_catalog", withExtension: "json") else {
+        let bundle = Self.resourceBundle
+        guard let url = bundle.url(forResource: "plugin_catalog", withExtension: "json") else {
             return
         }
         guard let data = try? Data(contentsOf: url) else { return }
