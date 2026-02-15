@@ -229,7 +229,7 @@ class WebSocketService: ObservableObject {
         // Use MenuBarManager's notification method if available
         if let menuBar {
             menuBar.sendNotification(title: title, body: body)
-        } else {
+        } else if Bundle.main.bundleIdentifier != nil {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body

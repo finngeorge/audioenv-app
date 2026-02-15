@@ -288,6 +288,10 @@ class MenuBarManager: ObservableObject {
     // MARK: - Notifications
 
     private func requestNotificationPermission() {
+        guard Bundle.main.bundleIdentifier != nil else {
+            logger.info("Skipping notification permission — no app bundle")
+            return
+        }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error {
                 self.logger.warning("Notification permission error: \(error)")
@@ -296,6 +300,10 @@ class MenuBarManager: ObservableObject {
     }
 
     func sendNotification(title: String, body: String) {
+        guard Bundle.main.bundleIdentifier != nil else {
+            logger.info("Notification skipped (no app bundle): \(title) — \(body)")
+            return
+        }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
