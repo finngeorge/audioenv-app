@@ -485,26 +485,24 @@ class ScannerService: ObservableObject {
         }.count
     }
 
+    /// Evaluate cache staleness WITHOUT touching the filesystem.
+    /// This avoids triggering macOS TCC prompts (Desktop, Downloads, etc.) on every launch.
+    /// Actual filesystem mod-time checks happen lazily when the user triggers a scan.
     private func evaluateCacheStalenessAndAutoRescan() {
         isCacheStale = false
         cacheStaleReason = nil
-        let currentRoots = Self.scanRootsForStaleness(customPaths: customPaths)
         guard !cachedScanRoots.isEmpty else { return }
 
+        let currentRoots = Self.scanRootsForStaleness(customPaths: customPaths)
         if Set(currentRoots) != Set(cachedScanRoots) {
             isCacheStale = true
             cacheStaleReason = "Scan roots changed"
-        } else {
-            let currentTimes = Self.rootModTimes(for: currentRoots)
-            for root in currentRoots {
-                guard let cachedTime = cachedRootModTimes[root],
-                      let currentTime = currentTimes[root]
-                else { continue }
-                if currentTime > cachedTime {
-                    isCacheStale = true
-                    cacheStaleReason = "Updated: \(root)"
-                    break
-                }
+        } else if let lastScan = lastScanDate {
+            // Mark stale based on age rather than filesystem access
+            let age = Date().timeIntervalSince(lastScan)
+            if age > 3600 {
+                isCacheStale = true
+                cacheStaleReason = "Last scan was \(Self.relativeTimeString(from: lastScan)) ago"
             }
         }
 

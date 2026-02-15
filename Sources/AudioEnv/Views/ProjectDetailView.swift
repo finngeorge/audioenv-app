@@ -33,8 +33,8 @@ struct ProjectDetailView: View {
                         .foregroundColor(.secondary)
                 }
                 if unparsedCount > 0 && !isParsing {
-                    Button("Parse One Unparsed") {
-                        parseOneUnparsedSession()
+                    Button("Parse \(unparsedCount) Unparsed") {
+                        parseUnparsedSessions()
                     }
                     .buttonStyle(.bordered)
                     .fixedSize(horizontal: true, vertical: false)
@@ -153,11 +153,20 @@ struct ProjectDetailView: View {
         project.sessions.filter { $0.project == nil }.count
     }
 
-    private func parseOneUnparsedSession() {
-        guard let session = project.sessions.first(where: { $0.project == nil }) else { return }
+    private func parseUnparsedSessions() {
+        let unparsed = project.sessions.filter { $0.project == nil }
+        guard !unparsed.isEmpty else { return }
         isParsing = true
-        scanner.parseIndividualSession(path: session.path) {
+        parseSequentially(remaining: unparsed[...])
+    }
+
+    private func parseSequentially(remaining: ArraySlice<AudioSession>) {
+        guard let next = remaining.first else {
             isParsing = false
+            return
+        }
+        scanner.parseIndividualSession(path: next.path) {
+            parseSequentially(remaining: remaining.dropFirst())
         }
     }
 }

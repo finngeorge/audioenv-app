@@ -6,8 +6,10 @@ import AppKit
 /// (AbletonDetailView / LogicDetailView) for the parsed project content.
 struct SessionDetailView: View {
     let session: AudioSession
+    @EnvironmentObject var scanner: ScannerService
     @EnvironmentObject var sampleCollector: SampleCollectionService
     @State private var showSampleCollection = false
+    @State private var isParsing = false
 
     var body: some View {
         ScrollView {
@@ -25,9 +27,23 @@ struct SessionDetailView: View {
                 case .proTools(let p):
                     ProToolsDetailView(project: p)
                 case .none:
-                    Text("Could not parse this session file.")
-                        .foregroundColor(.secondary)
-                        .italic()
+                    VStack(spacing: 12) {
+                        Text("This session file has not been parsed yet.")
+                            .foregroundColor(.secondary)
+                            .italic()
+                        if isParsing {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Button("Parse Session") {
+                                isParsing = true
+                                scanner.parseIndividualSession(path: session.path) {
+                                    isParsing = false
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
                 }
             }
             .padding(24)

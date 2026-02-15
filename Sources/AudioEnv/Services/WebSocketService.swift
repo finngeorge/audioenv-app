@@ -20,6 +20,7 @@ class WebSocketService: ObservableObject {
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var reconnectAttempt = 0
+    private var maxReconnectAttempts = 5
     private var maxReconnectDelay: TimeInterval = 30
     private var reconnectTask: Task<Void, Never>?
     private var isIntentionalDisconnect = false
@@ -67,21 +68,35 @@ class WebSocketService: ObservableObject {
         guard !isConnected, webSocketTask == nil else { return }
         isIntentionalDisconnect = false
 
-        let urlString = "\(baseURL)/api/ws/sync?token=\(token)"
+        let urlString = "\(baseURL)/api/ws/sync?token=\(token)&device_id=\(deviceUUID)"
         guard let url = URL(string: urlString) else {
             logger.error("Invalid WebSocket URL")
             return
         }
 
+        logger.info("WebSocket connecting to \(self.baseURL)...")
+
         let session = URLSession(configuration: .default)
-        webSocketTask = session.webSocketTask(with: url)
-        webSocketTask?.resume()
+        let task = session.webSocketTask(with: url)
+        webSocketTask = task
+        task.resume()
 
-        isConnected = true
-        reconnectAttempt = 0
-        logger.info("WebSocket connecting...")
-
-        receiveMessage()
+        // Wait for the handshake to complete before marking connected
+        task.sendPing { [weak self] error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    self.logger.warning("WebSocket handshake failed: \(error.localizedDescription)")
+                    self.webSocketTask = nil
+                    self.handleDisconnect()
+                } else {
+                    self.isConnected = true
+                    self.reconnectAttempt = 0
+                    self.logger.info("WebSocket connected")
+                    self.receiveMessage()
+                }
+            }
+        }
     }
 
     func disconnect() {
@@ -205,10 +220,15 @@ class WebSocketService: ObservableObject {
     private func scheduleReconnect() {
         reconnectTask?.cancel()
 
+        guard reconnectAttempt < maxReconnectAttempts else {
+            logger.info("Max reconnect attempts (\(self.maxReconnectAttempts)) reached, giving up. Use Sync to retry.")
+            return
+        }
+
         let delay = min(pow(2.0, Double(reconnectAttempt)), maxReconnectDelay)
         reconnectAttempt += 1
 
-        logger.info("Scheduling reconnect in \(delay)s (attempt \(self.reconnectAttempt))")
+        logger.info("Scheduling reconnect in \(delay)s (attempt \(self.reconnectAttempt)/\(self.maxReconnectAttempts))")
 
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
