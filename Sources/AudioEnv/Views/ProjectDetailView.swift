@@ -48,7 +48,7 @@ struct ProjectDetailView: View {
                     SessionRow(session: session)
                         .tag(session)
                 }
-                .frame(minWidth: 240, idealWidth: 300)
+                .frame(minWidth: 220, idealWidth: 280)
 
                 Divider()
 
@@ -101,7 +101,8 @@ struct ProjectDetailView: View {
             }
             .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
     }
 
     private func emptyDetail() -> some View {

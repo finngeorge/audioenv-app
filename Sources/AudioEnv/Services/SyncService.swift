@@ -151,6 +151,19 @@ class SyncService: ObservableObject {
                     if let tempo = logic.tempo {
                         dict["tempo"] = tempo
                     }
+                    if let trackCount = logic.trackCount {
+                        dict["track_count"] = trackCount
+                    }
+                    if let key = logic.songKey {
+                        dict["key_signature"] = key
+                    }
+                    if let scale = logic.songScale {
+                        dict["key_scale"] = scale
+                    }
+                    if let num = logic.timeSignatureNumerator,
+                       let den = logic.timeSignatureDenominator {
+                        dict["time_signature"] = "\(num)/\(den)"
+                    }
                     if !logic.pluginHints.isEmpty {
                         dict["used_plugins"] = logic.pluginHints
                         dict["plugin_count"] = logic.pluginHints.count
@@ -266,6 +279,66 @@ class SyncService: ObservableObject {
         } catch {
             logger.error("Failed to fetch S3 config: \(error)")
             return false
+        }
+    }
+
+    // MARK: - Session Activity Sync
+
+    /// Sync a live session's activity data to the backend.
+    func syncSessionActivity(session: LiveSession, token: String) async {
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        var payload: [String: Any] = [
+            "project_name": session.projectName,
+            "project_path": session.projectPath,
+            "session_format": session.format.rawValue,
+            "opened_at": dateFormatter.string(from: session.openedAt),
+            "duration_seconds": Int(session.duration),
+            "save_count": session.saveCount,
+            "initial_size_bytes": session.initialFileSize,
+            "final_size_bytes": session.currentFileSize,
+            "new_audio_files": session.newAudioFiles.count,
+            "new_bounces": session.newBounces.count,
+            "device_uuid": deviceUUID,
+        ]
+
+        if let closedAt = session.closedAt {
+            payload["closed_at"] = dateFormatter.string(from: closedAt)
+        }
+
+        if !session.snapshots.isEmpty {
+            payload["snapshots"] = session.snapshots.map { snapshot -> [String: Any] in
+                var dict: [String: Any] = [
+                    "timestamp": dateFormatter.string(from: snapshot.timestamp),
+                    "file_size": snapshot.fileSize,
+                ]
+                if let pluginCount = snapshot.pluginCount { dict["plugin_count"] = pluginCount }
+                if let trackCount = snapshot.trackCount { dict["track_count"] = trackCount }
+                if let tempo = snapshot.tempo { dict["tempo"] = tempo }
+                if let key = snapshot.keySignature { dict["key_signature"] = key }
+                if let ts = snapshot.timeSignature { dict["time_signature"] = ts }
+                return dict
+            }
+        }
+
+        let url = URL(string: "\(baseURL)/api/sessions/activity")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if statusCode == 200 || statusCode == 201 {
+                logger.info("Session activity synced: \(session.projectName)")
+            } else {
+                logger.warning("Session activity sync returned status \(statusCode)")
+            }
+        } catch {
+            logger.error("Failed to sync session activity: \(error)")
         }
     }
 

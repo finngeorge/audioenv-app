@@ -102,7 +102,7 @@ struct BackupScopeStats {
 
 /// Extension to calculate stats for a scope
 extension BackupScope {
-    func calculateStats(scanner: ScannerService) -> BackupScopeStats {
+    @MainActor func calculateStats(scanner: ScannerService) -> BackupScopeStats {
         let (plugins, projects) = self.resolve(scanner: scanner)
 
         let pluginSize = plugins.reduce(into: UInt64(0)) { result, plugin in
@@ -165,7 +165,7 @@ extension BackupScope {
     }
 
     /// Resolve this scope into concrete plugins and projects
-    func resolve(scanner: ScannerService) -> (plugins: [AudioPlugin], projects: [SessionProject]) {
+    @MainActor func resolve(scanner: ScannerService) -> (plugins: [AudioPlugin], projects: [SessionProject]) {
         switch self {
         case .everything:
             let projects = SessionProject.groupSessions(scanner.sessions)

@@ -477,19 +477,95 @@ struct ProToolsDetailView: View {
 struct LogicDetailView: View {
     let project: LogicProject
 
+    private var sampleRateDisplay: String {
+        guard let sr = project.sampleRate else { return "\u{2014}" }
+        switch sr {
+        case 44100: return "44.1 kHz"
+        case 48000: return "48 kHz"
+        case 88200: return "88.2 kHz"
+        case 96000: return "96 kHz"
+        case 176400: return "176.4 kHz"
+        case 192000: return "192 kHz"
+        default: return sr >= 1000 ? "\(Double(sr) / 1000.0) kHz" : "\(sr) Hz"
+        }
+    }
+
+    private var keyDisplay: String {
+        guard let key = project.songKey else { return "\u{2014}" }
+        if let scale = project.songScale {
+            let abbr = scale == "major" ? "maj" : scale == "minor" ? "min" : scale
+            return "\(key) \(abbr)"
+        }
+        return key
+    }
+
+    private var timeSigDisplay: String {
+        guard let num = project.timeSignatureNumerator,
+              let den = project.timeSignatureDenominator else { return "\u{2014}" }
+        return "\(num)/\(den)"
+    }
+
+    /// All instrument resource files flattened with type prefixes
+    private var instrumentResources: [(type: String, name: String)] {
+        var items: [(String, String)] = []
+        for name in project.samplerInstrumentFiles ?? [] { items.append(("Sampler", name)) }
+        for name in project.alchemyFiles ?? [] { items.append(("Alchemy", name)) }
+        for name in project.impulseResponseFiles ?? [] { items.append(("IR", name)) }
+        for name in project.quicksamplerFiles ?? [] { items.append(("Quick Sampler", name)) }
+        for name in project.ultrabeatFiles ?? [] { items.append(("Ultrabeat", name)) }
+        return items
+    }
+
+    /// Summary line parts
+    private var summaryParts: [String] {
+        var parts: [String] = []
+        if let tc = project.trackCount, tc > 0 { parts.append("\(tc) tracks") }
+        if !project.pluginHints.isEmpty { parts.append("\(project.pluginHints.count) plugin(s)") }
+        if !project.mediaFiles.isEmpty { parts.append("\(project.mediaFiles.count) audio files") }
+        return parts
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Quick-stat cards
+            // ── Quick-stat cards ────────────────────────────
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    QuickStat(label: "Tempo",       value: project.tempo.map      { "\(Int($0)) BPM" } ?? "—", icon: "metronome")
-                    QuickStat(label: "Sample Rate", value: project.sampleRate.map { "\($0) Hz" }       ?? "—", icon: "waveform")
-                    QuickStat(label: "Media",       value: "\(project.mediaFiles.count)",                       icon: "speaker.wave.2")
-                    QuickStat(label: "MIDI",        value: "\(project.midiFiles.count)",                        icon: "piano")
+                    QuickStat(label: "Tempo", value: project.tempo.map { "\(Int($0)) BPM" } ?? "\u{2014}", icon: "metronome")
+                    QuickStat(label: "Tracks", value: project.trackCount.map { "\($0)" } ?? "\u{2014}", icon: "slider.horizontal.3")
+                    QuickStat(label: "Sample Rate", value: sampleRateDisplay, icon: "waveform")
+                    if project.songKey != nil {
+                        QuickStat(label: "Key", value: keyDisplay, icon: "music.note")
+                    }
+                    if project.timeSignatureNumerator != nil {
+                        QuickStat(label: "Time Sig", value: timeSigDisplay, icon: "clock")
+                    }
                 }
                 .fixedSize(horizontal: true, vertical: false)
             }
 
+            // ── Summary line ────────────────────────────────
+            if !summaryParts.isEmpty {
+                HStack(spacing: 4) {
+                    Text(summaryParts.joined(separator: " \u{00B7} "))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    if let version = project.logicVersion {
+                        Text("\u{00B7} \(version)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+            } else if let version = project.logicVersion {
+                Text(version)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            // ── AU Plugin Hints ─────────────────────────────
             if !project.pluginHints.isEmpty {
                 Text("AU Plugin Hints")
                     .font(.headline)
@@ -509,6 +585,7 @@ struct LogicDetailView: View {
                 }
             }
 
+            // ── Alternatives ────────────────────────────────
             if !project.alternatives.isEmpty {
                 Text("Alternatives")
                     .font(.headline)
@@ -526,36 +603,46 @@ struct LogicDetailView: View {
                 }
             }
 
-            if project.metadata.isEmpty && project.mediaFiles.isEmpty && project.midiFiles.isEmpty && project.pluginHints.isEmpty {
+            // ── Instrument Resources ────────────────────────
+            if !instrumentResources.isEmpty {
+                Divider()
+                DisclosureGroup("Instrument Resources (\(instrumentResources.count))") {
+                    VStack(spacing: 0) {
+                        ForEach(0..<instrumentResources.count, id: \.self) { i in
+                            HStack(spacing: 8) {
+                                Text(instrumentResources[i].type)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 70, alignment: .leading)
+                                Text(instrumentResources[i].name)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 10)
+                            if i < instrumentResources.count - 1 { Divider() }
+                        }
+                    }
+                    .background(Color.secondary.opacity(0.08))
+                    .cornerRadius(8)
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+            }
+
+            // ── Empty state ─────────────────────────────────
+            if project.trackCount == nil && project.metadata.isEmpty && project.mediaFiles.isEmpty && project.midiFiles.isEmpty && project.pluginHints.isEmpty {
                 Text("Logic Pro uses a proprietary binary format. Full track and plugin analysis requires opening the session in Logic Pro.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
 
-            // ── Extracted metadata ────────────────────────────
-            if !project.metadata.isEmpty {
-                Divider()
-                Text("Extracted Metadata")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                    ForEach(project.metadata.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
-                        GridRow {
-                            Text(key)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            Text(value)
-                                .font(.subheadline)
-                        }
-                    }
-                }
-            }
-
-            // ── Media files ───────────────────────────────────
+            // ── Media files ─────────────────────────────────
             if !project.mediaFiles.isEmpty {
                 Divider()
-                Text("Media Files")
+                Text("Media Files (\(project.mediaFiles.count))")
                     .font(.headline)
                     .fontWeight(.semibold)
 
@@ -580,10 +667,10 @@ struct LogicDetailView: View {
                 .cornerRadius(8)
             }
 
-            // ── MIDI files ────────────────────────────────────
+            // ── MIDI files ──────────────────────────────────
             if !project.midiFiles.isEmpty {
                 Divider()
-                Text("MIDI Files")
+                Text("MIDI Files (\(project.midiFiles.count))")
                     .font(.headline)
                     .fontWeight(.semibold)
 
@@ -608,9 +695,10 @@ struct LogicDetailView: View {
                 .cornerRadius(8)
             }
 
+            // ── Bounced files ───────────────────────────────
             if !project.bouncedFiles.isEmpty {
                 Divider()
-                Text("Bounced Files")
+                Text("Bounced Files (\(project.bouncedFiles.count))")
                     .font(.headline)
                     .fontWeight(.semibold)
 
@@ -637,7 +725,76 @@ struct LogicDetailView: View {
                 Button("Show Bounces in Finder") { showLogicBounces(at: project.path) }
                     .buttonStyle(.bordered)
             }
+
+            // ── Unused audio files ──────────────────────────
+            if let unused = project.unusedAudioFiles, !unused.isEmpty {
+                Divider()
+                DisclosureGroup {
+                    VStack(spacing: 0) {
+                        ForEach(0..<unused.count, id: \.self) { i in
+                            HStack(spacing: 8) {
+                                Image(systemName: "speaker.wave.2")
+                                    .foregroundColor(.orange)
+                                    .frame(width: 16)
+                                Text(unused[i])
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                            }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            if i < unused.count - 1 { Divider() }
+                        }
+                    }
+                    .background(Color.orange.opacity(0.05))
+                    .cornerRadius(8)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundColor(.orange)
+                        Text("Unused Audio Files (\(unused.count))")
+                    }
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+            }
+
+            // ── All Metadata (collapsed) ────────────────────
+            if !filteredMetadata.isEmpty {
+                Divider()
+                DisclosureGroup("All Metadata (\(filteredMetadata.count))") {
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                        ForEach(filteredMetadata, id: \.key) { key, value in
+                            GridRow {
+                                Text(key)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                Text(value)
+                                    .font(.subheadline)
+                            }
+                        }
+                    }
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+            }
         }
+    }
+
+    /// Metadata keys already displayed elsewhere — filter them out of the raw table
+    private static let displayedKeys: Set<String> = [
+        "BeatsPerMinute", "SampleRate", "NumberOfTracks",
+        "SongKey", "SongGenderKey", "SongSignatureNumerator", "SongSignatureDenominator",
+        "AudioFiles", "SamplerInstrumentsFiles", "AlchemyFiles",
+        "ImpulsResponsesFiles", "QuicksamplerFiles", "UltrabeatFiles",
+        "PlaybackFiles", "UnusedAudioFiles", "SignatureKey", "Version",
+    ]
+
+    private var filteredMetadata: [(key: String, value: String)] {
+        project.metadata
+            .filter { !Self.displayedKeys.contains($0.key) }
+            .sorted { $0.key < $1.key }
     }
 }
 

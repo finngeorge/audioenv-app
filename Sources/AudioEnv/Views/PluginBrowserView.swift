@@ -29,7 +29,7 @@ struct PluginBrowserView: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($isSearchFocused)
             }
-            .padding([.leading, .trailing, .top])
+            .padding([.leading, .trailing])
 
             // ── Format picker + export ───────────────────────────────
             HStack(spacing: 10) {
@@ -61,9 +61,9 @@ struct PluginBrowserView: View {
                 .help("Export plugin list")
             }
             .padding(.horizontal)
-            .padding(.top, 6)
+            .padding(.top, 2)
 
-            Divider().padding(.top, 6)
+            Divider().padding(.top, 2)
 
             // ── Plugin list ───────────────────────────────────
             if filtered.isEmpty {

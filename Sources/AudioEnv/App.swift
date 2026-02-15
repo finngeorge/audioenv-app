@@ -9,6 +9,11 @@ struct AudioEnvApp: App {
     @StateObject private var sampleCollector = SampleCollectionService()
     @StateObject private var sync    = SyncService()
     @StateObject private var tempRestore = TempRestoreService()
+    @StateObject private var menuBar = MenuBarManager()
+    @StateObject private var webSocket = WebSocketService()
+    @StateObject private var sessionMonitor = SessionMonitorService()
+
+    @Environment(\.scenePhase) private var scenePhase
 
     private static let logger = Logger(subsystem: "com.audioenv.app", category: "App")
 
@@ -21,8 +26,23 @@ struct AudioEnvApp: App {
                 .environmentObject(sampleCollector)
                 .environmentObject(sync)
                 .environmentObject(tempRestore)
+                .environmentObject(menuBar)
+                .environmentObject(webSocket)
+                .environmentObject(sessionMonitor)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
                 .onAppear {
+                    // Configure menu bar manager with services
+                    menuBar.configure(scanner: scanner, sync: sync, auth: auth, sessionMonitor: sessionMonitor)
+
+                    // Configure session monitor
+                    sessionMonitor.configure(scanner: scanner, backup: backup, sync: sync, auth: auth)
+
+                    // Configure WebSocket service
+                    webSocket.configure(scanner: scanner, sync: sync, auth: auth, menuBar: menuBar)
+                    if auth.isAuthenticated, let token = auth.authToken {
+                        webSocket.connect(token: token)
+                    }
+
                     // Check for orphaned temp restore sessions
                     tempRestore.checkForOrphanedSessions()
 
@@ -78,6 +98,13 @@ struct AudioEnvApp: App {
                         }
                     }
 
+                    // Connect/disconnect WebSocket on auth changes
+                    if let _ = newUserId, auth.isAuthenticated, let token = auth.authToken {
+                        webSocket.connect(token: token)
+                    } else if newUserId == nil {
+                        webSocket.disconnect()
+                    }
+
                     // Auto-sync on login if scanner has data
                     if newUserId != nil, auth.isAuthenticated, let token = auth.authToken,
                        !scanner.plugins.isEmpty || !scanner.sessions.isEmpty {
@@ -93,6 +120,20 @@ struct AudioEnvApp: App {
                         Task {
                             await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
                         }
+                    }
+                    // Rebuild menu bar to reflect scan state
+                    menuBar.rebuildMenu()
+                }
+                .onChange(of: sync.isSyncing) { _, _ in
+                    menuBar.rebuildMenu()
+                }
+                .onChange(of: sessionMonitor.activeSessions.count) { _, _ in
+                    menuBar.rebuildMenu()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
+                    if let window = notification.object as? NSWindow,
+                       window.title.contains("AudioEnv") {
+                        menuBar.mainWindowDidClose()
                     }
                 }
                 .onOpenURL { url in

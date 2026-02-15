@@ -4,10 +4,83 @@ import Foundation
 ///
 /// Logic Pro sessions store the bulk of their project data in a proprietary
 /// binary format that cannot be fully parsed without the app.  However,
-/// the bundle may contain plist files with useful metadata – this parser
-/// reads every plist it can find inside the bundle and flattens the
-/// key/value pairs into a simple dictionary.
+/// the bundle contains plist files with useful metadata – in particular,
+/// `Alternatives/000/MetaData.plist` has structured info about tempo,
+/// sample rate, track count, key, time signature, and referenced assets.
 enum LogicParser {
+
+    // MARK: – Rich metadata from Alternatives/000/MetaData.plist
+
+    private struct RichMetadata {
+        let beatsPerMinute: Double?
+        let sampleRate: Int?
+        let numberOfTracks: Int?
+        let songKey: String?
+        let songGenderKey: String?
+        let songSignatureNumerator: Int?
+        let songSignatureDenominator: Int?
+        let hasARAPlugins: Bool?
+        let audioFiles: [String]
+        let samplerInstrumentsFiles: [String]
+        let alchemyFiles: [String]
+        let impulseResponseFiles: [String]
+        let quicksamplerFiles: [String]
+        let ultrabeatFiles: [String]
+        let playbackFiles: [String]
+        let unusedAudioFiles: [String]
+    }
+
+    /// Parse the rich MetaData.plist directly from the active alternative.
+    private static func parseRichMetadataPlist(at path: String) -> RichMetadata? {
+        guard let data = FileManager.default.contents(atPath: path),
+              let dict = try? PropertyListSerialization.propertyList(
+                  from: data, options: [], format: nil) as? [String: Any]
+        else { return nil }
+
+        // BPM is stored as Int in the plist; safely convert via NSNumber
+        let bpm: Double? = (dict["BeatsPerMinute"] as? NSNumber)?.doubleValue
+
+        return RichMetadata(
+            beatsPerMinute: bpm,
+            sampleRate: dict["SampleRate"] as? Int,
+            numberOfTracks: dict["NumberOfTracks"] as? Int,
+            songKey: dict["SongKey"] as? String,
+            songGenderKey: dict["SongGenderKey"] as? String,
+            songSignatureNumerator: dict["SongSignatureNumerator"] as? Int,
+            songSignatureDenominator: dict["SongSignatureDenominator"] as? Int,
+            hasARAPlugins: (dict["HasARAPlugins"] as? Int).map { $0 != 0 },
+            audioFiles: dict["AudioFiles"] as? [String] ?? [],
+            samplerInstrumentsFiles: dict["SamplerInstrumentsFiles"] as? [String] ?? [],
+            alchemyFiles: dict["AlchemyFiles"] as? [String] ?? [],
+            impulseResponseFiles: dict["ImpulsResponsesFiles"] as? [String] ?? [],
+            quicksamplerFiles: dict["QuicksamplerFiles"] as? [String] ?? [],
+            ultrabeatFiles: dict["UltrabeatFiles"] as? [String] ?? [],
+            playbackFiles: dict["PlaybackFiles"] as? [String] ?? [],
+            unusedAudioFiles: dict["UnusedAudioFiles"] as? [String] ?? []
+        )
+    }
+
+    // MARK: – ProjectInformation.plist (Logic version, alternative names)
+
+    private struct ProjectInfo {
+        let lastSavedFrom: String?
+        let variantNames: [String: String]  // "0" → "My Alternative Name"
+    }
+
+    private static func parseProjectInfo(in bundlePath: String) -> ProjectInfo? {
+        let path = (bundlePath as NSString).appendingPathComponent("Resources/ProjectInformation.plist")
+        guard let data = FileManager.default.contents(atPath: path),
+              let dict = try? PropertyListSerialization.propertyList(
+                  from: data, options: [], format: nil) as? [String: Any]
+        else { return nil }
+
+        return ProjectInfo(
+            lastSavedFrom: dict["LastSavedFrom"] as? String,
+            variantNames: dict["VariantNames"] as? [String: String] ?? [:]
+        )
+    }
+
+    // MARK: – Main parse entry point
 
     static func parse(path: String) -> LogicProject? {
         let fm = FileManager.default
@@ -15,10 +88,16 @@ enum LogicParser {
 
         let name = ((path as NSString).lastPathComponent as NSString)
                         .deletingPathExtension
-        var metadata: [String: String] = [:]
 
-        // Candidate directories that may hold plist metadata.
-        // Layout has varied across Logic Pro versions.
+        // Step 1: Parse the rich MetaData.plist from the active alternative (000)
+        let richPlistPath = (path as NSString).appendingPathComponent("Alternatives/000/MetaData.plist")
+        let rich = parseRichMetadataPlist(at: richPlistPath)
+
+        // Step 2: Parse ProjectInformation.plist for Logic version + alternative names
+        let projInfo = parseProjectInfo(in: path)
+
+        // Step 3: Legacy directory scan for any other plist metadata (fallback)
+        var metadata: [String: String] = [:]
         let candidates: [String] = [
             (path as NSString).appendingPathComponent("Contents/MetaData"),
             (path as NSString).appendingPathComponent("MetaData"),
@@ -40,13 +119,37 @@ enum LogicParser {
             }
         }
 
-        let tempo      = extractTempo(metadata)
-        let sampleRate = extractSampleRate(metadata)
+        // Step 4: Extract fields — prefer rich plist, fall back to legacy metadata
+        let tempo = rich?.beatsPerMinute ?? extractTempo(metadata)
+        let sampleRate = rich?.sampleRate ?? extractSampleRate(metadata)
         let mediaFiles = discoverFiles(in: path, extensions: Self.audioExtensions)
         let midiFiles  = discoverFiles(in: path, extensions: Self.midiExtensions)
         let bouncedFiles = discoverBouncedFiles(in: path)
-        let alternatives = discoverAlternatives(in: path)
         let pluginHints  = extractPluginHints(in: path)
+
+        // Step 5: Discover alternatives, map to human-readable names if available
+        let rawAlternatives = discoverAlternatives(in: path)
+        let alternatives: [String]
+        if let variantNames = projInfo?.variantNames, !variantNames.isEmpty {
+            alternatives = rawAlternatives.map { dirName -> String in
+                // Map "000" → index "0", "001" → "1", etc.
+                if let idx = Int(dirName), let humanName = variantNames[String(idx)] {
+                    return humanName
+                }
+                return dirName
+            }
+        } else {
+            alternatives = rawAlternatives
+        }
+
+        // Step 6: Strip absolute paths to filenames for asset arrays
+        let stripToFilename: ([String]) -> [String] = { paths in
+            paths.map { ($0 as NSString).lastPathComponent }
+        }
+
+        // Key/time sig: treat C/major/4/4 as Logic defaults ("not set")
+        let isDefaultKey = (rich?.songKey == "C") && (rich?.songGenderKey == "major")
+        let isDefaultTimeSig = (rich?.songSignatureNumerator == 4) && (rich?.songSignatureDenominator == 4)
 
         return LogicProject(
             name: name, path: path, metadata: metadata,
@@ -54,11 +157,24 @@ enum LogicParser {
             mediaFiles: mediaFiles, midiFiles: midiFiles,
             bouncedFiles: bouncedFiles,
             alternatives: alternatives,
-            pluginHints: pluginHints
+            pluginHints: pluginHints,
+            trackCount: rich?.numberOfTracks,
+            songKey: isDefaultKey ? nil : rich?.songKey,
+            songScale: isDefaultKey ? nil : rich?.songGenderKey,
+            timeSignatureNumerator: isDefaultTimeSig ? nil : rich?.songSignatureNumerator,
+            timeSignatureDenominator: isDefaultTimeSig ? nil : rich?.songSignatureDenominator,
+            hasARAPlugins: rich?.hasARAPlugins,
+            samplerInstrumentFiles: rich?.samplerInstrumentsFiles.nilIfEmpty.map(stripToFilename),
+            alchemyFiles: rich?.alchemyFiles.nilIfEmpty.map(stripToFilename),
+            impulseResponseFiles: rich?.impulseResponseFiles.nilIfEmpty.map(stripToFilename),
+            quicksamplerFiles: rich?.quicksamplerFiles.nilIfEmpty.map(stripToFilename),
+            ultrabeatFiles: rich?.ultrabeatFiles.nilIfEmpty.map(stripToFilename),
+            unusedAudioFiles: rich?.unusedAudioFiles.nilIfEmpty.map(stripToFilename),
+            logicVersion: projInfo?.lastSavedFrom
         )
     }
 
-    // MARK: – Structured-field extraction
+    // MARK: – Structured-field extraction (legacy fallback)
 
     private static let audioExtensions: Set<String> = [
         "wav", "aiff", "aif", "mp3", "m4a", "caf", "flac", "alac"
@@ -67,7 +183,7 @@ enum LogicParser {
 
     /// Pull tempo from well-known metadata keys Logic may emit.
     private static func extractTempo(_ metadata: [String: String]) -> Double? {
-        for key in ["tempo", "Tempo", "BPM", "bpm", "ProjectTempo"] {
+        for key in ["tempo", "Tempo", "BPM", "bpm", "ProjectTempo", "BeatsPerMinute"] {
             if let val = metadata[key], let d = Double(val) { return d }
         }
         return nil
@@ -140,6 +256,7 @@ enum LogicParser {
     private static func extractPluginHints(in bundlePath: String) -> [String] {
         let fm = FileManager.default
         let dataCandidates = [
+            (bundlePath as NSString).appendingPathComponent("Alternatives/000/ProjectData"),
             (bundlePath as NSString).appendingPathComponent("ProjectData"),
             (bundlePath as NSString).appendingPathComponent("Contents/ProjectData"),
         ]
@@ -233,4 +350,10 @@ enum LogicParser {
         }
         return false
     }
+}
+
+// MARK: – Array helper
+
+extension Array {
+    var nilIfEmpty: Self? { isEmpty ? nil : self }
 }

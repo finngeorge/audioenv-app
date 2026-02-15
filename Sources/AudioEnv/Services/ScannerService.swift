@@ -2,7 +2,8 @@ import Foundation
 import AppKit
 
 /// Central observable that drives the entire scan → parse pipeline.
-/// All @Published mutations happen on the main thread.
+/// All @Published mutations happen on the main actor.
+@MainActor
 class ScannerService: ObservableObject {
 
     // MARK: – Published state
@@ -52,7 +53,7 @@ class ScannerService: ObservableObject {
     ]
 
     /// Per-user plugin directories.
-    private static var userPluginDirs: [String] {
+    private nonisolated static var userPluginDirs: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return [
             "\(home)/Library/Audio/Plug-Ins/Components",
@@ -68,7 +69,7 @@ class ScannerService: ObservableObject {
 
     // MARK: – Default session search roots
 
-    private static var defaultSessionRoots: [String] {
+    private nonisolated static var defaultSessionRoots: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return [
             "\(home)/Documents",
@@ -100,7 +101,7 @@ class ScannerService: ObservableObject {
 
     // MARK: – Public API
 
-    /// Kick off a full scan on a background queue.
+    /// Kick off a full scan on a background task.
     /// No-ops if a scan is already in flight.
     func scanAll(keepExisting: Bool = false) {
         guard !isScanning else { return }
@@ -120,24 +121,28 @@ class ScannerService: ObservableObject {
         skippedLargeSessions = 0
         statusMessage = keepExisting ? "Rescanning in background…" : "Scanning plugins…"
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        // Capture values needed by the detached task
+        let customPaths = self.customPaths
+        let parseAll = self.parseAllSessions
+
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self = self else { return }
 
             // 1. Discover plugins
-            let foundPlugins = self.discoverPlugins()
-            self.onMain {
+            let foundPlugins = Self.discoverPlugins()
+            await MainActor.run {
                 self.plugins      = foundPlugins
                 self.scanProgress = 0.35
                 self.statusMessage = "Scanning sessions…"
             }
 
             // 2. Discover session files
-            let roots         = Self.defaultSessionRoots + self.customPaths
-            let foundSessions = self.discoverSessions(roots: roots)
-            self.onMain {
+            let roots         = Self.defaultSessionRoots + customPaths
+            let foundSessions = Self.discoverSessions(roots: roots)
+            await MainActor.run {
                 self.sessions     = foundSessions
                 self.scanProgress = 0.6
-                if self.parseAllSessions {
+                if parseAll {
                     self.statusMessage = "Parsing all sessions…"
                 } else {
                     let n = min(foundSessions.count, Self.maxParsedSessions)
@@ -149,7 +154,7 @@ class ScannerService: ObservableObject {
             var parsed = foundSessions
             var skippedLarge = 0
             var cacheHits = 0
-            let parseLimit = self.parseAllSessions ? Int.max : Self.maxParsedSessions
+            let parseLimit = parseAll ? Int.max : Self.maxParsedSessions
             let parseCandidates = parsed.enumerated()
                 .filter { !$0.element.isBackup }
                 .sorted { $0.element.modifiedDate > $1.element.modifiedDate }
@@ -167,16 +172,16 @@ class ScannerService: ObservableObject {
                     parsed[i] = reused
                     cacheHits += 1
                     let pct = 0.6 + 0.35 * (Double(i + 1) / Double(max(parsed.count, 1)))
-                    self.onMain { self.scanProgress = pct }
+                    await MainActor.run { self.scanProgress = pct }
                     continue
                 }
 
-                self.onMain {
+                await MainActor.run {
                     self.statusMessage = "Parsing \(current.name)…"
                 }
                 let parsedSession: AudioSession
                 if allowedIndices.contains(i) {
-                    parsedSession = self.parseSession(current)
+                    parsedSession = Self.parseSession(current, plugins: foundPlugins)
                 } else {
                     parsedSession = current
                 }
@@ -185,36 +190,48 @@ class ScannerService: ObservableObject {
                 }
                 parsed[i] = parsedSession
                 let pct = 0.6 + 0.35 * (Double(i + 1) / Double(max(parsed.count, 1)))
-                self.onMain { self.scanProgress = pct }
+                await MainActor.run { self.scanProgress = pct }
             }
 
             // 4. Done
             let scanDate = Date()
-            self.onMain {
-                self.sessions     = parsed
+            let finalSkippedLarge = skippedLarge
+            let finalCacheHits = cacheHits
+            let finalParsed = parsed
+            await MainActor.run {
+                self.sessions     = finalParsed
                 self.scanProgress = 1.0
                 self.isScanning   = false
-                self.skippedLargeSessions = skippedLarge
+                self.skippedLargeSessions = finalSkippedLarge
                 self.lastScanDate = scanDate
-                var base = "\(parsed.count) session(s), \(foundPlugins.count) plugin(s) found"
-                if cacheHits > 0 {
-                    base += " (\(cacheHits) cached)"
+                var base = "\(finalParsed.count) session(s), \(foundPlugins.count) plugin(s) found"
+                if finalCacheHits > 0 {
+                    base += " (\(finalCacheHits) cached)"
                 }
-                self.statusMessage = skippedLarge > 0
-                    ? "\(base), \(skippedLarge) large session(s) skipped"
+                self.statusMessage = finalSkippedLarge > 0
+                    ? "\(base), \(finalSkippedLarge) large session(s) skipped"
                     : base
             }
 
-            let scanRoots = self.scanRootsForStaleness()
-            let rootModTimes = self.rootModTimes(for: scanRoots)
-            self.persistCache(
+            let scanRoots = Self.scanRootsForStaleness(customPaths: customPaths)
+            let rootModTimes = Self.rootModTimes(for: scanRoots)
+
+            let cache = ScanCacheStore.makeCache(
                 plugins: foundPlugins,
-                sessions: parsed,
+                sessions: finalParsed,
                 lastScanDate: scanDate,
-                skippedLargeSessions: skippedLarge,
+                skippedLargeSessions: finalSkippedLarge,
                 scanRoots: scanRoots,
                 rootModTimes: rootModTimes
             )
+            let store = await MainActor.run { self.cacheStore }
+            store.save(cache)
+
+            await MainActor.run {
+                self.cachedScanRoots = scanRoots
+                self.cachedRootModTimes = rootModTimes
+                self.isCacheStale = false
+            }
         }
     }
 
@@ -243,20 +260,19 @@ class ScannerService: ObservableObject {
             return
         }
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let parsed = self.parseSession(session)
-            self.onMain {
-                self.sessions[index] = parsed
+        let currentPlugins = self.plugins
+        Task {
+            let parsed = await Task.detached(priority: .userInitiated) {
+                Self.parseSession(session, plugins: currentPlugins)
+            }.value
+            // Re-check index in case sessions array changed
+            if let currentIndex = self.sessions.firstIndex(where: { $0.path == path }) {
+                self.sessions[currentIndex] = parsed
             }
         }
     }
 
     // MARK: – Private helpers
-
-    private func onMain(_ block: @escaping () -> Void) {
-        DispatchQueue.main.async(execute: block)
-    }
 
     private func loadDefaults() {
         let defaults = UserDefaults.standard
@@ -300,33 +316,6 @@ class ScannerService: ObservableObject {
             statusMessage = "Loaded cached scan from \(Self.cacheDateFormatter.string(from: lastScanDate))"
         } else {
             statusMessage = "Loaded cached scan"
-        }
-    }
-
-    private func persistCache(
-        plugins: [AudioPlugin],
-        sessions: [AudioSession],
-        lastScanDate: Date?,
-        skippedLargeSessions: Int,
-        scanRoots: [String],
-        rootModTimes: [String: Date]
-    ) {
-        let cache = ScanCacheStore.makeCache(
-            plugins: plugins,
-            sessions: sessions,
-            lastScanDate: lastScanDate,
-            skippedLargeSessions: skippedLargeSessions,
-            scanRoots: scanRoots,
-            rootModTimes: rootModTimes
-        )
-        let store = cacheStore
-        DispatchQueue.global(qos: .utility).async {
-            store.save(cache)
-        }
-        onMain {
-            self.cachedScanRoots = scanRoots
-            self.cachedRootModTimes = rootModTimes
-            self.isCacheStale = false
         }
     }
 
@@ -377,14 +366,14 @@ class ScannerService: ObservableObject {
     private func evaluateCacheStalenessAndAutoRescan() {
         isCacheStale = false
         cacheStaleReason = nil
-        let currentRoots = scanRootsForStaleness()
+        let currentRoots = Self.scanRootsForStaleness(customPaths: customPaths)
         guard !cachedScanRoots.isEmpty else { return }
 
         if Set(currentRoots) != Set(cachedScanRoots) {
             isCacheStale = true
             cacheStaleReason = "Scan roots changed"
         } else {
-            let currentTimes = rootModTimes(for: currentRoots)
+            let currentTimes = Self.rootModTimes(for: currentRoots)
             for root in currentRoots {
                 guard let cachedTime = cachedRootModTimes[root],
                       let currentTime = currentTimes[root]
@@ -399,7 +388,8 @@ class ScannerService: ObservableObject {
 
         guard isCacheStale, autoRescanOnLaunch else { return }
         guard shouldAutoRescan() else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
             self?.scanAll(keepExisting: true)
         }
     }
@@ -409,17 +399,12 @@ class ScannerService: ObservableObject {
         return Date().timeIntervalSince(lastScanDate) > Self.autoRescanMinimumAge
     }
 
-    private func scanRootsForStaleness() -> [String] {
-        let roots = Self.systemPluginDirs + Self.userPluginDirs + customPaths
+    private nonisolated static func scanRootsForStaleness(customPaths: [String]) -> [String] {
+        let roots = systemPluginDirs + userPluginDirs + customPaths
         return Array(Set(roots)).sorted()
     }
 
-    private func scanRoots() -> [String] {
-        let roots = Self.systemPluginDirs + Self.userPluginDirs + Self.defaultSessionRoots + customPaths
-        return Array(Set(roots)).sorted()
-    }
-
-    private func rootModTimes(for roots: [String]) -> [String: Date] {
+    private nonisolated static func rootModTimes(for roots: [String]) -> [String: Date] {
         var result: [String: Date] = [:]
         let fm = FileManager.default
         for root in roots {
@@ -449,18 +434,19 @@ class ScannerService: ObservableObject {
 
     // ── Plugin discovery ──────────────────────────────────────────
 
-    private func discoverPlugins() -> [AudioPlugin] {
+    /// Discover all plugins on disk. This is a pure I/O operation safe to call off the main actor.
+    private nonisolated static func discoverPlugins() -> [AudioPlugin] {
         var results: [AudioPlugin] = []
         let fm = FileManager.default
 
-        for dir in Self.systemPluginDirs + Self.userPluginDirs {
+        for dir in systemPluginDirs + userPluginDirs {
             guard fm.fileExists(atPath: dir),
                   let enumerator = fm.enumerator(atPath: dir)
             else { continue }
 
             while let rel = enumerator.nextObject() as? String {
                 let ext = (rel as NSString).pathExtension.lowercased()
-                guard Self.pluginExts.contains(ext) else { continue }
+                guard pluginExts.contains(ext) else { continue }
 
                 // A plugin bundle is a directory; skip its internals.
                 enumerator.skipDescendants()
@@ -484,7 +470,7 @@ class ScannerService: ObservableObject {
     }
 
     /// Map a file extension to the corresponding PluginFormat.
-    private func formatFor(_ ext: String) -> PluginFormat {
+    private nonisolated static func formatFor(_ ext: String) -> PluginFormat {
         switch ext {
         case "au", "component": return .audioUnit
         case "vst":             return .vst
@@ -494,7 +480,7 @@ class ScannerService: ObservableObject {
     }
 
     /// Best-effort read of a macOS bundle's Info.plist.
-    private func readBundleInfo(at path: String) -> (bundleID: String?, version: String?, manufacturer: String?, auManufacturerCode: String?) {
+    private nonisolated static func readBundleInfo(at path: String) -> (bundleID: String?, version: String?, manufacturer: String?, auManufacturerCode: String?) {
         let plistPath = (path as NSString).appendingPathComponent("Contents/Info.plist")
         guard let data = FileManager.default.contents(atPath: plistPath),
               let dict = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
@@ -522,7 +508,7 @@ class ScannerService: ObservableObject {
     // ── Session discovery ─────────────────────────────────────────
 
     /// Walk each search root and collect every .als / .logicpro entry.
-    private func discoverSessions(roots: [String]) -> [AudioSession] {
+    private nonisolated static func discoverSessions(roots: [String]) -> [AudioSession] {
         var results: [AudioSession] = []
         let fm = FileManager.default
 
@@ -535,15 +521,13 @@ class ScannerService: ObservableObject {
                   )
             else { continue }
 
-            onMain { self.statusMessage = "Scanning \(root)…" }
-
             while let url = enumerator.nextObject() as? URL {
                 if shouldSkipDirectory(url: url) {
                     enumerator.skipDescendants()
                     continue
                 }
                 let ext = url.pathExtension.lowercased()
-                guard Self.sessionExts.contains(ext) else { continue }
+                guard sessionExts.contains(ext) else { continue }
 
                 // .logicpro / .logicx are bundle directories – don't recurse into them.
                 if ext == "logicpro" || ext == "logicx" { enumerator.skipDescendants() }
@@ -579,7 +563,7 @@ class ScannerService: ObservableObject {
         return results
     }
 
-    private func cleanSessionName(url: URL) -> String {
+    private nonisolated static func cleanSessionName(url: URL) -> String {
         let filename = url.lastPathComponent
         var name = (filename as NSString).deletingPathExtension
         if let range = name.lowercased().range(of: ".bak.") {
@@ -594,14 +578,14 @@ class ScannerService: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func shouldSkipDirectory(url: URL) -> Bool {
+    private nonisolated static func shouldSkipDirectory(url: URL) -> Bool {
         guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey]),
               values.isDirectory == true
         else { return false }
-        return Self.skippedDirNames.contains(url.lastPathComponent)
+        return skippedDirNames.contains(url.lastPathComponent)
     }
 
-    private func shouldSkipLogicTemplate(url: URL) -> Bool {
+    private nonisolated static func shouldSkipLogicTemplate(url: URL) -> Bool {
         let lower = url.path.lowercased()
         let markers = [
             "/project templates/",
@@ -615,7 +599,7 @@ class ScannerService: ObservableObject {
         return markers.contains { lower.contains($0) }
     }
 
-    private func shouldSkipProToolsTemplate(url: URL) -> Bool {
+    private nonisolated static func shouldSkipProToolsTemplate(url: URL) -> Bool {
         let lower = url.path.lowercased()
         let markers = [
             "/project templates/",
@@ -633,8 +617,10 @@ class ScannerService: ObservableObject {
 
     // ── Parsing ───────────────────────────────────────────────────
 
-    private func parseSession(_ session: AudioSession) -> AudioSession {
-        if session.fileSize > Self.maxParseSizeBytes {
+    /// Parse a session file. Pure I/O operation safe to call off the main actor.
+    /// The `plugins` parameter provides installed plugins for known-plugin matching.
+    private nonisolated static func parseSession(_ session: AudioSession, plugins: [AudioPlugin]) -> AudioSession {
+        if session.fileSize > maxParseSizeBytes {
             return session
         }
         if session.isBackup {

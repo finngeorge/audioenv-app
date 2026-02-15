@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import os.log
 
@@ -76,6 +77,7 @@ struct PluginBackupItem: Codable {
     let bundleId: String?
     let version: String?
     let manufacturer: String?
+    let checksum: String?       // SHA-256 hex digest
 }
 
 /// Individual project in a backup
@@ -210,25 +212,23 @@ class BackupService: ObservableObject {
         currentBackupId = backupId
 
         // Track successfully uploaded plugins for metadata
-        var uploadedPlugins: [(plugin: AudioPlugin, s3Key: String)] = []
+        var uploadedPlugins: [(plugin: AudioPlugin, s3Key: String, checksum: String?)] = []
 
         let total = max(plugins.count, 1)
         for (i, plugin) in plugins.enumerated() {
-            // Generate checksum for deduplication (simplified - using plugin name + format)
-            // TODO: Calculate actual SHA-256 checksum of plugin bundle
-            let checksum = "\(plugin.name)-\(plugin.format.rawValue)".replacingOccurrences(of: " ", with: "-")
+            let checksum = Self.sha256Checksum(forPluginAt: plugin.path)
 
             let remote = BackupPath.pluginKey(
                 userId: userId,
                 backupId: backupId,
-                checksum: checksum,
+                checksum: checksum ?? UUID().uuidString,
                 pluginName: plugin.name
             )
 
             do {
                 try await dest.upload(localPath: plugin.path, remotePath: remote)
                 uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .success))
-                uploadedPlugins.append((plugin, remote))
+                uploadedPlugins.append((plugin, remote, checksum))
             } catch {
                 uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .failed(error.localizedDescription)))
                 lastError = error.localizedDescription
@@ -288,25 +288,25 @@ class BackupService: ObservableObject {
         currentBackupId = backupId
 
         // Track successfully uploaded items
-        var uploadedPlugins: [(plugin: AudioPlugin, s3Key: String)] = []
+        var uploadedPlugins: [(plugin: AudioPlugin, s3Key: String, checksum: String?)] = []
         var uploadedProjects: [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date)] = []
 
         // Phase 1: Upload plugins (0-50% progress)
         if !plugins.isEmpty {
             let total = max(plugins.count, 1)
             for (i, plugin) in plugins.enumerated() {
-                let checksum = "\(plugin.name)-\(plugin.format.rawValue)".replacingOccurrences(of: " ", with: "-")
+                let checksum = Self.sha256Checksum(forPluginAt: plugin.path)
                 let remote = BackupPath.pluginKey(
                     userId: userId,
                     backupId: backupId,
-                    checksum: checksum,
+                    checksum: checksum ?? UUID().uuidString,
                     pluginName: plugin.name
                 )
 
                 do {
                     try await dest.upload(localPath: plugin.path, remotePath: remote)
                     uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .success))
-                    uploadedPlugins.append((plugin, remote))
+                    uploadedPlugins.append((plugin, remote, checksum))
                 } catch {
                     uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .failed(error.localizedDescription)))
                     lastError = error.localizedDescription
@@ -448,13 +448,43 @@ class BackupService: ObservableObject {
         return totalSize
     }
 
+    /// Compute SHA-256 of a plugin at the given path.
+    /// For bundles, hashes the main executable binary; for single files, hashes the file directly.
+    /// Returns the hex digest or nil if the file cannot be read.
+    static func sha256Checksum(forPluginAt path: String) -> String? {
+        let fm = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: path, isDirectory: &isDirectory) else { return nil }
+
+        let fileToHash: String
+        if isDirectory.boolValue {
+            // Bundle: hash the main executable inside Contents/MacOS/
+            let macosDir = (path as NSString).appendingPathComponent("Contents/MacOS")
+            if let contents = try? fm.contentsOfDirectory(atPath: macosDir),
+               let binary = contents.first(where: { !$0.hasPrefix(".") }) {
+                fileToHash = (macosDir as NSString).appendingPathComponent(binary)
+            } else {
+                // Fallback: hash the Info.plist
+                let plist = (path as NSString).appendingPathComponent("Contents/Info.plist")
+                guard fm.fileExists(atPath: plist) else { return nil }
+                fileToHash = plist
+            }
+        } else {
+            fileToHash = path
+        }
+
+        guard let data = fm.contents(atPath: fileToHash) else { return nil }
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     /// Upload metadata.json manifest for this backup
     private func uploadMetadata(
         userId: String,
         backupId: String,
         backupName: String,
         scopeDescription: String,
-        uploadedPlugins: [(plugin: AudioPlugin, s3Key: String)],
+        uploadedPlugins: [(plugin: AudioPlugin, s3Key: String, checksum: String?)],
         destination: BackupDestination
     ) async {
         // Create metadata
@@ -466,7 +496,8 @@ class BackupService: ObservableObject {
                 s3Key: item.s3Key,
                 bundleId: item.plugin.bundleID,
                 version: item.plugin.version,
-                manufacturer: item.plugin.manufacturer
+                manufacturer: item.plugin.manufacturer,
+                checksum: item.checksum
             )
         }
 
@@ -484,7 +515,7 @@ class BackupService: ObservableObject {
             projectCount: 0,
             sessionCount: 0,
             totalSizeBytes: totalSize,
-            appVersion: "1.0.0",
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0",
             plugins: pluginItems,
             projects: []
         )
@@ -501,7 +532,7 @@ class BackupService: ObservableObject {
 
         // Write to temp file
         let tempFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("metadata.json")
+            .appendingPathComponent("\(UUID().uuidString)-metadata.json")
 
         do {
             try jsonData.write(to: tempFile)
@@ -533,7 +564,7 @@ class BackupService: ObservableObject {
         backupId: String,
         backupName: String,
         scopeDescription: String,
-        uploadedPlugins: [(plugin: AudioPlugin, s3Key: String)],
+        uploadedPlugins: [(plugin: AudioPlugin, s3Key: String, checksum: String?)],
         uploadedProjects: [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date)],
         destination: BackupDestination
     ) async {
@@ -546,7 +577,8 @@ class BackupService: ObservableObject {
                 s3Key: item.s3Key,
                 bundleId: item.plugin.bundleID,
                 version: item.plugin.version,
-                manufacturer: item.plugin.manufacturer
+                manufacturer: item.plugin.manufacturer,
+                checksum: item.checksum
             )
         }
 
@@ -615,7 +647,7 @@ class BackupService: ObservableObject {
             projectCount: uploadedProjects.count,
             sessionCount: sessionCount,
             totalSizeBytes: totalSize,
-            appVersion: "1.0.0",
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0",
             plugins: pluginItems,
             projects: projectItems
         )
@@ -632,7 +664,7 @@ class BackupService: ObservableObject {
 
         // Write to temp file
         let tempFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("metadata.json")
+            .appendingPathComponent("\(UUID().uuidString)-metadata.json")
 
         do {
             try jsonData.write(to: tempFile)
@@ -687,7 +719,12 @@ class BackupService: ObservableObject {
         uploadProgress = 0
         lastError      = nil
 
-        let ext    = session.format == .ableton ? ".als" : ".logicpro"
+        let ext: String
+        switch session.format {
+        case .ableton:  ext = ".als"
+        case .logic:    ext = ".logicx"
+        case .proTools: ext = ".ptx"
+        }
         let remote = "sessions/\(session.format.rawValue)/\(session.name)\(ext)"
         do {
             try await dest.upload(localPath: session.path, remotePath: remote)

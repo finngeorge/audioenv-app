@@ -65,4 +65,23 @@ struct LogicProject: Codable {
     let bouncedFiles: [String]         /// bounced audio files discovered inside the bundle
     let alternatives: [String]         /// named alternatives found in Alternatives/ subdirectory
     let pluginHints: [String]          /// AU plugin IDs found via binary string scan of ProjectData
+
+    // Structured fields from Alternatives/000/MetaData.plist
+    let trackCount: Int?
+    let songKey: String?               /// e.g. "C", "F#"
+    let songScale: String?             /// e.g. "major", "minor" (from SongGenderKey)
+    let timeSignatureNumerator: Int?
+    let timeSignatureDenominator: Int?
+    let hasARAPlugins: Bool?
+
+    // Asset file arrays from MetaData.plist (filenames only, paths stripped)
+    let samplerInstrumentFiles: [String]?
+    let alchemyFiles: [String]?
+    let impulseResponseFiles: [String]?
+    let quicksamplerFiles: [String]?
+    let ultrabeatFiles: [String]?
+    let unusedAudioFiles: [String]?
+
+    // From Resources/ProjectInformation.plist
+    let logicVersion: String?          /// e.g. "Logic Pro X 11.0.0 (6011)"
 }

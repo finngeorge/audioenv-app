@@ -28,7 +28,7 @@ struct SessionBrowserView: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($isSearchFocused)
             }
-            .padding([.leading, .trailing, .top])
+            .padding([.leading, .trailing])
 
             // ── Format picker ─────────────────────────────────
             HStack(spacing: 10) {
@@ -45,9 +45,9 @@ struct SessionBrowserView: View {
                 Spacer()
             }
             .padding(.horizontal)
-            .padding(.top, 6)
+            .padding(.top, 2)
 
-            Divider().padding(.top, 6)
+            Divider().padding(.top, 2)
 
             // ── Session list ──────────────────────────────────
             if projects.isEmpty {

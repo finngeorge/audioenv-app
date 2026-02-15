@@ -21,7 +21,7 @@ struct PluginDetailView: View {
                 Divider()
                 actions()
             }
-            .padding(24)
+            .padding(EdgeInsets(top: 0, leading: 24, bottom: 24, trailing: 24))
         }
         .frame(minWidth: 340)
     }
