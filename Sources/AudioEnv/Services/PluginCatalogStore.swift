@@ -23,18 +23,24 @@ final class PluginCatalogStore {
     private var byNormalized: [String: PluginCatalogEntry] = [:]
     private(set) var pluginCount: Int = 0
 
-    /// SwiftPM resource bundle — `Bundle.module` works for `swift run`,
-    /// but for .app bundles the resources live inside a nested bundle.
+    /// Resource bundle — tries nested SPM resource bundle, then main bundle.
     private static let resourceBundle: Bundle = {
-        // For .app bundles: Contents/Resources/AudioEnv_AudioEnv.bundle
+        // SPM .app bundles: Contents/Resources/AudioEnv_AudioEnv.bundle
         if let resourceURL = Bundle.main.resourceURL {
             let nested = resourceURL.appendingPathComponent("AudioEnv_AudioEnv.bundle")
             if let bundle = Bundle(path: nested.path) {
                 return bundle
             }
         }
-        // Fallback: Bundle.module works for `swift run` / build directory
-        return Bundle.module
+        // SPM `swift run`: resource bundle is next to the executable
+        if let execURL = Bundle.main.executableURL {
+            let adjacent = execURL.deletingLastPathComponent()
+                .appendingPathComponent("AudioEnv_AudioEnv.bundle")
+            if let bundle = Bundle(path: adjacent.path) {
+                return bundle
+            }
+        }
+        return Bundle.main
     }()
 
     init() {

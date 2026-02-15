@@ -4,6 +4,17 @@ import SwiftUI
 struct ScanView: View {
     @EnvironmentObject var scanner: ScannerService
 
+    private var cacheStatusLabel: String {
+        if scanner.plugins.isEmpty && scanner.sessions.isEmpty && scanner.lastScanDate == nil {
+            return "Cache: Empty"
+        } else if scanner.isCacheStale {
+            return "Cache: Stale"
+        } else {
+            let count = scanner.plugins.count + scanner.sessions.count
+            return "Cache: \(count) items loaded"
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -82,7 +93,18 @@ struct ScanView: View {
                 .padding(.leading, 28)
 
             if !scanner.parseAllSessions {
-                Text("Limited to latest 200 sessions")
+                Text("Limited to newest session per project, up to 200")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 28)
+            }
+
+            Toggle("Parse auto backup sessions", isOn: $scanner.parseBackups)
+                .toggleStyle(.switch)
+                .padding(.leading, 28)
+
+            if !scanner.parseBackups {
+                Text("Auto backups (e.g. Ableton's automatic saves) are listed but not parsed to save time")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.leading, 28)
@@ -117,7 +139,7 @@ struct ScanView: View {
             }
 
             HStack(spacing: 10) {
-                Text(scanner.isCacheStale ? "Cache: Stale" : "Cache: Loaded")
+                Text(cacheStatusLabel)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .padding(.leading, 28)
@@ -128,6 +150,7 @@ struct ScanView: View {
                     scanner.clearCache()
                 }
                 .buttonStyle(.bordered)
+                .disabled(scanner.plugins.isEmpty && scanner.sessions.isEmpty && scanner.lastScanDate == nil)
             }
 
             if scanner.isCacheStale, let reason = scanner.cacheStaleReason {

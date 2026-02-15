@@ -5,6 +5,7 @@ struct ProjectDetailView: View {
     let project: SessionProject
     @State private var selectedSession: AudioSession? = nil
     @State private var showBackups = false
+    @State private var isParsing = false
     @EnvironmentObject var scanner: ScannerService
 
     private var sessionsToShow: [AudioSession] {
@@ -20,19 +21,26 @@ struct ProjectDetailView: View {
             header()
             Divider()
             HStack(spacing: 12) {
-                Toggle("Show Backups", isOn: $showBackups)
+                Toggle("Show Auto Backups", isOn: $showBackups)
                     .toggleStyle(.switch)
                     .fixedSize()
                 Spacer()
-                if unparsedCount > 0 {
-                    Button("Parse \(unparsedCount) Unparsed") {
-                        parseUnparsedSessions()
+                if isParsing {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Parsing…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                if unparsedCount > 0 && !isParsing {
+                    Button("Parse One Unparsed") {
+                        parseOneUnparsedSession()
                     }
                     .buttonStyle(.bordered)
                     .fixedSize(horizontal: true, vertical: false)
                 }
                 if !showBackups && project.backups.count > 0 {
-                    Text("Backups hidden")
+                    Text("\(project.backups.count) auto backup\(project.backups.count == 1 ? "" : "s") hidden")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -86,7 +94,7 @@ struct ProjectDetailView: View {
             Spacer(minLength: 8)
 
             if project.backups.count > 0 {
-                Text("\(project.backups.count) backup\(project.backups.count == 1 ? "" : "s")")
+                Text("\(project.backups.count) auto backup\(project.backups.count == 1 ? "" : "s")")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -145,10 +153,11 @@ struct ProjectDetailView: View {
         project.sessions.filter { $0.project == nil }.count
     }
 
-    private func parseUnparsedSessions() {
-        let unparsed = project.sessions.filter { $0.project == nil }
-        for session in unparsed {
-            scanner.parseIndividualSession(path: session.path)
+    private func parseOneUnparsedSession() {
+        guard let session = project.sessions.first(where: { $0.project == nil }) else { return }
+        isParsing = true
+        scanner.parseIndividualSession(path: session.path) {
+            isParsing = false
         }
     }
 }
@@ -175,7 +184,7 @@ private struct SessionRow: View {
                     .truncationMode(.tail)
                 Spacer(minLength: 4)
                 if session.isBackup {
-                    Text("Backup")
+                    Text("Auto Backup")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .padding(.init(top: 2, leading: 6, bottom: 2, trailing: 6))
@@ -183,6 +192,7 @@ private struct SessionRow: View {
                         .cornerRadius(4)
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                parsedBadge
                 Text(session.format.rawValue)
                     .font(.caption)
                     .padding(.init(top: 2, leading: 6, bottom: 2, trailing: 6))
@@ -213,6 +223,19 @@ private struct SessionRow: View {
         }
         .padding(.vertical, 2)
         .opacity(session.isBackup ? 0.7 : 1.0)
+    }
+
+    private var parsedBadge: some View {
+        let isParsed = session.project != nil
+        let label = isParsed ? "Parsed" : "Unparsed"
+        let color = isParsed ? Color.green : Color.orange
+        return Text(label)
+            .font(.caption2)
+            .foregroundColor(color)
+            .padding(.init(top: 2, leading: 6, bottom: 2, trailing: 6))
+            .background(color.opacity(0.15))
+            .cornerRadius(4)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private var fmtColor: Color {

@@ -11,9 +11,24 @@ struct SessionSnapshot: Identifiable, Codable {
     let keySignature: String?
     let timeSignature: String?
 
+    // Detailed breakdown (Ableton-specific but available for other DAWs too)
+    let audioTrackCount: Int?
+    let midiTrackCount: Int?
+    let returnTrackCount: Int?
+    let clipCount: Int?
+    let sampleCount: Int?
+    let pluginNames: [String]?
+    let trackPlugins: [TrackPluginInfo]?
+    let abletonVersion: String?
+
     init(timestamp: Date = Date(), fileSize: Int64, pluginCount: Int? = nil,
          trackCount: Int? = nil, tempo: Double? = nil,
-         keySignature: String? = nil, timeSignature: String? = nil) {
+         keySignature: String? = nil, timeSignature: String? = nil,
+         audioTrackCount: Int? = nil, midiTrackCount: Int? = nil,
+         returnTrackCount: Int? = nil, clipCount: Int? = nil,
+         sampleCount: Int? = nil, pluginNames: [String]? = nil,
+         trackPlugins: [TrackPluginInfo]? = nil,
+         abletonVersion: String? = nil) {
         self.id = UUID()
         self.timestamp = timestamp
         self.fileSize = fileSize
@@ -22,7 +37,22 @@ struct SessionSnapshot: Identifiable, Codable {
         self.tempo = tempo
         self.keySignature = keySignature
         self.timeSignature = timeSignature
+        self.audioTrackCount = audioTrackCount
+        self.midiTrackCount = midiTrackCount
+        self.returnTrackCount = returnTrackCount
+        self.clipCount = clipCount
+        self.sampleCount = sampleCount
+        self.pluginNames = pluginNames
+        self.trackPlugins = trackPlugins
+        self.abletonVersion = abletonVersion
     }
+}
+
+/// Plugin info with track location context.
+struct TrackPluginInfo: Codable {
+    let pluginName: String
+    let trackName: String
+    let trackType: String  // "audio", "midi", "return", "master"
 }
 
 /// Represents a live DAW session being monitored in real time.

@@ -7,12 +7,13 @@ struct ScanCache: Codable {
     let skippedLargeSessions: Int
     let scanRoots: [String]
     let rootModTimes: [String: Date]
+    let pluginDirModTimes: [String: Date]
     let plugins: [AudioPlugin]
     let sessions: [AudioSession]
 }
 
 final class ScanCacheStore {
-    private static let currentVersion = 3
+    private static let currentVersion = 4
     private let fm = FileManager.default
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -38,7 +39,17 @@ final class ScanCacheStore {
         if let url = legacyCacheURL(), let data = try? Data(contentsOf: url),
            let cache = try? decoder.decode(ScanCache.self, from: data),
            cache.version == Self.currentVersion {
-            save(cache)
+            save(ScanCache(
+                version: cache.version,
+                createdAt: cache.createdAt,
+                lastScanDate: cache.lastScanDate,
+                skippedLargeSessions: cache.skippedLargeSessions,
+                scanRoots: cache.scanRoots,
+                rootModTimes: cache.rootModTimes,
+                pluginDirModTimes: [:],
+                plugins: cache.plugins,
+                sessions: cache.sessions
+            ))
             return cache
         }
 
@@ -81,7 +92,8 @@ final class ScanCacheStore {
         lastScanDate: Date?,
         skippedLargeSessions: Int,
         scanRoots: [String],
-        rootModTimes: [String: Date]
+        rootModTimes: [String: Date],
+        pluginDirModTimes: [String: Date]
     ) -> ScanCache {
         ScanCache(
             version: currentVersion,
@@ -90,6 +102,7 @@ final class ScanCacheStore {
             skippedLargeSessions: skippedLargeSessions,
             scanRoots: scanRoots,
             rootModTimes: rootModTimes,
+            pluginDirModTimes: pluginDirModTimes,
             plugins: plugins,
             sessions: sessions
         )

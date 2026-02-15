@@ -25,6 +25,7 @@ class MenuBarManager: ObservableObject {
     }
 
     private var scanTimer: Timer?
+    private var menuRefreshTimer: Timer?
     private static let bgScanKey = "com.audioenv.backgroundScanEnabled"
     private static let intervalKey = "com.audioenv.scanIntervalMinutes"
 
@@ -52,6 +53,7 @@ class MenuBarManager: ObservableObject {
         if backgroundScanEnabled {
             rescheduleTimer()
         }
+        startMenuRefreshTimer()
     }
 
     // MARK: - Status Item
@@ -72,9 +74,11 @@ class MenuBarManager: ObservableObject {
     func rebuildMenu() {
         let menu = NSMenu()
 
-        // Last scan time
+        // Scan status
         let lastScanTitle: String
-        if let date = scanner?.lastScanDate {
+        if scanner?.isScanning == true {
+            lastScanTitle = "Scanning..."
+        } else if let date = scanner?.lastScanDate {
             let formatter = RelativeDateTimeFormatter()
             formatter.unitsStyle = .abbreviated
             lastScanTitle = "Last scan: \(formatter.localizedString(for: date, relativeTo: Date()))"
@@ -119,7 +123,12 @@ class MenuBarManager: ObservableObject {
 
                 // Stats line: duration, save count, size delta
                 var details: [String] = []
-                details.append("Open \(session.duration.formatted)")
+                let durationSecs = session.duration
+                if durationSecs >= 60 {
+                    details.append("Open \(durationSecs.formatted)")
+                } else {
+                    details.append("Just opened")
+                }
                 if session.saveCount > 0 {
                     details.append("\(session.saveCount) save\(session.saveCount == 1 ? "" : "s")")
                 }
@@ -138,21 +147,98 @@ class MenuBarManager: ObservableObject {
                 detailItem.isEnabled = false
                 menu.addItem(detailItem)
 
+                // Project info from most recent snapshot
+                if let snapshot = session.snapshots.last {
+                    // Line 1: Track breakdown + clips
+                    var trackInfo: [String] = []
+                    if let audio = snapshot.audioTrackCount, let midi = snapshot.midiTrackCount {
+                        trackInfo.append("\(audio) audio, \(midi) MIDI")
+                        if let ret = snapshot.returnTrackCount, ret > 0 {
+                            trackInfo.append("\(ret) return")
+                        }
+                    } else if let tracks = snapshot.trackCount {
+                        trackInfo.append("\(tracks) tracks")
+                    }
+                    if let clips = snapshot.clipCount, clips > 0 {
+                        trackInfo.append("\(clips) clips")
+                    }
+                    if !trackInfo.isEmpty {
+                        let trackItem = NSMenuItem(title: "   \(trackInfo.joined(separator: " · "))", action: nil, keyEquivalent: "")
+                        trackItem.isEnabled = false
+                        menu.addItem(trackItem)
+                    }
+
+                    // Line 2: Tempo, key, time sig
+                    var projectInfo: [String] = []
+                    if let tempo = snapshot.tempo {
+                        projectInfo.append("\(String(format: "%.0f", tempo)) BPM")
+                    }
+                    if let key = snapshot.keySignature {
+                        projectInfo.append(key)
+                    }
+                    if let timeSig = snapshot.timeSignature, timeSig != "4/4" {
+                        projectInfo.append(timeSig)
+                    }
+                    if let samples = snapshot.sampleCount, samples > 0 {
+                        projectInfo.append("\(samples) samples")
+                    }
+                    if !projectInfo.isEmpty {
+                        let infoItem = NSMenuItem(title: "   \(projectInfo.joined(separator: " · "))", action: nil, keyEquivalent: "")
+                        infoItem.isEnabled = false
+                        menu.addItem(infoItem)
+                    }
+
+                    // Line 3+: Plugins grouped by track location
+                    if let trackPlugins = snapshot.trackPlugins, !trackPlugins.isEmpty {
+                        // Group by location: tracks, sends, master
+                        let channelPlugins = trackPlugins.filter { $0.trackType == "audio" || $0.trackType == "midi" }
+                        let sendPlugins = trackPlugins.filter { $0.trackType == "return" }
+                        let masterPlugins = trackPlugins.filter { $0.trackType == "master" }
+
+                        if !channelPlugins.isEmpty {
+                            let names = Array(Set(channelPlugins.map { $0.pluginName })).sorted()
+                            let item = NSMenuItem(title: "   Tracks: \(names.joined(separator: ", "))", action: nil, keyEquivalent: "")
+                            item.isEnabled = false
+                            menu.addItem(item)
+                        }
+                        if !sendPlugins.isEmpty {
+                            let names = Array(Set(sendPlugins.map { $0.pluginName })).sorted()
+                            let item = NSMenuItem(title: "   Sends: \(names.joined(separator: ", "))", action: nil, keyEquivalent: "")
+                            item.isEnabled = false
+                            menu.addItem(item)
+                        }
+                        if !masterPlugins.isEmpty {
+                            let names = Array(Set(masterPlugins.map { $0.pluginName })).sorted()
+                            let item = NSMenuItem(title: "   Master: \(names.joined(separator: ", "))", action: nil, keyEquivalent: "")
+                            item.isEnabled = false
+                            menu.addItem(item)
+                        }
+                    } else if let pluginNames = snapshot.pluginNames, !pluginNames.isEmpty {
+                        let pluginLine = pluginNames.joined(separator: ", ")
+                        let pluginItem = NSMenuItem(title: "   \(pluginLine)", action: nil, keyEquivalent: "")
+                        pluginItem.isEnabled = false
+                        menu.addItem(pluginItem)
+                    }
+                }
+
                 // Process stats if available
                 if let daw = monitor.runningDAWs.first(where: { $0.pid == session.dawPID }),
                    let stats = daw.stats {
-                    var statsLine: [String] = []
-                    statsLine.append("\(String(format: "%.0f", stats.memoryMB))MB RAM")
-                    if let device = stats.audioDevice {
-                        statsLine.append(device)
-                    }
-                    if let sr = stats.sampleRate {
-                        statsLine.append("\(sr / 1000)kHz")
-                    }
-                    let statsItem = NSMenuItem(title: "   \(statsLine.joined(separator: " · "))", action: nil, keyEquivalent: "")
+                    let ramGB = String(format: "%.1f", stats.memoryMB / 1024)
+                    let statsItem = NSMenuItem(title: "   \(ramGB) GB RAM", action: nil, keyEquivalent: "")
                     statsItem.isEnabled = false
                     menu.addItem(statsItem)
                 }
+
+                // View in Library button
+                let viewItem = NSMenuItem(
+                    title: "   View \"\(session.projectName)\" in Library",
+                    action: #selector(viewProjectInLibrary(_:)),
+                    keyEquivalent: ""
+                )
+                viewItem.target = self
+                viewItem.representedObject = session.projectPath
+                menu.addItem(viewItem)
             }
         }
 
@@ -214,6 +300,16 @@ class MenuBarManager: ObservableObject {
         rebuildMenu()
     }
 
+    @objc private func viewProjectInLibrary(_ sender: NSMenuItem) {
+        guard let projectPath = sender.representedObject as? String else { return }
+        showMainWindow()
+        NotificationCenter.default.post(
+            name: .navigateToProject,
+            object: nil,
+            userInfo: ["projectPath": projectPath]
+        )
+    }
+
     @objc private func quitApp(_ sender: Any?) {
         NSApplication.shared.terminate(nil)
     }
@@ -240,6 +336,22 @@ class MenuBarManager: ObservableObject {
         let visibleWindows = NSApp.windows.filter { $0.isVisible && !$0.title.isEmpty }
         if visibleWindows.isEmpty {
             NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    // MARK: - Live Menu Refresh
+
+    /// Rebuild the menu every 30 seconds while sessions are active so duration
+    /// and stats stay current without the user needing to close/reopen the menu.
+    private func startMenuRefreshTimer() {
+        menuRefreshTimer?.invalidate()
+        menuRefreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let monitor = self.sessionMonitor, !monitor.activeSessions.isEmpty {
+                    self.rebuildMenu()
+                }
+            }
         }
     }
 

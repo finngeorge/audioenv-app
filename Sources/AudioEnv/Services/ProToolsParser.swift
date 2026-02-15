@@ -1,6 +1,9 @@
 import Foundation
+import os
 
 enum ProToolsParser {
+    private static let logger = Logger(subsystem: "com.audioenv", category: "ProToolsParser")
+
     private static let audioExtensions: Set<String> = [
         "wav", "aiff", "aif", "mp3", "m4a", "caf", "flac", "alac"
     ]
@@ -8,13 +11,20 @@ enum ProToolsParser {
         "mov", "mp4", "mxf", "avi"
     ]
 
+    /// Maximum files to collect per subdirectory to prevent runaway enumeration.
+    private static let maxFilesPerDirectory = 500
+
     static func parse(path: String) -> ProToolsProject? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
+        let data = (try? handle.read(upToCount: 1024 * 1024)) ?? Data()
+        return parse(data: data, path: path)
+    }
 
-        // Read first 1MB for metadata and plugin extraction
-        let headerData = try? handle.read(upToCount: 1024 * 1024)
-        let data = headerData ?? Data()
+    /// Parse a Pro Tools session from pre-read data. Use this to avoid reading the file twice
+    /// when the caller also needs the raw data for plugin matching.
+    static func parse(data: Data, path: String) -> ProToolsProject? {
+        let start = CFAbsoluteTimeGetCurrent()
         let signatureHex = data.prefix(8).map { String(format: "%02X", $0) }.joined(separator: " ")
 
         let attrs = try? FileManager.default.attributesOfItem(atPath: path)
@@ -28,6 +38,9 @@ enum ProToolsParser {
         let bouncedFiles = discoverFiles(in: root.appendingPathComponent("Bounced Files"), extensions: audioExtensions)
         let videoFiles = discoverFiles(in: root.appendingPathComponent("Video Files"), extensions: videoExtensions)
         let renderedFiles = discoverFiles(in: root.appendingPathComponent("Rendered Files"), extensions: audioExtensions)
+
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        logger.info("Parsed \(path, privacy: .public) in \(elapsed, format: .fixed(precision: 3))s (data=\(data.count)B, plugins=\(pluginNames.count), audio=\(audioFiles.count))")
 
         return ProToolsProject(
             signatureHex: signatureHex,
@@ -45,21 +58,25 @@ enum ProToolsParser {
     // MARK: – Sample rate extraction
 
     /// Search header for known sample rate values as big-endian 32-bit integers.
+    /// Limits search to the first 64 KB where PT stores session metadata.
     private static func extractSampleRate(from data: Data) -> Int? {
-        let knownRates: [UInt32] = [44100, 48000, 88200, 96000, 176400, 192000]
-        let bytes = [UInt8](data)
-        guard bytes.count >= 4 else { return nil }
+        let knownRates: Set<UInt32> = [44100, 48000, 88200, 96000, 176400, 192000]
+        let searchLimit = min(data.count, 65_536)
+        guard searchLimit >= 4 else { return nil }
 
-        for i in 0..<(bytes.count - 3) {
-            let value = UInt32(bytes[i]) << 24
-                      | UInt32(bytes[i+1]) << 16
-                      | UInt32(bytes[i+2]) << 8
-                      | UInt32(bytes[i+3])
-            if knownRates.contains(value) {
-                return Int(value)
+        return data.withUnsafeBytes { raw -> Int? in
+            let ptr = raw.bindMemory(to: UInt8.self)
+            for i in 0..<(searchLimit - 3) {
+                let value = UInt32(ptr[i]) << 24
+                          | UInt32(ptr[i+1]) << 16
+                          | UInt32(ptr[i+2]) << 8
+                          | UInt32(ptr[i+3])
+                if knownRates.contains(value) {
+                    return Int(value)
+                }
             }
+            return nil
         }
-        return nil
     }
 
     // MARK: – Plugin name extraction
@@ -133,7 +150,13 @@ enum ProToolsParser {
         var results: [String] = []
         while let rel = enumerator.nextObject() as? String {
             let ext = (rel as NSString).pathExtension.lowercased()
-            if extensions.contains(ext) { results.append(rel) }
+            if extensions.contains(ext) {
+                results.append(rel)
+                if results.count >= maxFilesPerDirectory {
+                    logger.warning("File enumeration capped at \(maxFilesPerDirectory) in \(dir.path, privacy: .public)")
+                    break
+                }
+            }
         }
         return results.sorted()
     }
@@ -141,8 +164,9 @@ enum ProToolsParser {
     // MARK: – Known-plugin matching
 
     /// Match installed plugin names and bundle IDs against binary data.
+    /// Uses Data.range(of:) for optimised searching instead of manual byte iteration.
     static func matchKnownPlugins(in data: Data, against plugins: [AudioPlugin]) -> [PluginMatch] {
-        let bytes = [UInt8](data)
+        let start = CFAbsoluteTimeGetCurrent()
         var matches: [PluginMatch] = []
         var matchedNames: Set<String> = []
 
@@ -151,8 +175,8 @@ enum ProToolsParser {
 
             // Try name match
             if plugin.name.count >= 4 {
-                let nameBytes = Array(plugin.name.utf8)
-                if containsSubsequence(bytes, nameBytes) {
+                let nameData = Data(plugin.name.utf8)
+                if data.range(of: nameData) != nil {
                     matches.append(PluginMatch(name: plugin.name, confidence: .nameMatch))
                     matchedNames.insert(plugin.name)
                     continue
@@ -161,25 +185,16 @@ enum ProToolsParser {
 
             // Try bundle ID match
             if let bundleID = plugin.bundleID, bundleID.count >= 8 {
-                let bundleBytes = Array(bundleID.utf8)
-                if containsSubsequence(bytes, bundleBytes) {
+                let bundleData = Data(bundleID.utf8)
+                if data.range(of: bundleData) != nil {
                     matches.append(PluginMatch(name: plugin.name, confidence: .bundleIdMatch))
                     matchedNames.insert(plugin.name)
                 }
             }
         }
 
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        logger.info("matchKnownPlugins: \(plugins.count) plugins checked in \(elapsed, format: .fixed(precision: 3))s → \(matches.count) matches")
         return matches
-    }
-
-    private static func containsSubsequence(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
-        guard needle.count <= haystack.count else { return false }
-        let limit = haystack.count - needle.count
-        for i in 0...limit {
-            if haystack[i..<(i + needle.count)].elementsEqual(needle) {
-                return true
-            }
-        }
-        return false
     }
 }

@@ -22,9 +22,14 @@ echo "Copying executable..."
 cp ".build/$CONFIG/AudioEnv" "$APP_DIR/AudioEnv"
 
 echo "Copying resources..."
+mkdir -p "$APP_NAME/Contents/Resources"
 if [ -d ".build/arm64-apple-macosx/$CONFIG/AudioEnv_AudioEnv.bundle" ]; then
-    mkdir -p "$APP_NAME/Contents/Resources"
     cp -R ".build/arm64-apple-macosx/$CONFIG/AudioEnv_AudioEnv.bundle" "$APP_NAME/Contents/Resources/"
+fi
+
+echo "Copying app icon..."
+if [ -f "audioenv.icns" ]; then
+    cp "audioenv.icns" "$APP_NAME/Contents/Resources/audioenv.icns"
 fi
 
 echo "Creating Info.plist..."
@@ -47,6 +52,8 @@ cat > "$PLIST_DIR/Info.plist" << 'EOF'
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>CFBundleIconFile</key>
+    <string>audioenv</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSUIElement</key>

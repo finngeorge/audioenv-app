@@ -18,9 +18,9 @@ targets:
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.audioenv.app
       MACOSX_DEPLOYMENT_TARGET: "14.0"
-      CODE_SIGN_ENTITLEMENTS: AudioEnv.entitlements
-      CODE_SIGN_STYLE: Automatic
-      DEVELOPMENT_TEAM: ""  # Leave empty for "Sign to Run Locally"
+      CODE_SIGN_ENTITLEMENTS: AudioEnv-adhoc.entitlements
+      CODE_SIGN_STYLE: Manual
+      CODE_SIGN_IDENTITY: "-"  # Ad-hoc sign for local development
       INFOPLIST_FILE: Sources/AudioEnv/Info.plist
       INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026"
       INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music

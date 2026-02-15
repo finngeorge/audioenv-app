@@ -31,6 +31,9 @@ enum AbletonParser {
         let projectSampleFiles = discoverFiles(in: projectRoot.appendingPathComponent("Samples"))
         let bouncedFiles = discoverBounces(in: projectRoot)
 
+        let timeSig = extractTimeSignature(doc)
+        let keyInfo = extractKey(doc)
+
         return AbletonProject(
             version:     version,
             tempo:       tempo,
@@ -39,7 +42,10 @@ enum AbletonParser {
             samplePaths: samplePaths,
             projectSampleFiles: projectSampleFiles,
             bouncedFiles: bouncedFiles,
-            projectRootPath: projectRoot.path
+            projectRootPath: projectRoot.path,
+            timeSignature: timeSig.map { "\($0.numerator)/\($0.denominator)" },
+            keyRoot: keyInfo?.root,
+            keyScale: keyInfo?.scale
         )
     }
 
@@ -68,22 +74,83 @@ enum AbletonParser {
 
     // MARK: – Tempo
 
-    /// Ableton stores the project tempo at  LiveSet > Transport > Tempo > Manual
-    /// The element is typically `<Manual Value="128.0"/>` (self-closing with attribute).
+    /// Ableton stores the project tempo in `<Tempo><Manual Value="137.0"/>`.
+    /// Live 10/11 used `//Transport/Tempo/Manual`; Live 12 moved it under
+    /// `//MasterTrack/.../Tempo/Manual` or directly `//Tempo/Manual`.
+    /// We try all known patterns and take the first match that looks like a BPM.
     private static func extractTempo(_ doc: XMLDocument) -> Double {
-        guard let nodes = try? doc.nodes(forXPath: "//Transport/Tempo/Manual"),
-              let el    = nodes.first as? XMLElement
-        else { return 120.0 }
+        let xpaths = [
+            "//Transport/Tempo/Manual",    // Live 10/11
+            "//MasterTrack//Tempo/Manual", // Live 12 variant
+            "//Tempo/Manual",              // Broadest fallback
+        ]
 
-        // Self-closing elements store the value as an attribute, not text content
-        if let attrVal = el.attribute(forName: "Value")?.stringValue,
-           let value = Double(attrVal) {
-            return value
-        }
-        if let raw = el.stringValue, let value = Double(raw) {
-            return value
+        for xpath in xpaths {
+            guard let nodes = try? doc.nodes(forXPath: xpath) else { continue }
+            for node in nodes {
+                guard let el = node as? XMLElement else { continue }
+                if let attrVal = el.attribute(forName: "Value")?.stringValue,
+                   let value = Double(attrVal),
+                   value >= 20 && value <= 999 {
+                    return value
+                }
+            }
         }
         return 120.0
+    }
+
+    // MARK: - Time Signature
+
+    /// Extract time signature from `<RemoteableTimeSignature>` (first occurrence).
+    static func extractTimeSignature(_ doc: XMLDocument) -> (numerator: Int, denominator: Int)? {
+        guard let numNodes = try? doc.nodes(forXPath: "//RemoteableTimeSignature/Numerator"),
+              let denNodes = try? doc.nodes(forXPath: "//RemoteableTimeSignature/Denominator"),
+              let numEl = numNodes.first as? XMLElement,
+              let denEl = denNodes.first as? XMLElement,
+              let num = numEl.attribute(forName: "Value")?.stringValue.flatMap({ Int($0) }),
+              let den = denEl.attribute(forName: "Value")?.stringValue.flatMap({ Int($0) })
+        else { return nil }
+        return (num, den)
+    }
+
+    // MARK: - Scale / Key
+
+    /// Extract key from `<ScaleInformation><Root Value="0"/><Name Value="Major"/>`.
+    /// Root is a MIDI note number (0=C, 1=C#, ..., 11=B).
+    static func extractKey(_ doc: XMLDocument) -> (root: String, scale: String?)? {
+        guard let rootNodes = try? doc.nodes(forXPath: "//ScaleInformation/Root"),
+              let rootEl = rootNodes.first as? XMLElement,
+              let rootVal = rootEl.attribute(forName: "Value")?.stringValue,
+              let rootInt = Int(rootVal)
+        else { return nil }
+
+        let noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        let root = noteNames[rootInt % 12]
+
+        // Name "0" means no scale set in Ableton; normalize common names
+        var scaleName: String? = nil
+        if let nameNodes = try? doc.nodes(forXPath: "//ScaleInformation/Name"),
+           let nameEl = nameNodes.first as? XMLElement,
+           let name = nameEl.attribute(forName: "Value")?.stringValue,
+           name != "0" && !name.isEmpty {
+            // Normalize scale names to short forms
+            switch name.lowercased() {
+            case "major": scaleName = "maj"
+            case "minor", "natural minor": scaleName = "min"
+            case "harmonic minor": scaleName = "harm min"
+            case "melodic minor": scaleName = "mel min"
+            case "dorian": scaleName = "dorian"
+            case "mixolydian": scaleName = "mixo"
+            case "phrygian": scaleName = "phryg"
+            case "lydian": scaleName = "lydian"
+            case "locrian": scaleName = "locrian"
+            case "pentatonic": scaleName = "pent"
+            case "blues": scaleName = "blues"
+            default: scaleName = name
+            }
+        }
+
+        return (root, scaleName)
     }
 
     // MARK: – Tracks
@@ -95,7 +162,10 @@ enum AbletonParser {
             ("//Tracks/AudioTrack",        .audio),
             ("//Tracks/MidiTrack",         .midi),
             ("//Tracks/BbTrack",           .beatBassline),
-            ("//ReturnTracks/ReturnTrack", .returnTrack),
+            ("//Tracks/ReturnTrack",       .returnTrack),   // Live 12
+            ("//ReturnTracks/ReturnTrack", .returnTrack),   // Live 10/11
+            ("//MainTrack",                .master),        // Live 12 master
+            ("//MasterTrack",              .master),        // Live 10/11 master
         ]
 
         for def in defs {
@@ -199,12 +269,15 @@ enum AbletonParser {
         var names: [String] = []
 
         let xpaths = [
-            ".//PluginDesc/Name",
-            ".//Plug/Name",
-            ".//InstrumentPluginName",
-            ".//VstPluginInfo/PlugName",
-            ".//Vst3PluginInfo/PlugName",
-            ".//AuPluginInfo/PlugName",
+            ".//Vst3PluginInfo/Name",     // Live 12 VST3
+            ".//VstPluginInfo/Name",      // Live 12 VST2
+            ".//AuPluginInfo/Name",       // Live 12 AU
+            ".//PluginDesc/Name",         // Live 10/11
+            ".//Plug/Name",              // older layouts
+            ".//InstrumentPluginName",   // legacy
+            ".//VstPluginInfo/PlugName", // Live 10/11 VST2
+            ".//Vst3PluginInfo/PlugName", // Live 10/11 VST3
+            ".//AuPluginInfo/PlugName",  // Live 10/11 AU
         ]
 
         for xpath in xpaths {

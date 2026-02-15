@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import os
 
 /// Central observable that drives the entire scan → parse pipeline.
 /// All @Published mutations happen on the main actor.
@@ -21,6 +22,11 @@ class ScannerService: ObservableObject {
             UserDefaults.standard.set(parseAllSessions, forKey: Self.defaultsParseAllKey)
         }
     }
+    @Published var parseBackups: Bool = false {
+        didSet {
+            UserDefaults.standard.set(parseBackups, forKey: Self.defaultsParseBackupsKey)
+        }
+    }
     @Published var autoRescanOnLaunch: Bool = true {
         didSet {
             UserDefaults.standard.set(autoRescanOnLaunch, forKey: Self.defaultsAutoRescanKey)
@@ -29,10 +35,16 @@ class ScannerService: ObservableObject {
     @Published var isCacheStale: Bool = false
     @Published var cacheStaleReason: String? = nil
 
+    private static let logger = Logger(subsystem: "com.audioenv", category: "ScannerService")
+
+    /// Maximum time (seconds) allowed for parsing a single session file.
+    private static let perSessionTimeout: TimeInterval = 10
+
     private let cacheStore = ScanCacheStore()
     private let pluginCatalog = PluginCatalogStore()
     private var cachedScanRoots: [String] = []
     private var cachedRootModTimes: [String: Date] = [:]
+    private var cachedPluginDirModTimes: [String: Date] = [:]
 
     init() {
         loadDefaults()
@@ -105,14 +117,42 @@ class ScannerService: ObservableObject {
     /// No-ops if a scan is already in flight.
     func scanAll(keepExisting: Bool = false) {
         guard !isScanning else { return }
+
+        // ── Fast re-scan path ──────────────────────────────────────
+        // If the last scan was < 5 min ago and no root directories changed,
+        // skip the entire filesystem walk and return cached data immediately.
+        if let lastScan = lastScanDate,
+           Date().timeIntervalSince(lastScan) < Self.fastRescanWindow,
+           !sessions.isEmpty {
+            let currentRoots = Self.scanRootsForStaleness(customPaths: customPaths)
+            let currentTimes = Self.rootModTimes(for: currentRoots)
+            var changed = Set(currentRoots) != Set(cachedScanRoots)
+            if !changed {
+                for root in currentRoots {
+                    if let cached = cachedRootModTimes[root],
+                       let current = currentTimes[root],
+                       current > cached {
+                        changed = true
+                        break
+                    }
+                }
+            }
+            if !changed {
+                statusMessage = "No changes since last scan (\(Self.relativeTimeString(from: lastScan)) ago)"
+                return
+            }
+        }
+
         isScanning   = true
         scanProgress = 0
 
-        // Snapshot cached sessions so we can reuse parse data for unchanged files.
+        // Snapshot cached data before clearing so we can reuse parse results.
         let cachedSessionsByPath: [String: AudioSession] = Dictionary(
             sessions.compactMap { s in s.project != nil ? (s.path, s) : nil },
             uniquingKeysWith: { first, _ in first }
         )
+        let priorPlugins = self.plugins
+        let priorPluginDirModTimes = self.cachedPluginDirModTimes
 
         if !keepExisting {
             plugins  = []
@@ -124,76 +164,145 @@ class ScannerService: ObservableObject {
         // Capture values needed by the detached task
         let customPaths = self.customPaths
         let parseAll = self.parseAllSessions
+        let shouldParseBackups = self.parseBackups
 
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self = self else { return }
 
-            // 1. Discover plugins
-            let foundPlugins = Self.discoverPlugins()
+            // ── 1. Discover plugins (with directory mod-time caching) ──
+            let pluginDirs = Self.systemPluginDirs + Self.userPluginDirs
+            let currentPluginDirTimes = Self.rootModTimes(for: pluginDirs)
+            let pluginsUnchanged = !priorPluginDirModTimes.isEmpty
+                && !priorPlugins.isEmpty
+                && pluginDirs.allSatisfy { dir in
+                    guard let cached = priorPluginDirModTimes[dir],
+                          let current = currentPluginDirTimes[dir] else { return true }
+                    return current <= cached
+                }
+
+            let foundPlugins: [AudioPlugin]
+            if pluginsUnchanged {
+                foundPlugins = priorPlugins
+            } else {
+                foundPlugins = Self.discoverPlugins()
+            }
+
             await MainActor.run {
                 self.plugins      = foundPlugins
                 self.scanProgress = 0.35
                 self.statusMessage = "Scanning sessions…"
             }
 
-            // 2. Discover session files
+            // ── 2. Discover session files ──
             let roots         = Self.defaultSessionRoots + customPaths
             let foundSessions = Self.discoverSessions(roots: roots)
+
+            // ── 3. Determine which sessions to parse ──
+            var parsed = foundSessions
+
+            // Filter parse candidates: respect parseBackups setting
+            let parseCandidates = parsed.enumerated()
+                .filter { shouldParseBackups || !$0.element.isBackup }
+                .sorted { $0.element.modifiedDate > $1.element.modifiedDate }
+
+            let parseLimit = parseAll ? Int.max : Self.maxParsedSessions
+            let allowedIndices: Set<Int>
+            if parseAll {
+                allowedIndices = Set(parseCandidates.map { $0.offset })
+            } else {
+                // Group by project; only parse the most recently modified per group
+                let groups = Dictionary(grouping: parseCandidates) { $0.element.projectGroupKey }
+                var representatives: [(offset: Int, element: AudioSession)] = []
+                for (_, group) in groups {
+                    if let newest = group.max(by: { $0.element.modifiedDate < $1.element.modifiedDate }) {
+                        representatives.append(newest)
+                    }
+                }
+                representatives.sort { $0.element.modifiedDate > $1.element.modifiedDate }
+                allowedIndices = Set(representatives.prefix(parseLimit).map { $0.offset })
+            }
+
             await MainActor.run {
                 self.sessions     = foundSessions
                 self.scanProgress = 0.6
                 if parseAll {
                     self.statusMessage = "Parsing all sessions…"
                 } else {
-                    let n = min(foundSessions.count, Self.maxParsedSessions)
-                    self.statusMessage = "Parsing latest \(n) sessions…"
+                    self.statusMessage = "Parsing latest \(allowedIndices.count) sessions…"
                 }
             }
 
-            // 3. Parse each session, reusing cached parse data for unchanged files
-            var parsed = foundSessions
+            // ── 4. Separate cache hits from sessions that need parsing ──
             var skippedLarge = 0
             var cacheHits = 0
-            let parseLimit = parseAll ? Int.max : Self.maxParsedSessions
-            let parseCandidates = parsed.enumerated()
-                .filter { !$0.element.isBackup }
-                .sorted { $0.element.modifiedDate > $1.element.modifiedDate }
-            let allowedIndices = Set(parseCandidates.prefix(parseLimit).map { $0.offset })
+            var indicesToParse: [(index: Int, session: AudioSession)] = []
 
             for i in parsed.indices {
-                let current = parsed[i]
+                let session = parsed[i]
 
-                // Check if we can reuse cached parse data (same path, size, and mod date)
-                if let cached = cachedSessionsByPath[current.path],
-                   cached.fileSize == current.fileSize,
-                   cached.modifiedDate == current.modifiedDate {
-                    var reused = current
+                // Reuse cached parse data for unchanged files (same path + size + modDate)
+                if let cached = cachedSessionsByPath[session.path],
+                   cached.fileSize == session.fileSize,
+                   cached.modifiedDate == session.modifiedDate {
+                    var reused = session
                     reused.project = cached.project
+                    reused.knownPluginMatches = cached.knownPluginMatches
                     parsed[i] = reused
                     cacheHits += 1
-                    let pct = 0.6 + 0.35 * (Double(i + 1) / Double(max(parsed.count, 1)))
-                    await MainActor.run { self.scanProgress = pct }
                     continue
                 }
 
-                await MainActor.run {
-                    self.statusMessage = "Parsing \(current.name)…"
-                }
-                let parsedSession: AudioSession
-                if allowedIndices.contains(i) {
-                    parsedSession = Self.parseSession(current, plugins: foundPlugins)
-                } else {
-                    parsedSession = current
-                }
-                if parsedSession.project == nil && parsed[i].fileSize > Self.maxParseSizeBytes {
-                    skippedLarge += 1
-                }
-                parsed[i] = parsedSession
-                let pct = 0.6 + 0.35 * (Double(i + 1) / Double(max(parsed.count, 1)))
-                await MainActor.run { self.scanProgress = pct }
+                guard allowedIndices.contains(i) else { continue }
+                indicesToParse.append((i, session))
             }
 
-            // 4. Done
+            // ── 5. Parallel parsing (max 4 concurrent) with batched UI updates ──
+            let totalToParse = indicesToParse.count
+            var completedCount = 0
+            var lastUpdateTime = CFAbsoluteTimeGetCurrent()
+
+            await withTaskGroup(of: (Int, AudioSession).self) { group in
+                var iter = indicesToParse.makeIterator()
+
+                // Seed with up to 4 concurrent parse tasks
+                for _ in 0..<4 {
+                    guard let (idx, session) = iter.next() else { break }
+                    group.addTask {
+                        (idx, await Self.parseWithTimeout(session, plugins: foundPlugins))
+                    }
+                }
+
+                for await (idx, result) in group {
+                    parsed[idx] = result
+                    if result.project == nil && result.fileSize > Self.maxParseSizeBytes {
+                        skippedLarge += 1
+                    }
+                    completedCount += 1
+
+                    // Batch MainActor updates: every 10 sessions or 0.5 s
+                    let now = CFAbsoluteTimeGetCurrent()
+                    if completedCount % 10 == 0
+                        || (now - lastUpdateTime) >= 0.5
+                        || completedCount == totalToParse {
+                        let pct = 0.6 + 0.35 * (Double(cacheHits + completedCount) / Double(max(parsed.count, 1)))
+                        let sessionName = result.name
+                        lastUpdateTime = now
+                        await MainActor.run {
+                            self.scanProgress = pct
+                            self.statusMessage = "Parsing \(sessionName)…"
+                        }
+                    }
+
+                    // Maintain concurrency — start next task
+                    if let (nextIdx, nextSession) = iter.next() {
+                        group.addTask {
+                            (nextIdx, await Self.parseWithTimeout(nextSession, plugins: foundPlugins))
+                        }
+                    }
+                }
+            }
+
+            // ── 6. Done ──
             let scanDate = Date()
             let finalSkippedLarge = skippedLarge
             let finalCacheHits = cacheHits
@@ -222,7 +331,8 @@ class ScannerService: ObservableObject {
                 lastScanDate: scanDate,
                 skippedLargeSessions: finalSkippedLarge,
                 scanRoots: scanRoots,
-                rootModTimes: rootModTimes
+                rootModTimes: rootModTimes,
+                pluginDirModTimes: currentPluginDirTimes
             )
             let store = await MainActor.run { self.cacheStore }
             store.save(cache)
@@ -230,6 +340,7 @@ class ScannerService: ObservableObject {
             await MainActor.run {
                 self.cachedScanRoots = scanRoots
                 self.cachedRootModTimes = rootModTimes
+                self.cachedPluginDirModTimes = currentPluginDirTimes
                 self.isCacheStale = false
             }
         }
@@ -251,12 +362,16 @@ class ScannerService: ObservableObject {
     }
 
     /// Parse a single session and update it in the sessions array
-    func parseIndividualSession(path: String) {
-        guard let index = sessions.firstIndex(where: { $0.path == path }) else { return }
+    func parseIndividualSession(path: String, completion: (() -> Void)? = nil) {
+        guard let index = sessions.firstIndex(where: { $0.path == path }) else {
+            completion?()
+            return
+        }
         let session = sessions[index]
 
         // Skip if already parsed
         if session.project != nil {
+            completion?()
             return
         }
 
@@ -269,6 +384,7 @@ class ScannerService: ObservableObject {
             if let currentIndex = self.sessions.firstIndex(where: { $0.path == path }) {
                 self.sessions[currentIndex] = parsed
             }
+            completion?()
         }
     }
 
@@ -294,6 +410,10 @@ class ScannerService: ObservableObject {
             defaults.set(value, forKey: Self.defaultsParseAllKey)
         }
 
+        if defaults.object(forKey: Self.defaultsParseBackupsKey) != nil {
+            parseBackups = defaults.bool(forKey: Self.defaultsParseBackupsKey)
+        }
+
         if defaults.object(forKey: Self.defaultsAutoRescanKey) != nil {
             autoRescanOnLaunch = defaults.bool(forKey: Self.defaultsAutoRescanKey)
         } else if defaults.object(forKey: Self.legacyAutoRescanKey) != nil {
@@ -311,6 +431,7 @@ class ScannerService: ObservableObject {
         lastScanDate = cache.lastScanDate
         cachedScanRoots = cache.scanRoots
         cachedRootModTimes = cache.rootModTimes
+        cachedPluginDirModTimes = cache.pluginDirModTimes
         cacheStaleReason = nil
         if let lastScanDate {
             statusMessage = "Loaded cached scan from \(Self.cacheDateFormatter.string(from: lastScanDate))"
@@ -328,6 +449,7 @@ class ScannerService: ObservableObject {
         isCacheStale = false
         cachedScanRoots = []
         cachedRootModTimes = [:]
+        cachedPluginDirModTimes = [:]
         statusMessage = "Cache cleared"
     }
 
@@ -400,7 +522,7 @@ class ScannerService: ObservableObject {
     }
 
     private nonisolated static func scanRootsForStaleness(customPaths: [String]) -> [String] {
-        let roots = systemPluginDirs + userPluginDirs + customPaths
+        let roots = defaultSessionRoots + systemPluginDirs + userPluginDirs + customPaths
         return Array(Set(roots)).sorted()
     }
 
@@ -416,6 +538,15 @@ class ScannerService: ObservableObject {
         return result
     }
 
+    private static func relativeTimeString(from date: Date) -> String {
+        let seconds = Int(Date().timeIntervalSince(date))
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        return "\(hours)h"
+    }
+
     private static let cacheDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
@@ -427,10 +558,12 @@ class ScannerService: ObservableObject {
     private static let defaultsParseAllKey = "AudioEnv.parseAllSessions"
     private static let defaultsAutoRescanKey = "AudioEnv.autoRescanOnLaunch"
 
+    private static let defaultsParseBackupsKey = "AudioEnv.parseBackups"
     private static let legacyCustomPathsKey = "AudioEnvScanner.customPaths"
     private static let legacyParseAllKey = "AudioEnvScanner.parseAllSessions"
     private static let legacyAutoRescanKey = "AudioEnvScanner.autoRescanOnLaunch"
     private static let autoRescanMinimumAge: TimeInterval = 12 * 60 * 60
+    private static let fastRescanWindow: TimeInterval = 5 * 60
 
     // ── Plugin discovery ──────────────────────────────────────────
 
@@ -623,17 +756,27 @@ class ScannerService: ObservableObject {
         if session.fileSize > maxParseSizeBytes {
             return session
         }
-        if session.isBackup {
-            return session
-        }
+
+        let start = CFAbsoluteTimeGetCurrent()
         var s = session
+
+        // For Pro Tools sessions, read the data once and reuse for both parsing and plugin matching.
+        var ptData: Data?
+
         switch session.format {
         case .ableton:
             if let p = AbletonParser.parse(path: session.path) { s.project = .ableton(p) }
         case .logic:
             if let p = LogicParser.parse(path: session.path)   { s.project = .logic(p) }
         case .proTools:
-            if let p = ProToolsParser.parse(path: session.path) { s.project = .proTools(p) }
+            if let handle = FileHandle(forReadingAtPath: session.path) {
+                let data = (try? handle.read(upToCount: 1024 * 1024)) ?? Data()
+                try? handle.close()
+                ptData = data
+                if let p = ProToolsParser.parse(data: data, path: session.path) {
+                    s.project = .proTools(p)
+                }
+            }
         }
 
         // Second pass: known-plugin matching against installed plugins
@@ -647,12 +790,7 @@ class ScannerService: ObservableObject {
                 ]
                 matchData = candidates.lazy.compactMap { FileManager.default.contents(atPath: $0) }.first
             case .proTools:
-                if let handle = FileHandle(forReadingAtPath: session.path) {
-                    matchData = try? handle.read(upToCount: 1024 * 1024)
-                    try? handle.close()
-                } else {
-                    matchData = nil
-                }
+                matchData = ptData  // reuse already-read data
             default:
                 matchData = nil
             }
@@ -673,6 +811,36 @@ class ScannerService: ObservableObject {
             }
         }
 
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        if elapsed > 2.0 {
+            logger.warning("Slow parse: \(session.name, privacy: .public) took \(elapsed, format: .fixed(precision: 2))s")
+        }
         return s
+    }
+
+    /// Run parseSession with a timeout to prevent one file from stalling the scan.
+    private nonisolated static func parseWithTimeout(_ session: AudioSession, plugins: [AudioPlugin]) async -> AudioSession {
+        await withTaskGroup(of: AudioSession?.self) { group in
+            group.addTask {
+                Self.parseSession(session, plugins: plugins)
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(perSessionTimeout))
+                return nil // sentinel for timeout
+            }
+
+            // Take whichever finishes first
+            if let first = await group.next() {
+                if let result = first {
+                    group.cancelAll()
+                    return result
+                }
+                // Timeout fired first (returned nil) – log and skip
+                logger.warning("Parse timed out after \(perSessionTimeout)s: \(session.name, privacy: .public) at \(session.path, privacy: .public)")
+                group.cancelAll()
+                return session
+            }
+            return session
+        }
     }
 }

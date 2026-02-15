@@ -11,11 +11,12 @@ class WebSocketService: ObservableObject {
     @Published var isConnected = false
     @Published var lastEvent: SyncEvent?
 
-    #if DEBUG
-    private let baseURL = "ws://localhost:8001"
-    #else
-    private let baseURL = "wss://api.audioenv.com"
-    #endif
+    private let baseURL: String = {
+        if let override = UserDefaults.standard.string(forKey: "wsBaseURL"), !override.isEmpty {
+            return override
+        }
+        return "wss://api.audioenv.com"
+    }()
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var reconnectAttempt = 0

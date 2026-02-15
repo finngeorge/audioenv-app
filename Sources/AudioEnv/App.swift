@@ -130,6 +130,9 @@ struct AudioEnvApp: App {
                 .onChange(of: sessionMonitor.activeSessions.count) { _, _ in
                     menuBar.rebuildMenu()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .sessionSnapshotCaptured)) { _ in
+                    menuBar.rebuildMenu()
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
                     if let window = notification.object as? NSWindow,
                        window.title.contains("AudioEnv") {

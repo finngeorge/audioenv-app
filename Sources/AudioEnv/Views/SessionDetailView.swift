@@ -912,9 +912,10 @@ struct TrackRow: View {
     private var trackIcon: String {
         switch track.type {
         case .audio:        return "speaker.wave.2"
-        case .midi:         return "piano"
+        case .midi:         return "pianokeys"
         case .beatBassline: return "drum"
         case .returnTrack:  return "arrow.turn.left.up"
+        case .master:       return "dial.high"
         }
     }
 
@@ -924,6 +925,7 @@ struct TrackRow: View {
         case .midi:         return .purple
         case .beatBassline: return .orange
         case .returnTrack:  return .green
+        case .master:       return .red
         }
     }
 }

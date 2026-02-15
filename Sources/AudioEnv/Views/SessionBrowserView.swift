@@ -147,7 +147,7 @@ private struct ProjectRow: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 if project.backups.count > 0 {
-                    Text("\(project.backups.count) backup\(project.backups.count == 1 ? "" : "s")")
+                    Text("\(project.backups.count) auto backup\(project.backups.count == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

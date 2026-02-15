@@ -8,6 +8,7 @@ extension Notification.Name {
     static let showPathManager = Notification.Name("AudioEnv.showPathManager")
     static let focusSearch = Notification.Name("AudioEnv.focusSearch")
     static let navigateToSummary = Notification.Name("AudioEnv.navigateToSummary")
+    static let navigateToProject = Notification.Name("AudioEnv.navigateToProject")
 }
 
 // MARK: - App Commands

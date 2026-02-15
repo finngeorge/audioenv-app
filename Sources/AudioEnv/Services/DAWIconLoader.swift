@@ -6,23 +6,24 @@ class DAWIconLoader {
 
     private static var iconCache: [String: NSImage] = [:]
 
-    /// The SwiftPM resource bundle — Bundle.module works for `swift run`,
-    /// but for .app bundles the bundle is in Contents/Resources/.
+    /// Resource bundle that works for both SPM (`swift run`) and Xcode (.app) builds.
     private static let resourceBundle: Bundle? = {
-        // 1) Bundle.module works when running via `swift run` (build dir)
-        //    It also works if the build dir still exists after `open .app`
-        let moduleBundle = Bundle.module
-
-        // 2) For .app bundles, also check Contents/Resources/
+        // SPM .app bundles: Contents/Resources/AudioEnv_AudioEnv.bundle
         if let resourceURL = Bundle.main.resourceURL {
-            let appBundlePath = resourceURL
-                .appendingPathComponent("AudioEnv_AudioEnv.bundle").path
-            if let appBundle = Bundle(path: appBundlePath) {
-                return appBundle
+            let nested = resourceURL.appendingPathComponent("AudioEnv_AudioEnv.bundle")
+            if let bundle = Bundle(path: nested.path) {
+                return bundle
             }
         }
-
-        return moduleBundle
+        // SPM `swift run`: resource bundle is next to the executable
+        if let execURL = Bundle.main.executableURL {
+            let adjacent = execURL.deletingLastPathComponent()
+                .appendingPathComponent("AudioEnv_AudioEnv.bundle")
+            if let bundle = Bundle(path: adjacent.path) {
+                return bundle
+            }
+        }
+        return Bundle.main
     }()
 
     /// Load a DAW icon by format name (for project lists)

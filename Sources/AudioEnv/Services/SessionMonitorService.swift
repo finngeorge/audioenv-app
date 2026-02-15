@@ -4,6 +4,27 @@ import CoreAudio
 import Darwin
 import os.log
 
+/// Thread-safe cache for CoreAudio device info to avoid HAL console warnings on every poll.
+private final class AudioDeviceCache: @unchecked Sendable {
+    static let shared = AudioDeviceCache()
+    private var name: String?
+    private var sampleRate: Int?
+    private var lastFetch: Date = .distantPast
+    private let lock = NSLock()
+
+    func get(maxAge: TimeInterval, fetch: () -> (String?, Int?)) -> (name: String?, sampleRate: Int?) {
+        lock.lock()
+        defer { lock.unlock() }
+        if Date().timeIntervalSince(lastFetch) >= maxAge {
+            let result = fetch()
+            name = result.0
+            sampleRate = result.1
+            lastFetch = Date()
+        }
+        return (name, sampleRate)
+    }
+}
+
 /// Passively monitors running DAWs and watches their active project files for saves.
 ///
 /// Architecture:
@@ -92,6 +113,10 @@ class SessionMonitorService: ObservableObject {
     private static let reparseThrottleSeconds: TimeInterval = 5
     private static let maxParseSizeBytes: Int64 = 200 * 1024 * 1024
     private static let pollIntervalSeconds: TimeInterval = 3
+    private var lastLogPollDate: Date = .distantPast
+    private static let logPollIntervalSeconds: TimeInterval = 10
+
+    private static let audioDeviceCacheSeconds: TimeInterval = 30
 
     // Session file extensions per format
     private static let sessionExtensions: [SessionFormat: Set<String>] = [
@@ -279,15 +304,36 @@ class SessionMonitorService: ObservableObject {
 
     /// Start watching directories where the given DAW's projects might live.
     private func startWatchingForProjects(daw: DAWProcessInfo) {
-        let projectPaths = discoverProjectPaths(for: daw)
+        // Discover candidate paths from log + file system
+        let allPaths = discoverProjectPaths(for: daw)
 
-        for path in projectPaths {
+        // Ableton only has one project open at a time — use the most recent
+        // "Loading document" entry from Log.txt as the current project.
+        if daw.format == .ableton, let logPath = findAbletonLogPath() {
+            let logPaths = parseAbletonLogForOpenSets(logPath: logPath)
+            if let currentPath = logPaths.first,  // most recent (parsed in reverse)
+               !activeSessions.contains(where: { $0.projectPath == currentPath }),
+               FileManager.default.fileExists(atPath: currentPath) {
+                let name = Self.projectName(from: currentPath)
+                let session = LiveSession(
+                    projectPath: currentPath,
+                    projectName: name,
+                    format: daw.format,
+                    dawPID: daw.pid
+                )
+                activeSessions.append(session)
+                logger.info("Session opened (from log): \(name)")
+                captureInitialSnapshot(projectPath: currentPath, format: daw.format)
+            }
+        }
+
+        for path in allPaths {
             startWatchingProjectFile(path: path, daw: daw)
         }
     }
 
     /// Discover project paths to watch for a given DAW.
-    /// Uses scanner's known sessions and common DAW project locations.
+    /// Uses scanner's known sessions, Ableton's Log.txt, and common project locations.
     private func discoverProjectPaths(for daw: DAWProcessInfo) -> [String] {
         var paths: [String] = []
         let fm = FileManager.default
@@ -302,57 +348,141 @@ class SessionMonitorService: ObservableObject {
             paths.append(contentsOf: knownPaths)
         }
 
-        // 2. Add common project directories
+        // 2. For Ableton, parse Log.txt to find the currently open project
+        if daw.format == .ableton {
+            if let logPath = findAbletonLogPath() {
+                paths.append(contentsOf: parseAbletonLogForOpenSets(logPath: logPath))
+            }
+        }
+
+        // 3. Add recently modified projects from common directories
+        //    (limited to files modified in the last 7 days to avoid watching hundreds of files)
         let home = fm.homeDirectoryForCurrentUser.path
+        let recentCutoff = Date().addingTimeInterval(-7 * 24 * 3600)
         switch daw.format {
         case .ableton:
             let abletonDir = "\(home)/Music/Ableton"
             if fm.fileExists(atPath: abletonDir) {
-                paths.append(contentsOf: findSessionFiles(in: abletonDir, extensions: ["als"]))
+                paths.append(contentsOf: findSessionFiles(in: abletonDir, extensions: ["als"], maxDepth: 4, modifiedAfter: recentCutoff))
             }
         case .logic:
-            // Logic projects could be anywhere but commonly in ~/Music
             let musicDir = "\(home)/Music"
             if fm.fileExists(atPath: musicDir) {
-                paths.append(contentsOf: findSessionFiles(in: musicDir, extensions: ["logicx", "logicpro"]))
+                paths.append(contentsOf: findSessionFiles(in: musicDir, extensions: ["logicx", "logicpro"], maxDepth: 3, modifiedAfter: recentCutoff))
             }
         case .proTools:
             let docsDir = "\(home)/Documents"
             if fm.fileExists(atPath: docsDir) {
-                paths.append(contentsOf: findSessionFiles(in: docsDir, extensions: ["ptx", "ptf"]))
+                paths.append(contentsOf: findSessionFiles(in: docsDir, extensions: ["ptx", "ptf"], maxDepth: 3, modifiedAfter: recentCutoff))
             }
         }
 
         // Deduplicate
-        return Array(Set(paths))
+        let deduplicated = Array(Set(paths))
+        logger.info("Discovered \(deduplicated.count) project paths for \(daw.name)")
+        return deduplicated
     }
 
-    /// Find session files in a directory (non-recursive, fast scan).
-    private nonisolated func findSessionFiles(in directory: String, extensions: [String]) -> [String] {
-        let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(atPath: directory) else { return [] }
+    // MARK: - Ableton Log Parsing
 
-        var results: [String] = []
-        for item in contents {
-            let ext = (item as NSString).pathExtension.lowercased()
-            if extensions.contains(ext) {
-                results.append((directory as NSString).appendingPathComponent(item))
+    /// Find the most recent Ableton Live Log.txt path.
+    private nonisolated func findAbletonLogPath() -> String? {
+        let prefsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/Ableton").path
+        guard let versions = try? FileManager.default.contentsOfDirectory(atPath: prefsDir) else { return nil }
+
+        // Find the most recently modified "Live *" directory
+        let liveDirs = versions
+            .filter { $0.hasPrefix("Live ") }
+            .compactMap { dir -> (String, Date)? in
+                let fullPath = (prefsDir as NSString).appendingPathComponent(dir)
+                let logPath = (fullPath as NSString).appendingPathComponent("Log.txt")
+                guard let attrs = try? FileManager.default.attributesOfItem(atPath: logPath),
+                      let modDate = attrs[.modificationDate] as? Date else { return nil }
+                return (logPath, modDate)
             }
-            // Check one level of subdirectories (project folders)
-            let subpath = (directory as NSString).appendingPathComponent(item)
-            var isDir: ObjCBool = false
-            if fm.fileExists(atPath: subpath, isDirectory: &isDir), isDir.boolValue {
-                if let subContents = try? fm.contentsOfDirectory(atPath: subpath) {
-                    for subItem in subContents {
-                        let subExt = (subItem as NSString).pathExtension.lowercased()
-                        if extensions.contains(subExt) {
-                            results.append((subpath as NSString).appendingPathComponent(subItem))
-                        }
+            .sorted { $0.1 > $1.1 }
+
+        return liveDirs.first?.0
+    }
+
+    /// Parse Ableton's Log.txt for "Loading document" lines to find open project(s).
+    private nonisolated func parseAbletonLogForOpenSets(logPath: String) -> [String] {
+        guard let data = FileManager.default.contents(atPath: logPath),
+              let log = String(data: data, encoding: .utf8) else { return [] }
+
+        // Read from the end — we only care about the most recent session
+        // Look for lines like: info: Loading document "/Users/.../project.als"
+        var results: [String] = []
+        let lines = log.components(separatedBy: "\n").reversed()
+
+        for line in lines {
+            // Stop at the last "Started: Live" marker — that's the current session boundary
+            if line.contains("Started: Live") && line.contains("Build:") {
+                break
+            }
+
+            if line.contains("Loading document") && line.contains(".als\"") {
+                // Extract path between quotes
+                if let startRange = line.range(of: "\""),
+                   let endRange = line.range(of: "\"", range: line.index(after: startRange.lowerBound)..<line.endIndex) {
+                    let path = String(line[startRange.upperBound..<endRange.lowerBound])
+                    // Skip template/default/untitled tracks, only include real user projects
+                    let filename = (path as NSString).lastPathComponent.lowercased()
+                    if !path.contains("/App-Resources/") &&
+                       !path.contains("/Core Library/") &&
+                       !path.contains("/Defaults/") &&
+                       filename != "untitled.als" &&
+                       !filename.hasPrefix("untitled ") {
+                        results.append(path)
                     }
                 }
             }
         }
+
+        // The last "Loading document" line (first found in reverse) is the currently open set
+        // Return unique paths, most recent first
+        return Array(NSOrderedSet(array: results)) as? [String] ?? results
+    }
+
+    /// Find session files in a directory, recursing up to maxDepth levels.
+    /// Only returns files modified after the given date (if provided) to avoid watching stale projects.
+    private nonisolated func findSessionFiles(in directory: String, extensions: [String], maxDepth: Int, modifiedAfter: Date? = nil) -> [String] {
+        var results: [String] = []
+        findSessionFilesRecursive(in: directory, extensions: extensions, depth: 0, maxDepth: maxDepth, modifiedAfter: modifiedAfter, results: &results)
         return results
+    }
+
+    private nonisolated func findSessionFilesRecursive(in directory: String, extensions: [String], depth: Int, maxDepth: Int, modifiedAfter: Date?, results: inout [String]) {
+        guard depth < maxDepth else { return }
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(atPath: directory) else { return }
+
+        for item in contents {
+            // Skip Backup folders, hidden dirs, and Factory Packs
+            if item.hasPrefix(".") || item == "Backup" || item == "Factory Packs" { continue }
+
+            let fullPath = (directory as NSString).appendingPathComponent(item)
+            let ext = (item as NSString).pathExtension.lowercased()
+
+            if extensions.contains(ext) {
+                // Filter by modification date if specified
+                if let cutoff = modifiedAfter {
+                    if let attrs = try? fm.attributesOfItem(atPath: fullPath),
+                       let modDate = attrs[.modificationDate] as? Date,
+                       modDate > cutoff {
+                        results.append(fullPath)
+                    }
+                } else {
+                    results.append(fullPath)
+                }
+            } else {
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: fullPath, isDirectory: &isDir), isDir.boolValue {
+                    findSessionFilesRecursive(in: fullPath, extensions: extensions, depth: depth + 1, maxDepth: maxDepth, modifiedAfter: modifiedAfter, results: &results)
+                }
+            }
+        }
     }
 
     // MARK: - File Watching (DispatchSource)
@@ -574,6 +704,7 @@ class SessionMonitorService: ObservableObject {
                     if let snapshot {
                         self.activeSessions[index].snapshots.append(snapshot)
                         self.logger.info("Snapshot captured for \(self.activeSessions[index].projectName): \(snapshot.pluginCount ?? 0) plugins, \(snapshot.trackCount ?? 0) tracks")
+                        NotificationCenter.default.post(name: .sessionSnapshotCaptured, object: nil)
                     }
                 }
             }
@@ -600,17 +731,89 @@ class SessionMonitorService: ObservableObject {
 
     // MARK: - Re-parse & Snapshot
 
+    /// Parse the project file immediately on discovery so the menu bar shows
+    /// track count, plugin count, tempo, etc. right away.
+    private func captureInitialSnapshot(projectPath: String, format: SessionFormat) {
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: projectPath)[.size] as? Int64) ?? 0
+        guard fileSize > 0, fileSize < Self.maxParseSizeBytes else {
+            logger.warning("Skipping initial snapshot for \(projectPath): size=\(fileSize)")
+            return
+        }
+
+        logger.info("Parsing project for initial snapshot: \(projectPath) (\(fileSize) bytes)")
+
+        Task.detached(priority: .utility) {
+            let snapshot = Self.reparseAndSnapshot(path: projectPath, format: format, fileSize: fileSize)
+            await MainActor.run { [weak self] in
+                guard let self,
+                      let index = self.activeSessions.firstIndex(where: { $0.projectPath == projectPath })
+                else {
+                    self?.logger.warning("Session gone before snapshot completed for \(projectPath)")
+                    return
+                }
+                if let snapshot {
+                    self.activeSessions[index].snapshots.append(snapshot)
+                    self.logger.info("Initial snapshot for \(self.activeSessions[index].projectName): \(snapshot.pluginCount ?? 0) plugins, \(snapshot.trackCount ?? 0) tracks, \(snapshot.tempo ?? 0) BPM")
+                    // Notify menu bar to rebuild with the new snapshot data
+                    NotificationCenter.default.post(name: .sessionSnapshotCaptured, object: nil)
+                } else {
+                    self.logger.warning("Parse returned nil for \(projectPath)")
+                }
+            }
+        }
+    }
+
     /// Re-parse a project file and create a snapshot of its current state.
     /// Runs off the main actor — pure I/O + parsing.
     private nonisolated static func reparseAndSnapshot(path: String, format: SessionFormat, fileSize: Int64) -> SessionSnapshot? {
         switch format {
         case .ableton:
             guard let project = AbletonParser.parse(path: path) else { return nil }
+            let nonMasterTracks = project.tracks.filter { $0.type != .master }
+            let audioTracks = nonMasterTracks.filter { $0.type == .audio }.count
+            let midiTracks = nonMasterTracks.filter { $0.type == .midi || $0.type == .beatBassline }.count
+            let returnTracks = nonMasterTracks.filter { $0.type == .returnTrack }.count
+            let totalClips = nonMasterTracks.reduce(0) { $0 + $1.clips.count }
+
+            var keySignature: String? = nil
+            if let root = project.keyRoot {
+                keySignature = project.keyScale != nil ? "\(root) \(project.keyScale!)" : root
+            }
+
+            // Build per-track plugin info
+            var trackPlugins: [TrackPluginInfo] = []
+            for track in project.tracks {
+                let typeLabel: String
+                switch track.type {
+                case .audio: typeLabel = "audio"
+                case .midi, .beatBassline: typeLabel = "midi"
+                case .returnTrack: typeLabel = "return"
+                case .master: typeLabel = "master"
+                }
+                for plugin in track.plugins {
+                    trackPlugins.append(TrackPluginInfo(
+                        pluginName: plugin,
+                        trackName: track.name,
+                        trackType: typeLabel
+                    ))
+                }
+            }
+
             return SessionSnapshot(
                 fileSize: fileSize,
                 pluginCount: project.usedPlugins.count,
-                trackCount: project.tracks.count,
-                tempo: project.tempo
+                trackCount: nonMasterTracks.count,
+                tempo: project.tempo,
+                keySignature: keySignature,
+                timeSignature: project.timeSignature,
+                audioTrackCount: audioTracks,
+                midiTrackCount: midiTracks,
+                returnTrackCount: returnTracks,
+                clipCount: totalClips,
+                sampleCount: project.samplePaths.count,
+                pluginNames: project.usedPlugins,
+                trackPlugins: trackPlugins,
+                abletonVersion: project.version
             )
 
         case .logic:
@@ -733,6 +936,49 @@ class SessionMonitorService: ObservableObject {
             runningDAWs[i].stats = Self.getProcessStats(pid: runningDAWs[i].pid)
         }
 
+        // Periodically re-check Ableton Log.txt for newly opened projects
+        if Date().timeIntervalSince(lastLogPollDate) >= Self.logPollIntervalSeconds {
+            lastLogPollDate = Date()
+            for daw in runningDAWs where daw.format == .ableton {
+                if let logPath = findAbletonLogPath() {
+                    let openSets = parseAbletonLogForOpenSets(logPath: logPath)
+                    // Close sessions for this DAW that are no longer the active project.
+                    // Ableton only has one project open at a time, so the most recent
+                    // "Loading document" entry is the current one — close all others.
+                    let currentProject = openSets.first // most recent from log (reversed parse)
+                    let staleSessions = activeSessions.indices.filter { i in
+                        activeSessions[i].dawPID == daw.pid &&
+                        activeSessions[i].format == .ableton &&
+                        activeSessions[i].projectPath != currentProject
+                    }
+                    for i in staleSessions.reversed() {
+                        var session = activeSessions.remove(at: i)
+                        session.closedAt = Date()
+                        logger.info("Session closed (project switched): \(session.projectName)")
+                        syncSessionToAPI(session)
+                        recentSessions.insert(session, at: 0)
+                    }
+
+                    // Add the current project if it's not already tracked
+                    if let path = currentProject,
+                       !activeSessions.contains(where: { $0.projectPath == path }),
+                       FileManager.default.fileExists(atPath: path) {
+                        let name = Self.projectName(from: path)
+                        let session = LiveSession(
+                            projectPath: path,
+                            projectName: name,
+                            format: daw.format,
+                            dawPID: daw.pid
+                        )
+                        activeSessions.append(session)
+                        logger.info("Session opened (from log poll): \(name)")
+                        captureInitialSnapshot(projectPath: path, format: daw.format)
+                        startWatchingProjectFile(path: path, daw: daw)
+                    }
+                }
+            }
+        }
+
         // Poll watched files for changes (catches atomic writes that replace the fd)
         for session in activeSessions {
             let path = session.projectPath
@@ -819,12 +1065,17 @@ class SessionMonitorService: ObservableObject {
     private nonisolated static func getProcessStats(pid: Int32) -> DAWProcessStats {
         let cpu = cpuUsage(for: pid)
         let memory = memoryUsageMB(for: pid)
-        let (device, sampleRate) = defaultAudioOutputDevice()
+
+        // Use cached audio device info to avoid CoreAudio HAL warnings on every poll
+        let device = AudioDeviceCache.shared.get(maxAge: audioDeviceCacheSeconds) {
+            defaultAudioOutputDevice()
+        }
+
         return DAWProcessStats(
             cpuPercent: cpu,
             memoryMB: memory,
-            audioDevice: device,
-            sampleRate: sampleRate
+            audioDevice: device.name,
+            sampleRate: device.sampleRate
         )
     }
 
@@ -910,6 +1161,7 @@ extension Notification.Name {
     static let sessionOpened = Notification.Name("AudioEnv.sessionOpened")
     static let sessionClosed = Notification.Name("AudioEnv.sessionClosed")
     static let sessionAutoBackupRequested = Notification.Name("AudioEnv.sessionAutoBackupRequested")
+    static let sessionSnapshotCaptured = Notification.Name("AudioEnv.sessionSnapshotCaptured")
 }
 
 // MARK: - TimeInterval Formatting

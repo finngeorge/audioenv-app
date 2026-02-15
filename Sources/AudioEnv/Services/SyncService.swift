@@ -11,11 +11,12 @@ class SyncService: ObservableObject {
     @Published var lastSyncDate: Date?
     @Published var lastSyncError: String?
 
-    #if DEBUG
-    private let baseURL = "http://localhost:8001"
-    #else
-    private let baseURL = "https://api.audioenv.com"
-    #endif
+    private let baseURL: String = {
+        if let override = UserDefaults.standard.string(forKey: "apiBaseURL"), !override.isEmpty {
+            return override
+        }
+        return "https://api.audioenv.com"
+    }()
 
     // MARK: - Device identification
 

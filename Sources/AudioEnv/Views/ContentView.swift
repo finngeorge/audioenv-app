@@ -202,6 +202,17 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .navigateToSummary)) { _ in
             section = .summary
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToProject)) { notification in
+            guard let projectPath = notification.userInfo?["projectPath"] as? String else { return }
+            section = .projects
+            // Find the matching project group and select it
+            let projects = SessionProject.groupSessions(scanner.sessions)
+            if let match = projects.first(where: { project in
+                project.sessions.contains { $0.path == projectPath }
+            }) {
+                selectedProject = match
+            }
+        }
     }
 
     // ── Detail placeholder ──────────────────────────────────────

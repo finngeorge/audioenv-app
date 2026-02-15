@@ -14,12 +14,17 @@ class AuthenticationService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    #if DEBUG
-    private let baseURL = "http://localhost:8001"
-    #else
-    private let baseURL = "https://api.audioenv.com"
-    #endif
+    private let baseURL: String = {
+        if let override = UserDefaults.standard.string(forKey: "apiBaseURL"), !override.isEmpty {
+            return override
+        }
+        return "https://api.audioenv.com"
+    }()
     private let keychainService = "com.audioenv.app"
+
+    /// In-memory cache for auth keychain items so we only prompt once per launch.
+    private var keychainCache: [String: String] = [:]
+    private var keychainCacheLoaded = false
 
     /// Tracks when the current access token was obtained, for proactive refresh.
     private var tokenObtainedAt: Date?
@@ -347,50 +352,72 @@ class AuthenticationService: ObservableObject {
         deleteKeychainItem(account: "refreshToken")
     }
 
-    private func saveKeychainItem(account: String, value: String) {
-        guard let data = value.data(using: .utf8) else { return }
+    /// Bulk-load all auth keychain items in a single query (one prompt max).
+    private func ensureKeychainCacheLoaded() {
+        guard !keychainCacheLoaded else { return }
+        keychainCacheLoaded = true
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: data
-        ]
-
-        // Delete existing
-        SecItemDelete(query as CFDictionary)
-
-        // Add new
-        SecItemAdd(query as CFDictionary, nil)
-    }
-
-    private func loadKeychainItem(account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true
+            kSecReturnData as String: true,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
         ]
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
         guard status == errSecSuccess,
-              let data = result as? Data,
-              let value = String(data: data, encoding: .utf8) else {
-            return nil
-        }
+              let items = result as? [[String: Any]] else { return }
 
-        return value
+        for item in items {
+            guard let account = item[kSecAttrAccount as String] as? String,
+                  let data = item[kSecValueData as String] as? Data,
+                  let value = String(data: data, encoding: .utf8) else { continue }
+            keychainCache[account] = value
+        }
+    }
+
+    private func saveKeychainItem(account: String, value: String) {
+        ensureKeychainCacheLoaded()
+        keychainCache[account] = value
+
+        guard let data = value.data(using: .utf8) else { return }
+
+        // Delete existing
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        // Add new with proper accessibility
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
+
+    private func loadKeychainItem(account: String) -> String? {
+        ensureKeychainCacheLoaded()
+        return keychainCache[account]
     }
 
     private func deleteKeychainItem(account: String) {
+        ensureKeychainCacheLoaded()
+        keychainCache.removeValue(forKey: account)
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: account,
         ]
-
         SecItemDelete(query as CFDictionary)
     }
 }

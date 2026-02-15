@@ -11,6 +11,9 @@ struct AbletonProject: Codable {
     let projectSampleFiles: [String] /// audio files found in the project Samples folder
     let bouncedFiles:      [String]  /// audio files found in project bounce folders
     let projectRootPath:   String    /// root folder for the project on disk
+    let timeSignature: String?       /// e.g. "4/4"
+    let keyRoot: String?             /// e.g. "C", "F#"
+    let keyScale: String?            /// e.g. "Major", "Minor"
 }
 
 // MARK: – Track type
@@ -20,6 +23,7 @@ enum AbletonTrackType: String, Codable {
     case midi
     case beatBassline
     case returnTrack
+    case master
 }
 
 // MARK: – Single track
