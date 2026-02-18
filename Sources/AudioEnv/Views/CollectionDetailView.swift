@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Detail view for a selected collection — shows its projects and management controls.
 struct CollectionDetailView: View {
-    let collection: AudioCollection
+    let collectionId: UUID
     @EnvironmentObject var collectionService: CollectionService
     @EnvironmentObject var auth: AuthenticationService
     @EnvironmentObject var scanner: ScannerService
@@ -10,12 +10,30 @@ struct CollectionDetailView: View {
     @State private var showEditSheet = false
     @State private var showAddProjectsSheet = false
     @State private var showDeleteConfirmation = false
+    @State private var projects: [CollectionService.CollectionProject] = []
+    @State private var isLoadingProjects = false
+
+    /// Live collection from service array — updates when fetchCollections refreshes.
+    private var collection: AudioCollection? {
+        collectionService.collections.first(where: { $0.id == collectionId })
+    }
 
     var body: some View {
+        if let collection {
+            content(collection)
+        } else {
+            Text("Collection not found")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func content(_ collection: AudioCollection) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Header
-                header()
+                header(collection)
 
                 Divider()
 
@@ -52,10 +70,86 @@ struct CollectionDetailView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)
+                    } else if isLoadingProjects {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Loading projects...")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
                     } else {
-                        Text("\(collection.projectCount) project\(collection.projectCount == 1 ? "" : "s") in this collection")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        ForEach(projects) { project in
+                            HStack(spacing: 10) {
+                                Image(systemName: formatIcon(project.sessionFormat))
+                                    .font(.title3)
+                                    .foregroundColor(formatColor(project.sessionFormat))
+                                    .frame(width: 24)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(project.displayName)
+                                        .font(.body)
+                                        .fontWeight(.medium)
+                                        .lineLimit(1)
+
+                                    HStack(spacing: 8) {
+                                        if let fmt = project.sessionFormat {
+                                            Text(fmt)
+                                                .font(.caption2)
+                                                .padding(.horizontal, 5)
+                                                .padding(.vertical, 1)
+                                                .background(formatColor(fmt).opacity(0.15))
+                                                .foregroundColor(formatColor(fmt))
+                                                .cornerRadius(3)
+                                        }
+                                        if let tracks = project.trackCount, tracks > 0 {
+                                            Text("\(tracks) tracks")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        if let plugins = project.pluginCount, plugins > 0 {
+                                            Text("\(plugins) plugins")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        if let size = project.fileSizeBytes {
+                                            Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+
+                                Spacer()
+
+                                Button(role: .destructive) {
+                                    Task {
+                                        if let token = auth.authToken,
+                                           let sessionId = UUID(uuidString: project.id) {
+                                            await collectionService.removeProject(
+                                                collectionId: collectionId,
+                                                sessionId: sessionId,
+                                                token: token
+                                            )
+                                            await loadProjects()
+                                        }
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark.circle")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Remove from collection")
+                            }
+                            .padding(.vertical, 4)
+
+                            if project.id != projects.last?.id {
+                                Divider()
+                            }
+                        }
                     }
                 }
                 .padding()
@@ -96,7 +190,13 @@ struct CollectionDetailView: View {
             EditCollectionSheet(collection: collection)
         }
         .sheet(isPresented: $showAddProjectsSheet) {
-            AddProjectsSheet(collectionId: collection.id)
+            AddProjectsSheet(collectionId: collectionId)
+        }
+        .task(id: collectionId) {
+            await loadProjects()
+        }
+        .onChange(of: collection.projectCount) { _, _ in
+            Task { await loadProjects() }
         }
         .confirmationDialog(
             "Delete \"\(collection.name)\"?",
@@ -106,7 +206,7 @@ struct CollectionDetailView: View {
             Button("Delete", role: .destructive) {
                 Task {
                     if let token = auth.authToken {
-                        await collectionService.deleteCollection(id: collection.id, token: token)
+                        await collectionService.deleteCollection(id: collectionId, token: token)
                     }
                 }
             }
@@ -116,7 +216,32 @@ struct CollectionDetailView: View {
         }
     }
 
-    private func header() -> some View {
+    private func loadProjects() async {
+        guard let token = auth.authToken else { return }
+        isLoadingProjects = true
+        projects = await collectionService.fetchCollectionProjects(collectionId: collectionId, token: token)
+        isLoadingProjects = false
+    }
+
+    private func formatIcon(_ format: String?) -> String {
+        switch format?.lowercased() {
+        case "ableton live": return "circle.fill"
+        case "logic pro":    return "circle.fill"
+        case "pro tools":    return "circle.fill"
+        default:             return "doc.fill"
+        }
+    }
+
+    private func formatColor(_ format: String?) -> Color {
+        switch format?.lowercased() {
+        case "ableton live": return .teal
+        case "logic pro":    return .blue
+        case "pro tools":    return .purple
+        default:             return .secondary
+        }
+    }
+
+    private func header(_ collection: AudioCollection) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if let color = collection.color {

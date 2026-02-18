@@ -212,13 +212,13 @@ struct SummaryView: View {
                 onNavigateToPlugins()
             })
             StatCard(title: "Projects", count: cachedProjects.count,
-                     icon: "folder.fill", color: .cyan, action: {
+                     icon: "folder.fill", color: .mint, action: {
                 onNavigateToProjects(nil)
             })
             StatCard(title: "Sessions", count: cachedTotalSessions,
-                     icon: "doc.on.doc", color: .teal, action: {})
+                     icon: "doc.on.doc", color: .orange, action: {})
             StatCard(title: "Ableton Live",   count: cachedFormatCounts[.ableton] ?? 0,
-                     icon: "circle.fill", color: .gray, action: {
+                     icon: "circle.fill", color: .teal, action: {
                 onNavigateToProjects(.ableton)
             })
             StatCard(title: "Logic Pro",      count: cachedFormatCounts[.logic] ?? 0,

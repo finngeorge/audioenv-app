@@ -124,7 +124,7 @@ class BounceService: ObservableObject {
         defer { isLoading = false }
 
         do {
-            var components = URLComponents(string: "\(baseURL)/api/bounces")!
+            var components = URLComponents(string: "\(baseURL)/api/bounces/")!
             var queryItems: [URLQueryItem] = [URLQueryItem(name: "per_page", value: "10000")]
             if let fid = folderId { queryItems.append(.init(name: "folder_id", value: fid.uuidString)) }
             if let fmt = format { queryItems.append(.init(name: "format", value: fmt)) }
@@ -227,9 +227,10 @@ class BounceService: ObservableObject {
     /// Extract duration, sample rate, and bit depth from an audio file.
     private nonisolated static func extractAudioMetadata(path: String) async -> (duration: Double?, sampleRate: Int?, bitDepth: Int?) {
         let url = URL(fileURLWithPath: path)
+        let ext = (path as NSString).pathExtension.lowercased()
 
-        // Try AVAudioFile first (works for WAV, AIFF, FLAC)
-        if let audioFile = try? AVAudioFile(forReading: url) {
+        // AVAudioFile works for WAV, AIFF, FLAC but not MP3 — skip it for MP3 to avoid console error spam
+        if ext != "mp3", let audioFile = try? AVAudioFile(forReading: url) {
             let format = audioFile.processingFormat
             let duration = Double(audioFile.length) / format.sampleRate
             let sampleRate = Int(format.sampleRate)
@@ -237,7 +238,7 @@ class BounceService: ObservableObject {
             return (duration, sampleRate, bitDepth > 0 ? bitDepth : nil)
         }
 
-        // Fallback: AVURLAsset (works for MP3 and others)
+        // AVURLAsset fallback (works for MP3 and others)
         let asset = AVURLAsset(url: url)
         let durationValue = try? await asset.load(.duration)
         let duration = durationValue.map { CMTimeGetSeconds($0) }

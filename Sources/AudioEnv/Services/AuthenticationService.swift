@@ -79,34 +79,82 @@ class AuthenticationService: ObservableObject {
         }
     }
 
+    // MARK: - File-based token storage
+
+    /// Directory for persisted auth tokens (survives ad-hoc signing rebuilds unlike Keychain).
+    private static let tokenStorageURL: URL = {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport.appendingPathComponent("AudioEnv", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    private static let accessTokenFile = tokenStorageURL.appendingPathComponent(".auth_token")
+    private static let refreshTokenFile = tokenStorageURL.appendingPathComponent(".refresh_token")
+
+    private func saveTokenToFile(_ token: String) {
+        try? token.write(to: Self.accessTokenFile, atomically: true, encoding: .utf8)
+    }
+
+    private func loadTokenFromFile() -> String? {
+        try? String(contentsOf: Self.accessTokenFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func saveRefreshTokenToFile(_ token: String) {
+        try? token.write(to: Self.refreshTokenFile, atomically: true, encoding: .utf8)
+    }
+
+    private func loadRefreshTokenFromFile() -> String? {
+        try? String(contentsOf: Self.refreshTokenFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func deleteTokenFiles() {
+        try? FileManager.default.removeItem(at: Self.accessTokenFile)
+        try? FileManager.default.removeItem(at: Self.refreshTokenFile)
+    }
+
     // MARK: - Initialization
 
     init() {
-        // Try to load saved token from Keychain
-        if let savedToken = loadTokenFromKeychain() {
+        // Try file-based storage first (reliable across ad-hoc rebuilds), then Keychain
+        let savedToken = loadTokenFromFile() ?? loadTokenFromKeychain()
+        if let savedToken, !savedToken.isEmpty {
             self.authToken = savedToken
             self.isAuthenticated = true
+
+            // Migrate keychain-only tokens to file storage
+            if loadTokenFromFile() == nil {
+                saveTokenToFile(savedToken)
+            }
+            if let rt = loadRefreshTokenFromKeychain(), loadRefreshTokenFromFile() == nil {
+                saveRefreshTokenToFile(rt)
+            }
+
             Task {
-                // Try to refresh first (token may be expired), fall back to profile fetch
-                if loadRefreshTokenFromKeychain() != nil {
+                let refreshTokenValue = self.loadRefreshTokenFromFile() ?? self.loadRefreshTokenFromKeychain()
+                if refreshTokenValue != nil {
                     do {
                         try await refreshToken()
                     } catch {
                         logger.warning("Token refresh on init failed: \(error)")
-                        // Try fetching profile with existing token
+                        // Try fetching profile with existing access token
                         do {
                             try await fetchUserProfile()
                         } catch {
-                            logger.warning("Profile fetch failed, logging out: \(error)")
-                            logout()
+                            // Don't delete tokens — they may work later (network issue, server down).
+                            // Just mark as unauthenticated so the login gate shows.
+                            logger.warning("Profile fetch failed, marking unauthenticated (tokens preserved): \(error)")
+                            self.isAuthenticated = false
+                            self.currentUser = nil
                         }
                     }
                 } else {
                     do {
                         try await fetchUserProfile()
                     } catch {
-                        logger.warning("Failed to fetch user profile on init: \(error)")
-                        logout()
+                        logger.warning("Failed to fetch user profile on init, marking unauthenticated: \(error)")
+                        self.isAuthenticated = false
+                        self.currentUser = nil
                     }
                 }
             }
@@ -179,8 +227,6 @@ class AuthenticationService: ObservableObject {
     func logout() {
         // Note: We do NOT clear S3 config from keychain on logout
         // This allows users to keep their S3 credentials between sessions
-        // The config will be cleared from memory by the onChange handler in App.swift
-        // Users can explicitly disconnect S3 via the "Disconnect" button in BackupConfigView
 
         isAuthenticated = false
         currentUser = nil
@@ -188,6 +234,7 @@ class AuthenticationService: ObservableObject {
         tokenObtainedAt = nil
         deleteTokenFromKeychain()
         deleteRefreshTokenFromKeychain()
+        deleteTokenFiles()
     }
 
     // MARK: - Token Refresh
@@ -200,7 +247,7 @@ class AuthenticationService: ObservableObject {
         }
 
         // Check if token is near expiry and we have a refresh token
-        if isTokenNearExpiry(), loadRefreshTokenFromKeychain() != nil {
+        if isTokenNearExpiry(), (loadRefreshTokenFromFile() ?? loadRefreshTokenFromKeychain()) != nil {
             do {
                 try await refreshToken()
                 return self.authToken ?? token
@@ -217,7 +264,7 @@ class AuthenticationService: ObservableObject {
     /// On success, updates both tokens in Keychain and memory.
     func refreshToken() async throws {
         guard !isRefreshing else { return }
-        guard let refreshTokenValue = loadRefreshTokenFromKeychain() else {
+        guard let refreshTokenValue = loadRefreshTokenFromFile() ?? loadRefreshTokenFromKeychain() else {
             throw AuthError.serverError("No refresh token available")
         }
 
@@ -244,8 +291,10 @@ class AuthenticationService: ObservableObject {
             self.tokenObtainedAt = Date()
             self.tokenExpiresIn = TimeInterval(authResponse.expiresIn)
             saveTokenToKeychain(authResponse.accessToken)
+            saveTokenToFile(authResponse.accessToken)
             if let newRefreshToken = authResponse.refreshToken {
                 saveRefreshTokenToKeychain(newRefreshToken)
+                saveRefreshTokenToFile(newRefreshToken)
             }
             self.isAuthenticated = true
             logger.info("Token refreshed successfully")
@@ -261,7 +310,7 @@ class AuthenticationService: ObservableObject {
     /// Attempt a reactive refresh after receiving a 401 response.
     /// Returns true if refresh succeeded (caller should retry their request).
     func handleUnauthorized() async -> Bool {
-        guard loadRefreshTokenFromKeychain() != nil else {
+        guard (loadRefreshTokenFromFile() ?? loadRefreshTokenFromKeychain()) != nil else {
             logout()
             return false
         }
@@ -293,8 +342,10 @@ class AuthenticationService: ObservableObject {
         self.tokenObtainedAt = Date()
         self.tokenExpiresIn = TimeInterval(authResponse.expiresIn)
         saveTokenToKeychain(authResponse.accessToken)
+        saveTokenToFile(authResponse.accessToken)
         if let refreshTokenValue = authResponse.refreshToken {
             saveRefreshTokenToKeychain(refreshTokenValue)
+            saveRefreshTokenToFile(refreshTokenValue)
         }
 
         // Fetch user profile

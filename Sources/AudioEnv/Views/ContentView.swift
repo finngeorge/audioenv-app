@@ -39,6 +39,9 @@ struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
+        if !auth.isAuthenticated {
+            LoginGateView()
+        } else {
         VStack(spacing: 0) {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // ── Sidebar ─────────────────────────────────────────
@@ -153,7 +156,7 @@ struct ContentView: View {
                 }
             case .collections:
                 if let collection = selectedCollection {
-                    CollectionDetailView(collection: collection)
+                    CollectionDetailView(collectionId: collection.id)
                 } else {
                     emptyDetail()
                 }
@@ -245,6 +248,7 @@ struct ContentView: View {
 
         PlayerBarView()
         } // end VStack
+        } // end if authenticated
     }
 
     // ── Detail placeholder ──────────────────────────────────────
@@ -503,5 +507,129 @@ struct ContentView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - Login Gate
+
+/// Full-window login view shown when the user is not authenticated.
+struct LoginGateView: View {
+    @EnvironmentObject var auth: AuthenticationService
+
+    @State private var showingRegister = false
+    @State private var email = ""
+    @State private var username = ""
+    @State private var password = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: 28) {
+                // App icon + branding
+                VStack(spacing: 12) {
+                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                        .resizable()
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(16)
+
+                    Text("AudioEnv")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+
+                    Text("Sign in to manage your plugins, projects, and backups")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 320)
+                }
+
+                // Form
+                VStack(spacing: 14) {
+                    if showingRegister {
+                        TextField("Username", text: $username)
+                            .textFieldStyle(.roundedBorder)
+                            .textContentType(.username)
+                    }
+
+                    TextField("Email", text: $email)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.emailAddress)
+
+                    SecureField("Password", text: $password)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(showingRegister ? .newPassword : .password)
+                        .onSubmit {
+                            if isFormValid {
+                                Task { await submitForm() }
+                            }
+                        }
+                }
+                .frame(width: 300)
+
+                // Error
+                if let error = auth.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .frame(maxWidth: 300)
+                }
+
+                // Submit
+                Button {
+                    Task { await submitForm() }
+                } label: {
+                    HStack {
+                        if auth.isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(showingRegister ? "Create Account" : "Sign In")
+                    }
+                    .frame(width: 300)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(auth.isLoading || !isFormValid)
+
+                // Toggle
+                Button {
+                    showingRegister.toggle()
+                    auth.errorMessage = nil
+                } label: {
+                    Text(showingRegister
+                         ? "Already have an account? Sign In"
+                         : "Don't have an account? Sign Up")
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer()
+        }
+        .frame(minWidth: 500, minHeight: 400)
+    }
+
+    private var isFormValid: Bool {
+        if showingRegister {
+            return !email.isEmpty && !username.isEmpty && !password.isEmpty && password.count >= 6
+        }
+        return !email.isEmpty && !password.isEmpty
+    }
+
+    private func submitForm() async {
+        do {
+            if showingRegister {
+                try await auth.register(email: email, username: username, password: password)
+            } else {
+                try await auth.login(email: email, password: password)
+            }
+            email = ""
+            username = ""
+            password = ""
+        } catch {
+            auth.errorMessage = error.localizedDescription
+        }
     }
 }

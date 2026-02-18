@@ -169,7 +169,7 @@ class CollectionService: ObservableObject {
             var lookup: [String: [UUID]] = [:]
             for group in items {
                 let projectName = group["project_name"] as? String ?? ""
-                let format = group["session_format"] as? String ?? ""
+                let format = group["format"] as? String ?? ""
                 let key = "\(projectName)-\(format)"
 
                 if let sessions = group["sessions"] as? [[String: Any]] {
@@ -202,6 +202,55 @@ class CollectionService: ObservableObject {
     }
 
     // MARK: - Collection Projects
+
+    struct CollectionProject: Codable, Identifiable {
+        let id: String
+        let sessionName: String?
+        let sessionFormat: String?
+        let projectName: String?
+        let fileSizeBytes: Int?
+        let modifiedDate: String?
+        let trackCount: Int?
+        let pluginCount: Int?
+        let isBackup: Bool?
+        let addedAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case sessionName = "session_name"
+            case sessionFormat = "session_format"
+            case projectName = "project_name"
+            case fileSizeBytes = "file_size_bytes"
+            case modifiedDate = "modified_date"
+            case trackCount = "track_count"
+            case pluginCount = "plugin_count"
+            case isBackup = "is_backup"
+            case addedAt = "added_at"
+        }
+
+        var displayName: String {
+            projectName ?? sessionName ?? "Unknown"
+        }
+    }
+
+    func fetchCollectionProjects(collectionId: UUID, token: String) async -> [CollectionProject] {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/projects")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return [] }
+
+            let projects = try JSONDecoder().decode([CollectionProject].self, from: data)
+            logger.info("Fetched \(projects.count) projects for collection \(collectionId)")
+            return projects
+        } catch {
+            logger.error("fetchCollectionProjects failed: \(error)")
+            return []
+        }
+    }
 
     func addProjects(collectionId: UUID, sessionIds: [UUID], token: String) async {
         do {

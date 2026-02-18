@@ -134,7 +134,8 @@ struct BounceBrowserView: View {
                                 Button {
                                     audioPlayer.play(bounce: bounce)
                                 } label: {
-                                    Image(systemName: "play.circle")
+                                    Image(systemName: audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying
+                                          ? "pause.circle.fill" : "play.circle")
                                         .font(.title3)
                                         .foregroundColor(.accentColor)
                                 }
@@ -143,6 +144,11 @@ struct BounceBrowserView: View {
                             BounceRow(bounce: bounce)
                         }
                         .tag(bounce)
+                        .onTapGesture(count: 2) {
+                            if bounce.isLocallyAvailable {
+                                audioPlayer.play(bounce: bounce)
+                            }
+                        }
                     }
                 }
                 .listStyle(.inset)

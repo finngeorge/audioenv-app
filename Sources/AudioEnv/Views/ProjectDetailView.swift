@@ -237,7 +237,7 @@ private struct SessionRow: View {
     private var parsedBadge: some View {
         let isParsed = session.project != nil
         let label = isParsed ? "Parsed" : "Unparsed"
-        let color = isParsed ? Color.green : Color.orange
+        let color = isParsed ? Color.green : Color.yellow
         return Text(label)
             .font(.caption2)
             .foregroundColor(color)
