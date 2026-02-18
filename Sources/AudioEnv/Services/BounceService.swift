@@ -210,7 +210,7 @@ class BounceService: ObservableObject {
             }
 
             // Extract audio metadata
-            let (duration, sampleRate, bitDepth) = Self.extractAudioMetadata(path: filePath)
+            let (duration, sampleRate, bitDepth) = await Self.extractAudioMetadata(path: filePath)
 
             results.append(LocalBounceInfo(
                 fileName: fileName,
@@ -228,7 +228,7 @@ class BounceService: ObservableObject {
     }
 
     /// Extract duration, sample rate, and bit depth from an audio file.
-    private nonisolated static func extractAudioMetadata(path: String) -> (duration: Double?, sampleRate: Int?, bitDepth: Int?) {
+    private nonisolated static func extractAudioMetadata(path: String) async -> (duration: Double?, sampleRate: Int?, bitDepth: Int?) {
         let url = URL(fileURLWithPath: path)
 
         // Try AVAudioFile first (works for WAV, AIFF, FLAC)
@@ -242,13 +242,14 @@ class BounceService: ObservableObject {
 
         // Fallback: AVURLAsset (works for MP3 and others)
         let asset = AVURLAsset(url: url)
-        let duration = CMTimeGetSeconds(asset.duration)
-        let validDuration = duration.isFinite && duration > 0 ? duration : nil
+        let durationValue = try? await asset.load(.duration)
+        let duration = durationValue.map { CMTimeGetSeconds($0) }
+        let validDuration = duration != nil && duration!.isFinite && duration! > 0 ? duration : nil
 
         // Try to get format details from audio tracks
-        if let track = asset.tracks(withMediaType: .audio).first {
-            let descriptions = track.formatDescriptions as! [CMAudioFormatDescription]
-            if let desc = descriptions.first {
+        if let track = try? await asset.loadTracks(withMediaType: .audio).first {
+            let descriptions = try? await track.load(.formatDescriptions)
+            if let desc = descriptions?.first {
                 let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee
                 let sr = asbd.map { Int($0.mSampleRate) }
                 let bd = asbd.map { Int($0.mBitsPerChannel) }
