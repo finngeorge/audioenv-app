@@ -12,6 +12,8 @@ struct AudioEnvApp: App {
     @StateObject private var menuBar = MenuBarManager()
     @StateObject private var webSocket = WebSocketService()
     @StateObject private var sessionMonitor = SessionMonitorService()
+    @StateObject private var collectionService = CollectionService()
+    @StateObject private var bounceService = BounceService()
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -29,6 +31,8 @@ struct AudioEnvApp: App {
                 .environmentObject(menuBar)
                 .environmentObject(webSocket)
                 .environmentObject(sessionMonitor)
+                .environmentObject(collectionService)
+                .environmentObject(bounceService)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
                 .onAppear {
                     // Configure menu bar manager with services

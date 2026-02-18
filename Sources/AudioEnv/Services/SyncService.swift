@@ -97,13 +97,23 @@ class SyncService: ObservableObject {
 
     private func syncPlugins(_ plugins: [AudioPlugin], token: String) async throws {
         let payload = plugins.map { plugin -> [String: Any?] in
-            [
+            var dict: [String: Any?] = [
                 "plugin_name": plugin.name,
                 "plugin_format": plugin.format.rawValue,
                 "bundle_id": plugin.bundleID,
                 "version": plugin.version,
                 "manufacturer": plugin.manufacturer,
+                "installation_path": plugin.path,
             ]
+
+            // Add file size if available on disk
+            let fileURL = URL(fileURLWithPath: plugin.path)
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+               let size = attrs[.size] as? Int64 {
+                dict["file_size_bytes"] = size
+            }
+
+            return dict
         }
 
         let url = URL(string: "\(baseURL)/api/plugins/scan")!

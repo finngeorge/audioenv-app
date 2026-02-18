@@ -3,12 +3,14 @@ import SwiftUI
 // MARK: – Top-level navigation category
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case summary  = "Summary"
-    case plugins  = "Plugins"
-    case projects = "Projects"
-    case scan     = "Scan"
-    case backup   = "Backup"
-    case profile  = "Profile"
+    case summary     = "Summary"
+    case plugins     = "Plugins"
+    case projects    = "Projects"
+    case collections = "Collections"
+    case bounces     = "Bounces"
+    case scan        = "Scan"
+    case backup      = "Backup"
+    case profile     = "Profile"
 
     var id: String { rawValue }
 }
@@ -27,7 +29,9 @@ struct ContentView: View {
     @State private var section:         AppSection?    = .summary
     @State private var selectedProject: SessionProject? = nil
     @State private var selectedPlugin:  AudioPlugin?   = nil
-    @State private var selectedBackup:  BackupListItem? = nil
+    @State private var selectedBackup:     BackupListItem? = nil
+    @State private var selectedCollection: Collection?     = nil
+    @State private var selectedBounce:     Bounce?         = nil
     @State private var projectFormatFilter: SessionFormat? = nil
     @State private var showPaths                      = false
     @State private var showHowToScan                  = false
@@ -50,6 +54,12 @@ struct ContentView: View {
                     Label("Projects", systemImage: "folder.fill")
                         .badge(SessionProject.groupSessions(scanner.sessions).count)
                         .tag(AppSection.projects)
+
+                    Label("Collections", systemImage: "rectangle.stack")
+                        .tag(AppSection.collections)
+
+                    Label("Bounces", systemImage: "waveform")
+                        .tag(AppSection.bounces)
                 }
 
                 Section("Settings") {
@@ -94,6 +104,10 @@ struct ContentView: View {
                     PluginBrowserView(selectedPlugin: $selectedPlugin)
                 case .projects:
                     SessionBrowserView(selectedProject: $selectedProject, formatFilter: $projectFormatFilter)
+                case .collections:
+                    CollectionBrowserView(selectedCollection: $selectedCollection)
+                case .bounces:
+                    BounceBrowserView(selectedBounce: $selectedBounce)
                 case .scan:
                     ScanView()
                 case .backup:
@@ -115,6 +129,8 @@ struct ContentView: View {
                 if selectedProject != nil { selectedProject = nil }
                 if selectedPlugin != nil { selectedPlugin = nil }
                 if selectedBackup != nil { selectedBackup = nil }
+                if selectedCollection != nil { selectedCollection = nil }
+                if selectedBounce != nil { selectedBounce = nil }
 
                 columnVisibility = .all
             }
@@ -131,6 +147,18 @@ struct ContentView: View {
             case .plugins:
                 if let plugin = selectedPlugin {
                     PluginDetailView(plugin: plugin)
+                } else {
+                    emptyDetail()
+                }
+            case .collections:
+                if let collection = selectedCollection {
+                    CollectionDetailView(collection: collection)
+                } else {
+                    emptyDetail()
+                }
+            case .bounces:
+                if let bounce = selectedBounce {
+                    BounceDetailPanel(bounce: bounce)
                 } else {
                     emptyDetail()
                 }
@@ -245,6 +273,38 @@ struct ContentView: View {
                         .font(.title2)
                         .foregroundColor(.secondary)
                     Text("Choose a project from the list to view its sessions.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            case .collections:
+                VStack(spacing: 14) {
+                    Image(systemName: "rectangle.stack")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("Select a Collection")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    Text("Choose a collection to view its projects and details.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            case .bounces:
+                VStack(spacing: 14) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("Select a Bounce")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    Text("Choose a bounce to view its audio details and linked projects.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)

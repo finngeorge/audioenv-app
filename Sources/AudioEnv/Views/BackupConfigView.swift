@@ -22,76 +22,49 @@ struct BackupConfigView: View {
     @State private var backupName = ""
     @State private var showScopeSelector = false
     @State private var scopeStats: BackupScopeStats? = nil
+    @State private var useCustomS3 = false
+    @State private var customS3Expanded = false
+
+    private var isPro: Bool {
+        auth.currentUser?.subscriptionTier == "pro"
+    }
+
+    private var storageQuotaBytes: Int { 100 * 1024 * 1024 * 1024 } // 100 GB
+
+    private var storageUsedBytes: Int {
+        auth.currentUser?.storageUsedBytes ?? 0
+    }
+
+    private var formattedStorageUsed: String {
+        ByteCountFormatter.string(fromByteCount: Int64(storageUsedBytes), countStyle: .file)
+    }
+
+    private var formattedStorageQuota: String {
+        ByteCountFormatter.string(fromByteCount: Int64(storageQuotaBytes), countStyle: .file)
+    }
+
+    private var storageProgress: Double {
+        guard storageQuotaBytes > 0 else { return 0 }
+        return min(Double(storageUsedBytes) / Double(storageQuotaBytes), 1.0)
+    }
+
+    /// Whether backup should use the platform cloud (Pro without custom S3 override)
+    private var usingPlatformCloud: Bool {
+        isPro && !useCustomS3
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // S3 Configuration Section
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("S3 Configuration", systemImage: "externaldrive.badge.icloud")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-
-                    if backup.destination == nil {
-                        VStack(spacing: 12) {
-                            Image(systemName: "externaldrive.badge.icloud")
-                                .font(.system(size: 40))
-                                .foregroundStyle(.secondary)
-
-                            Text("No S3 Connection")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-
-                            Text("Connect to Amazon S3 to backup your plugins and projects")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-
-                            Button("Configure S3 Backup") {
-                                showS3Config = true
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                    } else {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                                .font(.title3)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(backup.destination?.displayName ?? "")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                Text("Storage: \(backup.formattedTotalStorage)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button("Disconnect") {
-                                if let userId = auth.currentUser?.id {
-                                    KeychainHelper.shared.clearS3Config(forUser: userId)
-                                }
-                                backup.configure(destination: nil)
-                                bucketName = ""
-                                accessKeyId = ""
-                                secretKey = ""
-                                region = "us-west-2"
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                    }
+                // Storage Configuration Section — tier-aware
+                if isPro {
+                    proStorageSection()
+                } else {
+                    freeStorageSection()
                 }
-                .padding()
-                .background(Color.secondary.opacity(0.05))
-                .cornerRadius(12)
 
                 // Create New Backup Section
-                if backup.destination != nil {
+                if usingPlatformCloud || backup.destination != nil {
                     VStack(alignment: .leading, spacing: 16) {
                         Label("Create New Backup", systemImage: "plus.circle.fill")
                             .font(.headline)
@@ -370,6 +343,209 @@ struct BackupConfigView: View {
             } else {
                 scopeStats = nil
                 backupName = ""
+            }
+        }
+    }
+
+    // MARK: - Pro Tier Storage Section
+
+    private func proStorageSection() -> some View {
+        VStack(spacing: 16) {
+            // AudioEnv Cloud card
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "cloud.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("AudioEnv Cloud")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        Text("Included with Pro")
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.15))
+                            .foregroundStyle(.blue)
+                            .cornerRadius(4)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                        Text("Connected")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // Storage bar
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: storageProgress)
+                        .tint(storageProgress > 0.9 ? .orange : .blue)
+
+                    HStack {
+                        Text("\(formattedStorageUsed) / \(formattedStorageQuota) used")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(Int(storageProgress * 100))%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding()
+            .background(Color.blue.opacity(0.05))
+            .cornerRadius(12)
+
+            // Collapsible custom S3 override
+            VStack(alignment: .leading, spacing: 8) {
+                DisclosureGroup("Use Custom S3 Instead", isExpanded: $customS3Expanded) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle("Use custom S3 storage", isOn: $useCustomS3)
+                            .font(.subheadline)
+
+                        Text("Override AudioEnv Cloud with your own S3 bucket")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        if useCustomS3 {
+                            s3ConnectionStatus()
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+            .padding()
+            .background(Color.secondary.opacity(0.05))
+            .cornerRadius(12)
+        }
+    }
+
+    // MARK: - Free Tier Storage Section
+
+    private func freeStorageSection() -> some View {
+        VStack(spacing: 16) {
+            // S3 Configuration (prominent for free tier)
+            VStack(alignment: .leading, spacing: 12) {
+                Label("S3 Configuration", systemImage: "externaldrive.badge.icloud")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+
+                s3ConnectionStatus()
+            }
+            .padding()
+            .background(Color.secondary.opacity(0.05))
+            .cornerRadius(12)
+
+            // Upgrade CTA
+            VStack(spacing: 12) {
+                HStack {
+                    Image(systemName: "cloud.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Upgrade to Pro")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        Text("Get 100 GB AudioEnv Cloud storage")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+
+                Text("Back up your plugins and projects without configuring S3. Included with AudioEnv Pro.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    if let url = URL(string: "https://audioenv.com/pricing") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.up.right")
+                        Text("View Pricing")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+            .background(
+                LinearGradient(
+                    colors: [Color.blue.opacity(0.08), Color.purple.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(12)
+        }
+    }
+
+    // MARK: - S3 Connection Status (shared)
+
+    @ViewBuilder
+    private func s3ConnectionStatus() -> some View {
+        if backup.destination == nil {
+            VStack(spacing: 12) {
+                Image(systemName: "externaldrive.badge.icloud")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary)
+
+                Text("No S3 Connection")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Text("Connect to Amazon S3 to backup your plugins and projects")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button("Configure S3 Backup") {
+                    showS3Config = true
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+        } else {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.title3)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(backup.destination?.displayName ?? "")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text("Storage: \(backup.formattedTotalStorage)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button("Disconnect") {
+                    if let userId = auth.currentUser?.id {
+                        KeychainHelper.shared.clearS3Config(forUser: userId)
+                    }
+                    backup.configure(destination: nil)
+                    bucketName = ""
+                    accessKeyId = ""
+                    secretKey = ""
+                    region = "us-west-2"
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
         }
     }
