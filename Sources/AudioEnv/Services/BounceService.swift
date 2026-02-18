@@ -53,8 +53,7 @@ class BounceService: ObservableObject {
             guard let http = response as? HTTPURLResponse else { return }
 
             if http.statusCode == 200 {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
+                let decoder = FlexibleISO8601.makeAPIDecoder()
                 let folder = try decoder.decode(BounceFolder.self, from: data)
                 bounceFolders.insert(folder, at: 0)
                 logger.info("Linked bounce folder: \(path)")
@@ -110,8 +109,7 @@ class BounceService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = FlexibleISO8601.makeAPIDecoder()
             bounceFolders = Self.decodeItems(data: data, decoder: decoder) ?? []
         } catch {
             logger.error("fetchFolders failed: \(error)")
@@ -139,8 +137,7 @@ class BounceService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = FlexibleISO8601.makeAPIDecoder()
             bounces = Self.decodeItems(data: data, decoder: decoder) ?? []
         } catch {
             logger.error("fetchBounces failed: \(error)")
@@ -318,7 +315,7 @@ class BounceService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
 
-            suggestions = Self.decodeItems(data: data, decoder: JSONDecoder()) ?? []
+            suggestions = Self.decodeItems(data: data, decoder: FlexibleISO8601.makeAPIDecoder()) ?? []
         } catch {
             logger.error("fetchSuggestions failed: \(error)")
         }
@@ -464,7 +461,7 @@ class BounceService: ObservableObject {
                 let expires_in: Int
             }
 
-            let downloadInfo = try JSONDecoder().decode(DownloadURLResponse.self, from: data)
+            let downloadInfo = try FlexibleISO8601.makeAPIDecoder().decode(DownloadURLResponse.self, from: data)
             guard let downloadURL = URL(string: downloadInfo.url) else {
                 throw BounceDownloadError.serverError("Invalid download URL")
             }

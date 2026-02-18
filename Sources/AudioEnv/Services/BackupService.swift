@@ -696,9 +696,7 @@ class BackupService: ObservableObject {
         do {
             let data = try await destination.download(key: key)
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-
+            let decoder = FlexibleISO8601.makeAPIDecoder()
             let manifest = try decoder.decode(BackupManifest.self, from: data)
             return manifest
         } catch {

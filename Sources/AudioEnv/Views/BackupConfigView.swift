@@ -29,7 +29,7 @@ struct BackupConfigView: View {
         auth.currentUser?.subscriptionTier == "pro"
     }
 
-    private var storageQuotaBytes: Int { 100 * 1024 * 1024 * 1024 } // 100 GB
+    private var storageQuotaBytes: Int { 250_000_000_000 } // 250 GB
 
     private var storageUsedBytes: Int {
         auth.currentUser?.storageUsedBytes ?? 0
@@ -455,7 +455,7 @@ struct BackupConfigView: View {
                         Text("Upgrade to Pro")
                             .font(.headline)
                             .fontWeight(.semibold)
-                        Text("Get 100 GB AudioEnv Cloud storage")
+                        Text("Get 250 GB AudioEnv Cloud storage")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

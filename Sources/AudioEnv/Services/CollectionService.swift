@@ -49,8 +49,7 @@ class CollectionService: ObservableObject {
                 throw CollectionServiceError.serverError("GET /collections returned \(status)")
             }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = FlexibleISO8601.makeAPIDecoder()
             collections = Self.decodeItems(data: data, decoder: decoder) ?? []
             logger.info("Fetched \(self.collections.count) collections")
         } catch {
@@ -80,8 +79,7 @@ class CollectionService: ObservableObject {
                 throw CollectionServiceError.serverError("POST /collections returned \(status)")
             }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = FlexibleISO8601.makeAPIDecoder()
             let collection = try decoder.decode(AudioCollection.self, from: data)
             collections.insert(collection, at: 0)
             logger.info("Created collection: \(collection.name)")
@@ -110,8 +108,7 @@ class CollectionService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = FlexibleISO8601.makeAPIDecoder()
             let updated = try decoder.decode(AudioCollection.self, from: data)
             if let idx = collections.firstIndex(where: { $0.id == id }) {
                 collections[idx] = updated
@@ -219,7 +216,7 @@ class CollectionService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
 
-            return try JSONDecoder().decode(SessionTagMetadata.self, from: data)
+            return try FlexibleISO8601.makeAPIDecoder().decode(SessionTagMetadata.self, from: data)
         } catch {
             logger.error("fetchSessionMetadata failed: \(error)")
             return nil
@@ -239,8 +236,7 @@ class CollectionService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = FlexibleISO8601.makeAPIDecoder()
             customProgressOptions = Self.decodeItems(data: data, decoder: decoder) ?? []
         } catch {
             logger.error("fetchProgressOptions failed: \(error)")
@@ -265,7 +261,7 @@ class CollectionService: ObservableObject {
 
             let (data, response) = try await URLSession.shared.data(for: request)
             if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                knownCollaborators = Self.decodeItems(data: data, decoder: JSONDecoder()) ?? []
+                knownCollaborators = Self.decodeItems(data: data, decoder: FlexibleISO8601.makeAPIDecoder()) ?? []
             }
         } catch {
             logger.error("fetchCollaborators failed: \(error)")
@@ -281,7 +277,7 @@ class CollectionService: ObservableObject {
 
             let (data, response) = try await URLSession.shared.data(for: request)
             if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                knownClients = Self.decodeItems(data: data, decoder: JSONDecoder()) ?? []
+                knownClients = Self.decodeItems(data: data, decoder: FlexibleISO8601.makeAPIDecoder()) ?? []
             }
         } catch {
             logger.error("fetchClients failed: \(error)")

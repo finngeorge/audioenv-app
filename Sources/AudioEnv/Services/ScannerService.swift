@@ -243,7 +243,7 @@ class ScannerService: ObservableObject {
                 // Reuse cached parse data for unchanged files (same path + size + modDate)
                 if let cached = cachedSessionsByPath[session.path],
                    cached.fileSize == session.fileSize,
-                   cached.modifiedDate == session.modifiedDate {
+                   abs(cached.modifiedDate.timeIntervalSince(session.modifiedDate)) < 1.0 {
                     var reused = session
                     reused.project = cached.project
                     reused.knownPluginMatches = cached.knownPluginMatches
