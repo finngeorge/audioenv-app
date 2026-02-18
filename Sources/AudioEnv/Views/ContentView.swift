@@ -30,7 +30,7 @@ struct ContentView: View {
     @State private var selectedProject: SessionProject? = nil
     @State private var selectedPlugin:  AudioPlugin?   = nil
     @State private var selectedBackup:     BackupListItem? = nil
-    @State private var selectedCollection: Collection?     = nil
+    @State private var selectedCollection: AudioCollection?     = nil
     @State private var selectedBounce:     Bounce?         = nil
     @State private var projectFormatFilter: SessionFormat? = nil
     @State private var showPaths                      = false

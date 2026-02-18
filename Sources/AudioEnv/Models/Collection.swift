@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Collection model
 
 /// A user-created collection for organizing projects.
-struct Collection: Identifiable, Hashable, Codable {
+struct AudioCollection: Identifiable, Hashable, Codable {
     let id: UUID
     let userId: UUID
     let name: String
@@ -23,7 +23,7 @@ struct Collection: Identifiable, Hashable, Codable {
     }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
-    static func == (lhs: Collection, rhs: Collection) -> Bool { lhs.id == rhs.id }
+    static func == (lhs: AudioCollection, rhs: AudioCollection) -> Bool { lhs.id == rhs.id }
 }
 
 // MARK: - Collection project membership

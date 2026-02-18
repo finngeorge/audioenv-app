@@ -9,7 +9,7 @@ class CollectionService: ObservableObject {
 
     // MARK: - Published State
 
-    @Published var collections: [Collection] = []
+    @Published var collections: [AudioCollection] = []
     @Published var isLoading = false
     @Published var lastError: String?
 
@@ -61,7 +61,7 @@ class CollectionService: ObservableObject {
         isLoading = false
     }
 
-    func createCollection(name: String, description: String?, color: String?, token: String) async -> Collection? {
+    func createCollection(name: String, description: String?, color: String?, token: String) async -> AudioCollection? {
         do {
             let url = URL(string: "\(baseURL)/api/collections/")!
             var request = URLRequest(url: url)
@@ -82,7 +82,7 @@ class CollectionService: ObservableObject {
 
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            let collection = try decoder.decode(Collection.self, from: data)
+            let collection = try decoder.decode(AudioCollection.self, from: data)
             collections.insert(collection, at: 0)
             logger.info("Created collection: \(collection.name)")
             return collection
@@ -112,7 +112,7 @@ class CollectionService: ObservableObject {
 
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            let updated = try decoder.decode(Collection.self, from: data)
+            let updated = try decoder.decode(AudioCollection.self, from: data)
             if let idx = collections.firstIndex(where: { $0.id == id }) {
                 collections[idx] = updated
             }

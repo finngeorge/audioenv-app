@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Detail view for a selected collection — shows its projects and management controls.
 struct CollectionDetailView: View {
-    let collection: Collection
+    let collection: AudioCollection
     @EnvironmentObject var collectionService: CollectionService
     @EnvironmentObject var auth: AuthenticationService
     @EnvironmentObject var scanner: ScannerService
@@ -148,7 +148,7 @@ struct CollectionDetailView: View {
 // MARK: - Edit Collection Sheet
 
 struct EditCollectionSheet: View {
-    let collection: Collection
+    let collection: AudioCollection
     @EnvironmentObject var collectionService: CollectionService
     @EnvironmentObject var auth: AuthenticationService
     @Environment(\.dismiss) private var dismiss
@@ -162,7 +162,7 @@ struct EditCollectionSheet: View {
         "8B5CF6", "EC4899", "06B6D4", "F97316",
     ]
 
-    init(collection: Collection) {
+    init(collection: AudioCollection) {
         self.collection = collection
         _name = State(initialValue: collection.name)
         _description = State(initialValue: collection.description ?? "")

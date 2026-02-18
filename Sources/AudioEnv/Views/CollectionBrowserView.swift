@@ -5,12 +5,12 @@ struct CollectionBrowserView: View {
     @EnvironmentObject var collectionService: CollectionService
     @EnvironmentObject var auth: AuthenticationService
 
-    @Binding var selectedCollection: Collection?
+    @Binding var selectedCollection: AudioCollection?
 
     @State private var showNewCollectionSheet = false
     @State private var search = ""
 
-    private var filteredCollections: [Collection] {
+    private var filteredCollections: [AudioCollection] {
         if search.isEmpty { return collectionService.collections }
         return collectionService.collections.filter {
             $0.name.localizedCaseInsensitiveContains(search)
@@ -100,7 +100,7 @@ struct CollectionBrowserView: View {
 // MARK: - Collection Row
 
 private struct CollectionRow: View {
-    let collection: Collection
+    let collection: AudioCollection
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
