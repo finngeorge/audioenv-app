@@ -137,6 +137,70 @@ class CollectionService: ObservableObject {
         }
     }
 
+    // MARK: - Resolve Local Projects to Backend IDs
+
+    /// Fetch synced session project groups from the API and match by project name + format
+    /// to resolve local SessionProject selections to backend scanned_session UUIDs.
+    func resolveSessionIds(for localProjects: [SessionProject], token: String) async -> [UUID] {
+        do {
+            var components = URLComponents(string: "\(baseURL)/api/sessions/projects")!
+            components.queryItems = [URLQueryItem(name: "per_page", value: "10000")]
+
+            var request = URLRequest(url: components.url!)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return [] }
+
+            // Parse the API response to extract session IDs per project group
+            let json = try JSONSerialization.jsonObject(with: data)
+
+            // Handle paginated or bare array response
+            let items: [[String: Any]]
+            if let paginated = json as? [String: Any], let arr = paginated["items"] as? [[String: Any]] {
+                items = arr
+            } else if let arr = json as? [[String: Any]] {
+                items = arr
+            } else {
+                return []
+            }
+
+            // Build lookup: (project_name, format) -> [session UUIDs]
+            var lookup: [String: [UUID]] = [:]
+            for group in items {
+                let projectName = group["project_name"] as? String ?? ""
+                let format = group["session_format"] as? String ?? ""
+                let key = "\(projectName)-\(format)"
+
+                if let sessions = group["sessions"] as? [[String: Any]] {
+                    let ids = sessions.compactMap { s -> UUID? in
+                        guard let idStr = s["id"] as? String else { return nil }
+                        return UUID(uuidString: idStr)
+                    }
+                    lookup[key] = ids
+                }
+            }
+
+            // Match local projects to backend IDs
+            var result: [UUID] = []
+            for project in localProjects {
+                let key = "\(project.name)-\(project.format.rawValue)"
+                if let ids = lookup[key] {
+                    // Add the first (most recent) session ID for each project
+                    if let first = ids.first {
+                        result.append(first)
+                    }
+                }
+            }
+
+            logger.info("Resolved \(result.count) backend session IDs from \(localProjects.count) local projects")
+            return result
+        } catch {
+            logger.error("resolveSessionIds failed: \(error)")
+            return []
+        }
+    }
+
     // MARK: - Collection Projects
 
     func addProjects(collectionId: UUID, sessionIds: [UUID], token: String) async {

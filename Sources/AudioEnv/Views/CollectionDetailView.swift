@@ -311,11 +311,18 @@ struct AddProjectsSheet: View {
                 Button("Add to Collection") {
                     Task {
                         if let token = auth.authToken {
-                            // Note: the API uses scanned_session_id which maps to the session UUID
-                            // For now we pass the project group IDs; the actual mapping depends
-                            // on synced session IDs from the backend.
-                            // This is a placeholder — the session IDs need to be the backend UUIDs.
-                            await collectionService.fetchCollections(token: token)
+                            // Resolve local project group IDs to backend session UUIDs
+                            let selectedProjects = projects.filter { selectedSessionIds.contains($0.id) }
+                            let backendIds = await collectionService.resolveSessionIds(
+                                for: selectedProjects, token: token
+                            )
+                            if !backendIds.isEmpty {
+                                await collectionService.addProjects(
+                                    collectionId: collectionId,
+                                    sessionIds: backendIds,
+                                    token: token
+                                )
+                            }
                         }
                         dismiss()
                     }
