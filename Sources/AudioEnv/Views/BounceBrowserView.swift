@@ -6,6 +6,7 @@ import AppKit
 struct BounceBrowserView: View {
     @EnvironmentObject var bounceService: BounceService
     @EnvironmentObject var auth: AuthenticationService
+    @EnvironmentObject var audioPlayer: AudioPlayerService
 
     @Binding var selectedBounce: Bounce?
 
@@ -54,6 +55,18 @@ struct BounceBrowserView: View {
                 .frame(width: 220)
 
                 Spacer()
+
+                // Play all button
+                if !filteredBounces.isEmpty {
+                    Button {
+                        audioPlayer.playAll(bounces: filteredBounces)
+                    } label: {
+                        Label("Play All", systemImage: "play.fill")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
 
                 // Link folder button
                 Button {
@@ -116,8 +129,20 @@ struct BounceBrowserView: View {
             } else {
                 List(selection: $selectedBounce) {
                     ForEach(filteredBounces) { bounce in
-                        BounceRow(bounce: bounce)
-                            .tag(bounce)
+                        HStack {
+                            if bounce.isLocallyAvailable {
+                                Button {
+                                    audioPlayer.play(bounce: bounce)
+                                } label: {
+                                    Image(systemName: "play.circle")
+                                        .font(.title3)
+                                        .foregroundColor(.accentColor)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            BounceRow(bounce: bounce)
+                        }
+                        .tag(bounce)
                     }
                 }
                 .listStyle(.inset)

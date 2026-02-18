@@ -39,6 +39,7 @@ struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
+        VStack(spacing: 0) {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // ── Sidebar ─────────────────────────────────────────
             List(selection: $section) {
@@ -241,6 +242,9 @@ struct ContentView: View {
                 selectedProject = match
             }
         }
+
+        PlayerBarView()
+        } // end VStack
     }
 
     // ── Detail placeholder ──────────────────────────────────────

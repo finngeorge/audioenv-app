@@ -52,7 +52,7 @@ class BounceService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else { return }
 
-            if http.statusCode == 200 {
+            if http.statusCode == 200 || http.statusCode == 201 {
                 let decoder = FlexibleISO8601.makeAPIDecoder()
                 let folder = try decoder.decode(BounceFolder.self, from: data)
                 bounceFolders.insert(folder, at: 0)
@@ -124,7 +124,7 @@ class BounceService: ObservableObject {
         defer { isLoading = false }
 
         do {
-            var components = URLComponents(string: "\(baseURL)/api/bounces/")!
+            var components = URLComponents(string: "\(baseURL)/api/bounces")!
             var queryItems: [URLQueryItem] = [URLQueryItem(name: "per_page", value: "10000")]
             if let fid = folderId { queryItems.append(.init(name: "folder_id", value: fid.uuidString)) }
             if let fmt = format { queryItems.append(.init(name: "format", value: fmt)) }

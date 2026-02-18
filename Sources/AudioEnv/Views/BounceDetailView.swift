@@ -5,6 +5,7 @@ struct BounceDetailPanel: View {
     let bounce: Bounce
     @EnvironmentObject var bounceService: BounceService
     @EnvironmentObject var auth: AuthenticationService
+    @EnvironmentObject var audioPlayer: AudioPlayerService
 
     var body: some View {
         ScrollView {
@@ -41,6 +42,21 @@ struct BounceDetailPanel: View {
                     }
                 }
                 .padding(.bottom, 8)
+
+                // Play button for local files
+                if bounce.isLocallyAvailable {
+                    Button {
+                        audioPlayer.play(bounce: bounce)
+                    } label: {
+                        HStack {
+                            Image(systemName: "play.circle.fill")
+                            Text(audioPlayer.currentBounce == bounce && audioPlayer.isPlaying ? "Now Playing" : "Play")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .disabled(audioPlayer.currentBounce == bounce && audioPlayer.isPlaying)
+                }
 
                 // Cloud bounce banner
                 if !bounce.isLocallyAvailable {

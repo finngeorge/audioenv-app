@@ -82,7 +82,8 @@ final class AudioSessionCodableTests: XCTestCase {
         let project = AbletonProject(
             version: "11.3.2", tempo: 128.0, tracks: [],
             usedPlugins: ["Serum", "Pro-Q 3"], samplePaths: [],
-            projectSampleFiles: [], bouncedFiles: [], projectRootPath: "/tmp"
+            projectSampleFiles: [], bouncedFiles: [], projectRootPath: "/tmp",
+            timeSignature: nil, keyRoot: nil, keyScale: nil
         )
         let session = AudioSession(
             name: "Test", path: "/tmp/test.als", format: .ableton,
@@ -188,13 +189,14 @@ final class ScanCacheCodableTests: XCTestCase {
             lastScanDate: Date(timeIntervalSince1970: 1700000000),
             skippedLargeSessions: 2,
             scanRoots: ["/Users/test/Music"],
-            rootModTimes: ["/Users/test/Music": Date(timeIntervalSince1970: 1700000000)]
+            rootModTimes: ["/Users/test/Music": Date(timeIntervalSince1970: 1700000000)],
+            pluginDirModTimes: [:]
         )
 
         let data = try encoder.encode(cache)
         let decoded = try decoder.decode(ScanCache.self, from: data)
 
-        XCTAssertEqual(decoded.version, 3)
+        XCTAssertEqual(decoded.version, 5)
         XCTAssertEqual(decoded.plugins.count, 1)
         XCTAssertEqual(decoded.sessions.count, 1)
         XCTAssertEqual(decoded.skippedLargeSessions, 2)
@@ -208,6 +210,7 @@ final class ScanCacheCodableTests: XCTestCase {
         let cache = ScanCache(
             version: 999, createdAt: Date(), lastScanDate: nil,
             skippedLargeSessions: 0, scanRoots: [], rootModTimes: [:],
+            pluginDirModTimes: [:],
             plugins: [], sessions: []
         )
 
