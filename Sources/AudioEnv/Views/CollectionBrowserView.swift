@@ -123,6 +123,17 @@ private struct CollectionRow: View {
                     .fontWeight(.medium)
                     .lineLimit(1)
 
+                if collection.isPack {
+                    Text("Pack")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.12))
+                        .cornerRadius(4)
+                }
+
                 Spacer()
 
                 // Content type badges
@@ -149,19 +160,6 @@ private struct CollectionRow: View {
             }
 
             HStack(spacing: 12) {
-                // Content type labels
-                HStack(spacing: 4) {
-                    ForEach(collection.contentTypes, id: \.self) { ct in
-                        Text(ct.capitalized)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.08))
-                            .cornerRadius(3)
-                    }
-                }
-
                 if let desc = collection.description, !desc.isEmpty {
                     Text(desc)
                         .font(.caption)

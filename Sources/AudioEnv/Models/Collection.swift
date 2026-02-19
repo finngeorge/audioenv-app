@@ -44,6 +44,9 @@ struct AudioCollection: Identifiable, Hashable, Codable {
     var hasBounces: Bool { contentTypes.contains("bounces") }
     var hasPluginDeps: Bool { contentTypes.contains("plugin_deps") }
 
+    /// Bounces-only collections are displayed as "Packs" — shareable audio bundles.
+    var isPack: Bool { hasBounces && !hasProjects }
+
     /// Total item count across projects and bounces.
     var totalItemCount: Int { projectCount + bounceCount }
 

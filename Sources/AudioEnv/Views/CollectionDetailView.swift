@@ -439,6 +439,17 @@ struct CollectionDetailView: View {
                 Text(collection.name)
                     .font(.title)
                     .fontWeight(.bold)
+
+                if collection.isPack {
+                    Text("Pack")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.12))
+                        .cornerRadius(5)
+                }
             }
 
             if let desc = collection.description, !desc.isEmpty {
@@ -448,17 +459,6 @@ struct CollectionDetailView: View {
             }
 
             HStack(spacing: 16) {
-                // Content type chips
-                ForEach(collection.contentTypes, id: \.self) { ct in
-                    Text(ct.capitalized)
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.12))
-                        .foregroundColor(.blue)
-                        .cornerRadius(4)
-                }
-
                 if collection.hasProjects {
                     Label("\(collection.projectCount) projects", systemImage: "folder")
                         .font(.caption)
