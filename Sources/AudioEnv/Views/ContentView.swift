@@ -635,7 +635,7 @@ struct LoginGateView: View {
                     } label: {
                         HStack {
                             Image(systemName: "apple.logo")
-                            Text("Sign in with Apple")
+                            Text(showingRegister ? "Sign up with Apple" : "Sign in with Apple")
                         }
                         .frame(width: 300)
                     }
@@ -657,7 +657,7 @@ struct LoginGateView: View {
                             Text("G")
                                 .fontWeight(.bold)
                                 .foregroundColor(.blue)
-                            Text("Sign in with Google")
+                            Text(showingRegister ? "Sign up with Google" : "Sign in with Google")
                         }
                         .frame(width: 300)
                     }
