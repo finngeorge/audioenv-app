@@ -102,7 +102,7 @@ class SyncService: ObservableObject {
                 "plugin_format": plugin.format.rawValue,
                 "bundle_id": plugin.bundleID,
                 "version": plugin.version,
-                "manufacturer": plugin.manufacturer,
+                "manufacturer": ManufacturerResolver.displayManufacturer(plugin: plugin, catalogManufacturer: nil),
                 "installation_path": plugin.path,
             ]
 
