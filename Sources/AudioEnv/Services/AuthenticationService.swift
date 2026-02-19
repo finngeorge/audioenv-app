@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import os.log
+import AuthenticationServices
 
 /// Manages user authentication state and API communication
 @MainActor
@@ -63,6 +64,18 @@ class AuthenticationService: ObservableObject {
         let email: String
         let username: String
         let password: String
+    }
+
+    struct OAuthRequest: Codable {
+        let provider: String
+        let idToken: String
+        let fullName: String?
+
+        enum CodingKeys: String, CodingKey {
+            case provider
+            case idToken = "id_token"
+            case fullName = "full_name"
+        }
     }
 
     struct AuthResponse: Codable {
@@ -222,6 +235,116 @@ class AuthenticationService: ObservableObject {
             let errorText = String(data: data, encoding: .utf8) ?? "Invalid credentials"
             throw AuthError.serverError(errorText)
         }
+    }
+
+    // MARK: - OAuth Methods
+
+    func signInWithOAuth(provider: String, idToken: String, fullName: String? = nil) async throws {
+        isLoading = true
+        errorMessage = nil
+
+        defer { isLoading = false }
+
+        let oauthRequest = OAuthRequest(provider: provider, idToken: idToken, fullName: fullName)
+        let url = URL(string: "\(baseURL)/api/auth/oauth")!
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try JSONEncoder().encode(oauthRequest)
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 200 {
+            let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+            await handleSuccessfulAuth(authResponse)
+        } else {
+            let errorText = String(data: data, encoding: .utf8) ?? "OAuth sign in failed"
+            throw AuthError.serverError(errorText)
+        }
+    }
+
+    func signInWithApple() async throws {
+        let coordinator = AppleSignInCoordinator()
+        let (idToken, fullName) = try await coordinator.signIn()
+        try await signInWithOAuth(provider: "apple", idToken: idToken, fullName: fullName)
+    }
+
+    func signInWithGoogle() async throws {
+        isLoading = true
+        errorMessage = nil
+
+        defer { isLoading = false }
+
+        let clientId = "809075910499-o01a42a6k9vo2e6a1sfcnifpei3bqnv9.apps.googleusercontent.com"
+        let callbackScheme = "com.googleusercontent.apps.809075910499-o01a42a6k9vo2e6a1sfcnifpei3bqnv9"
+        let redirectURI = "\(callbackScheme):/oauth/callback"
+
+        var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: clientId),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "scope", value: "openid email profile"),
+        ]
+
+        guard let authURL = components.url else {
+            throw AuthError.invalidResponse
+        }
+
+        let callbackURL: URL = try await withCheckedThrowingContinuation { continuation in
+            let session = ASWebAuthenticationSession(
+                url: authURL,
+                callbackURLScheme: callbackScheme
+            ) { url, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else if let url = url {
+                    continuation.resume(returning: url)
+                } else {
+                    continuation.resume(throwing: AuthError.invalidResponse)
+                }
+            }
+            session.prefersEphemeralWebBrowserSession = false
+            session.presentationContextProvider = ASWebAuthSessionContextProvider.shared
+            session.start()
+        }
+
+        // Extract authorization code from query params
+        guard let queryItems = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?.queryItems,
+              let code = queryItems.first(where: { $0.name == "code" })?.value else {
+            throw AuthError.serverError("No authorization code in callback")
+        }
+
+        // Exchange code for id_token with Google (iOS clients have no secret)
+        var tokenRequest = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
+        tokenRequest.httpMethod = "POST"
+        tokenRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let body = [
+            "code=\(code)",
+            "client_id=\(clientId)",
+            "redirect_uri=\(redirectURI)",
+            "grant_type=authorization_code",
+        ].joined(separator: "&")
+        tokenRequest.httpBody = body.data(using: .utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: tokenRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorText = String(data: data, encoding: .utf8) ?? "Token exchange failed"
+            throw AuthError.serverError(errorText)
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let idToken = json["id_token"] as? String else {
+            throw AuthError.serverError("No id_token in Google token response")
+        }
+
+        try await signInWithOAuth(provider: "google", idToken: idToken)
     }
 
     func logout() {
@@ -470,6 +593,69 @@ class AuthenticationService: ObservableObject {
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(query as CFDictionary)
+    }
+}
+
+// MARK: - Apple Sign In Coordinator
+
+class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+
+    private var continuation: CheckedContinuation<(idToken: String, fullName: String?), Error>?
+
+    @MainActor
+    func signIn() async throws -> (idToken: String, fullName: String?) {
+        let provider = ASAuthorizationAppleIDProvider()
+        let request = provider.createRequest()
+        request.requestedScopes = [.fullName, .email]
+
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            controller.performRequests()
+        }
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        NSApplication.shared.mainWindow ?? ASPresentationAnchor()
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let tokenData = credential.identityToken,
+              let idToken = String(data: tokenData, encoding: .utf8) else {
+            continuation?.resume(throwing: AuthError.invalidResponse)
+            continuation = nil
+            return
+        }
+
+        var fullName: String?
+        if let nameComponents = credential.fullName {
+            let parts = [nameComponents.givenName, nameComponents.familyName].compactMap { $0 }
+            if !parts.isEmpty {
+                fullName = parts.joined(separator: " ")
+            }
+        }
+
+        continuation?.resume(returning: (idToken, fullName))
+        continuation = nil
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        continuation?.resume(throwing: error)
+        continuation = nil
+    }
+}
+
+// MARK: - ASWebAuthenticationSession Context Provider
+
+class ASWebAuthSessionContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let shared = ASWebAuthSessionContextProvider()
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        NSApplication.shared.mainWindow ?? ASPresentationAnchor()
     }
 }
 

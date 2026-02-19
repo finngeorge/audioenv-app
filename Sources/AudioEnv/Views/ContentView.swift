@@ -41,6 +41,7 @@ struct ContentView: View {
     var body: some View {
         if !auth.isAuthenticated {
             LoginGateView()
+                .onAppear { resizeWindow(width: 500, height: 600) }
         } else {
         VStack(spacing: 0) {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -248,7 +249,22 @@ struct ContentView: View {
 
         PlayerBarView()
         } // end VStack
+        .onAppear { resizeWindow(width: 1360, height: 780, minWidth: 1200, minHeight: 620) }
         } // end if authenticated
+    }
+
+    private func resizeWindow(width: CGFloat, height: CGFloat, minWidth: CGFloat? = nil, minHeight: CGFloat? = nil) {
+        guard let window = NSApplication.shared.mainWindow else { return }
+        let newSize = NSSize(width: width, height: height)
+        // Set minSize *before* resizing so the frame isn't clamped
+        window.minSize = NSSize(width: minWidth ?? width, height: minHeight ?? height)
+        let oldFrame = window.frame
+        let newOrigin = NSPoint(
+            x: oldFrame.midX - width / 2,
+            y: oldFrame.midY - height / 2
+        )
+        let newFrame = NSRect(origin: newOrigin, size: newSize)
+        window.setFrame(newFrame, display: true, animate: true)
     }
 
     // ── Detail placeholder ──────────────────────────────────────
@@ -592,6 +608,64 @@ struct LoginGateView: View {
                 .controlSize(.large)
                 .disabled(auth.isLoading || !isFormValid)
 
+                // OAuth divider
+                HStack {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.3))
+                        .frame(height: 1)
+                    Text("or")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.3))
+                        .frame(height: 1)
+                }
+                .frame(width: 300)
+
+                // OAuth buttons
+                VStack(spacing: 10) {
+                    Button {
+                        Task {
+                            do {
+                                try await auth.signInWithApple()
+                            } catch {
+                                auth.errorMessage = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "apple.logo")
+                            Text("Sign in with Apple")
+                        }
+                        .frame(width: 300)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.black)
+                    .controlSize(.large)
+                    .disabled(auth.isLoading)
+
+                    Button {
+                        Task {
+                            do {
+                                try await auth.signInWithGoogle()
+                            } catch {
+                                auth.errorMessage = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text("G")
+                                .fontWeight(.bold)
+                                .foregroundColor(.blue)
+                            Text("Sign in with Google")
+                        }
+                        .frame(width: 300)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .disabled(auth.isLoading)
+                }
+
                 // Toggle
                 Button {
                     showingRegister.toggle()
@@ -608,7 +682,7 @@ struct LoginGateView: View {
 
             Spacer()
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(width: 500, height: 600)
     }
 
     private var isFormValid: Bool {

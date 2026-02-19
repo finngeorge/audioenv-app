@@ -194,6 +194,65 @@ struct LoginRegisterView: View {
                 .disabled(auth.isLoading || !isFormValid)
                 .padding(.horizontal, 40)
 
+                // OAuth divider
+                HStack {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.3))
+                        .frame(height: 1)
+                    Text("or")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.3))
+                        .frame(height: 1)
+                }
+                .padding(.horizontal, 40)
+
+                // OAuth buttons
+                VStack(spacing: 10) {
+                    Button {
+                        Task {
+                            do {
+                                try await auth.signInWithApple()
+                            } catch {
+                                auth.errorMessage = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "apple.logo")
+                            Text("Sign in with Apple")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.black)
+                    .controlSize(.large)
+                    .disabled(auth.isLoading)
+
+                    Button {
+                        Task {
+                            do {
+                                try await auth.signInWithGoogle()
+                            } catch {
+                                auth.errorMessage = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text("G")
+                                .fontWeight(.bold)
+                                .foregroundColor(.blue)
+                            Text("Sign in with Google")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .disabled(auth.isLoading)
+                }
+                .padding(.horizontal, 40)
+
                 // Toggle between login/register
                 Button(action: {
                     showingRegister.toggle()

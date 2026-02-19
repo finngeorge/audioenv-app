@@ -47,6 +47,8 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>audioenv</string>
+				<string>com.audioenv.app</string>
+				<string>com.googleusercontent.apps.809075910499-o01a42a6k9vo2e6a1sfcnifpei3bqnv9</string>
 			</array>
 		</dict>
 	</array>
