@@ -60,7 +60,7 @@ class CollectionService: ObservableObject {
         isLoading = false
     }
 
-    func createCollection(name: String, description: String?, color: String?, token: String) async -> AudioCollection? {
+    func createCollection(name: String, description: String?, color: String?, contentTypes: [String] = ["projects"], token: String) async -> AudioCollection? {
         do {
             let url = URL(string: "\(baseURL)/api/collections/")!
             var request = URLRequest(url: url)
@@ -68,7 +68,7 @@ class CollectionService: ObservableObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-            var payload: [String: Any] = ["name": name]
+            var payload: [String: Any] = ["name": name, "content_types": contentTypes]
             if let desc = description { payload["description"] = desc }
             if let col = color { payload["color"] = col }
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -91,7 +91,7 @@ class CollectionService: ObservableObject {
         }
     }
 
-    func updateCollection(id: UUID, name: String?, description: String?, color: String?, token: String) async {
+    func updateCollection(id: UUID, name: String?, description: String?, color: String?, contentTypes: [String]? = nil, token: String) async {
         do {
             let url = URL(string: "\(baseURL)/api/collections/\(id)")!
             var request = URLRequest(url: url)
@@ -103,6 +103,7 @@ class CollectionService: ObservableObject {
             if let n = name { payload["name"] = n }
             if let d = description { payload["description"] = d }
             if let c = color { payload["color"] = c }
+            if let ct = contentTypes { payload["content_types"] = ct }
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -289,6 +290,94 @@ class CollectionService: ObservableObject {
         } catch {
             lastError = error.localizedDescription
             logger.error("removeProject failed: \(error)")
+        }
+    }
+
+    // MARK: - Collection Bounces
+
+    struct CollectionBounce: Codable, Identifiable {
+        let id: String
+        let fileName: String
+        let filePath: String?
+        let fileSizeBytes: Int?
+        let format: String?
+        let durationSeconds: Double?
+        let sampleRate: Int?
+        let bitDepth: Int?
+        let createdAt: String?
+        let fileModifiedAt: String?
+        let addedAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case fileName = "file_name"
+            case filePath = "file_path"
+            case fileSizeBytes = "file_size_bytes"
+            case format
+            case durationSeconds = "duration_seconds"
+            case sampleRate = "sample_rate"
+            case bitDepth = "bit_depth"
+            case createdAt = "created_at"
+            case fileModifiedAt = "file_modified_at"
+            case addedAt = "added_at"
+        }
+    }
+
+    func fetchCollectionBounces(collectionId: UUID, token: String) async -> [CollectionBounce] {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/bounces")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return [] }
+
+            let bounces = try JSONDecoder().decode([CollectionBounce].self, from: data)
+            logger.info("Fetched \(bounces.count) bounces for collection \(collectionId)")
+            return bounces
+        } catch {
+            logger.error("fetchCollectionBounces failed: \(error)")
+            return []
+        }
+    }
+
+    func addBounces(collectionId: UUID, bounceIds: [UUID], token: String) async {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/bounces")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let payload = bounceIds.map { ["bounce_id": $0.uuidString] }
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+
+            await fetchCollections(token: token)
+            logger.info("Added \(bounceIds.count) bounces to collection \(collectionId)")
+        } catch {
+            lastError = error.localizedDescription
+            logger.error("addBounces failed: \(error)")
+        }
+    }
+
+    func removeBounce(collectionId: UUID, bounceId: UUID, token: String) async {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/bounces/\(bounceId)")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+
+            await fetchCollections(token: token)
+        } catch {
+            lastError = error.localizedDescription
+            logger.error("removeBounce failed: \(error)")
         }
     }
 

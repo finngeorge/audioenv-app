@@ -125,16 +125,43 @@ private struct CollectionRow: View {
 
                 Spacer()
 
-                Text("\(collection.projectCount)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(4)
+                // Content type badges
+                HStack(spacing: 4) {
+                    if collection.hasProjects {
+                        Text("\(collection.projectCount)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.cyan.opacity(0.15))
+                            .cornerRadius(3)
+                    }
+                    if collection.hasBounces {
+                        Text("\(collection.bounceCount)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.orange.opacity(0.15))
+                            .cornerRadius(3)
+                    }
+                }
             }
 
             HStack(spacing: 12) {
+                // Content type labels
+                HStack(spacing: 4) {
+                    ForEach(collection.contentTypes, id: \.self) { ct in
+                        Text(ct.capitalized)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.08))
+                            .cornerRadius(3)
+                    }
+                }
+
                 if let desc = collection.description, !desc.isEmpty {
                     Text(desc)
                         .font(.caption)
@@ -161,6 +188,7 @@ struct NewCollectionSheet: View {
     @State private var name = ""
     @State private var description = ""
     @State private var selectedColor = "3B82F6" // blue
+    @State private var selectedContentTypes: Set<CollectionContentType> = [.projects]
 
     private let colorOptions = [
         "3B82F6", // blue
@@ -182,6 +210,35 @@ struct NewCollectionSheet: View {
             Form {
                 TextField("Name", text: $name)
                 TextField("Description (optional)", text: $description)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Content Types")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    HStack(spacing: 8) {
+                        ForEach(CollectionContentType.allCases) { ct in
+                            Button {
+                                if selectedContentTypes.contains(ct) {
+                                    // Don't allow deselecting the last one
+                                    if selectedContentTypes.count > 1 {
+                                        selectedContentTypes.remove(ct)
+                                    }
+                                } else {
+                                    selectedContentTypes.insert(ct)
+                                }
+                            } label: {
+                                Label(ct.label, systemImage: ct.icon)
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(selectedContentTypes.contains(ct) ? Color.blue : Color.secondary.opacity(0.1))
+                                    .foregroundColor(selectedContentTypes.contains(ct) ? .white : .primary)
+                                    .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Color")
@@ -209,10 +266,12 @@ struct NewCollectionSheet: View {
                 Button("Create") {
                     Task {
                         if let token = auth.authToken {
+                            let types = selectedContentTypes.map(\.rawValue)
                             _ = await collectionService.createCollection(
                                 name: name,
                                 description: description.isEmpty ? nil : description,
                                 color: selectedColor,
+                                contentTypes: types,
                                 token: token
                             )
                         }
@@ -224,7 +283,7 @@ struct NewCollectionSheet: View {
             }
         }
         .padding()
-        .frame(width: 450, height: 360)
+        .frame(width: 500, height: 420)
     }
 }
 
