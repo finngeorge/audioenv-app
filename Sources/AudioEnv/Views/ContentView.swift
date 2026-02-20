@@ -8,6 +8,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case projects    = "Projects"
     case collections = "Collections"
     case bounces     = "Bounces"
+    case commands    = "Commands"
     case scan        = "Scan"
     case backup      = "Backup"
     case profile     = "Profile"
@@ -32,6 +33,7 @@ struct ContentView: View {
     @State private var selectedBackup:     BackupListItem? = nil
     @State private var selectedCollection: AudioCollection?     = nil
     @State private var selectedBounce:     Bounce?         = nil
+    @State private var selectedCommand:  Command?        = nil
     @State private var projectFormatFilter: SessionFormat? = nil
     @State private var showPaths                      = false
     @State private var showHowToScan                  = false
@@ -65,6 +67,9 @@ struct ContentView: View {
 
                     Label("Bounces", systemImage: "waveform")
                         .tag(AppSection.bounces)
+
+                    Label("Commands", systemImage: "terminal")
+                        .tag(AppSection.commands)
                 }
 
                 Section("Settings") {
@@ -113,6 +118,8 @@ struct ContentView: View {
                     CollectionBrowserView(selectedCollection: $selectedCollection)
                 case .bounces:
                     BounceBrowserView(selectedBounce: $selectedBounce)
+                case .commands:
+                    CommandBrowserView(selectedCommand: $selectedCommand)
                 case .scan:
                     ScanView()
                 case .backup:
@@ -136,6 +143,7 @@ struct ContentView: View {
                 if selectedBackup != nil { selectedBackup = nil }
                 if selectedCollection != nil { selectedCollection = nil }
                 if selectedBounce != nil { selectedBounce = nil }
+                if selectedCommand != nil { selectedCommand = nil }
 
                 columnVisibility = .all
             }
@@ -164,6 +172,12 @@ struct ContentView: View {
             case .bounces:
                 if let bounce = selectedBounce {
                     BounceDetailPanel(bounce: bounce)
+                } else {
+                    emptyDetail()
+                }
+            case .commands:
+                if let command = selectedCommand {
+                    CommandDetailView(command: command)
                 } else {
                     emptyDetail()
                 }
@@ -234,6 +248,9 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToSummary)) { _ in
             section = .summary
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToCommands)) { _ in
+            section = .commands
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToProject)) { notification in
             guard let projectPath = notification.userInfo?["projectPath"] as? String else { return }
@@ -329,6 +346,22 @@ struct ContentView: View {
                         .font(.title2)
                         .foregroundColor(.secondary)
                     Text("Choose a bounce to view its audio details and linked projects.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            case .commands:
+                VStack(spacing: 14) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("Select a Command")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    Text("Choose a command or recipe to view its details, or create a new one.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)

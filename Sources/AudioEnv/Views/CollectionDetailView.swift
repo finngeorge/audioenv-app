@@ -9,8 +9,7 @@ struct CollectionDetailView: View {
     @EnvironmentObject var bounceService: BounceService
 
     @State private var showEditSheet = false
-    @State private var showAddProjectsSheet = false
-    @State private var showAddBouncesSheet = false
+    @State private var showCollectionBuilder = false
     @State private var showDeleteConfirmation = false
     @State private var projects: [CollectionService.CollectionProject] = []
     @State private var bounces: [CollectionService.CollectionBounce] = []
@@ -84,11 +83,8 @@ struct CollectionDetailView: View {
         .sheet(isPresented: $showEditSheet) {
             EditCollectionSheet(collection: collection)
         }
-        .sheet(isPresented: $showAddProjectsSheet) {
-            AddProjectsSheet(collectionId: collectionId)
-        }
-        .sheet(isPresented: $showAddBouncesSheet) {
-            AddBouncesSheet(collectionId: collectionId)
+        .sheet(isPresented: $showCollectionBuilder) {
+            CollectionBuilderPopup(collectionId: collectionId)
         }
         .task(id: collectionId) {
             await loadContent()
@@ -128,9 +124,9 @@ struct CollectionDetailView: View {
                     .foregroundColor(.secondary)
                 Spacer()
                 Button {
-                    showAddProjectsSheet = true
+                    showCollectionBuilder = true
                 } label: {
-                    Label("Add Projects", systemImage: "plus")
+                    Label("Add Content", systemImage: "plus")
                         .font(.caption)
                 }
                 .buttonStyle(.bordered)
@@ -145,8 +141,8 @@ struct CollectionDetailView: View {
                     Text("No projects in this collection")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Button("Add Projects") {
-                        showAddProjectsSheet = true
+                    Button("Add Content") {
+                        showCollectionBuilder = true
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -254,9 +250,9 @@ struct CollectionDetailView: View {
                     .foregroundColor(.secondary)
                 Spacer()
                 Button {
-                    showAddBouncesSheet = true
+                    showCollectionBuilder = true
                 } label: {
-                    Label("Add Bounces", systemImage: "plus")
+                    Label("Add Content", systemImage: "plus")
                         .font(.caption)
                 }
                 .buttonStyle(.bordered)
@@ -271,8 +267,8 @@ struct CollectionDetailView: View {
                     Text("No bounces in this collection")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Button("Add Bounces") {
-                        showAddBouncesSheet = true
+                    Button("Add Content") {
+                        showCollectionBuilder = true
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)

@@ -9,6 +9,7 @@ extension Notification.Name {
     static let focusSearch = Notification.Name("AudioEnv.focusSearch")
     static let navigateToSummary = Notification.Name("AudioEnv.navigateToSummary")
     static let navigateToProject = Notification.Name("AudioEnv.navigateToProject")
+    static let navigateToCommands = Notification.Name("AudioEnv.navigateToCommands")
 }
 
 // MARK: - App Commands
@@ -38,6 +39,13 @@ struct AudioEnvCommands: Commands {
                 NotificationCenter.default.post(name: .focusSearch, object: nil)
             }
             .keyboardShortcut("f", modifiers: .command)
+
+            Divider()
+
+            Button("Command Bar") {
+                NotificationCenter.default.post(name: .navigateToCommands, object: nil)
+            }
+            .keyboardShortcut("k", modifiers: .command)
         }
     }
 }

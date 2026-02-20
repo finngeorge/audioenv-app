@@ -15,6 +15,8 @@ struct AudioEnvApp: App {
     @StateObject private var collectionService = CollectionService()
     @StateObject private var bounceService = BounceService()
     @StateObject private var audioPlayer = AudioPlayerService()
+    @StateObject private var commandService = CommandService()
+    @StateObject private var patternService = PatternService()
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -35,6 +37,8 @@ struct AudioEnvApp: App {
                 .environmentObject(collectionService)
                 .environmentObject(bounceService)
                 .environmentObject(audioPlayer)
+                .environmentObject(commandService)
+                .environmentObject(patternService)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
                 .onAppear {
                     // Configure menu bar manager with services

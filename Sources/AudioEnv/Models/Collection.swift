@@ -14,11 +14,12 @@ struct AudioCollection: Identifiable, Hashable, Codable {
     let updatedAt: Date
     let projectCount: Int
     let bounceCount: Int
+    let source: String?  // JSON-encoded CollectionSource, nil = manual legacy
 
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
-        case name, description, color
+        case name, description, color, source
         case contentTypes = "content_types"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -38,6 +39,19 @@ struct AudioCollection: Identifiable, Hashable, Codable {
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         projectCount = try container.decodeIfPresent(Int.self, forKey: .projectCount) ?? 0
         bounceCount = try container.decodeIfPresent(Int.self, forKey: .bounceCount) ?? 0
+        source = try container.decodeIfPresent(String.self, forKey: .source)
+    }
+
+    /// Decoded collection source, if present.
+    var collectionSource: CollectionSource? {
+        guard let source, let data = source.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(CollectionSource.self, from: data)
+    }
+
+    /// Whether this is a smart (auto-updating) collection.
+    var isSmart: Bool {
+        if case .smart = collectionSource { return true }
+        return false
     }
 
     var hasProjects: Bool { contentTypes.contains("projects") }
