@@ -62,10 +62,52 @@ struct BackupManifest: Codable {
     let pluginCount: Int
     let projectCount: Int
     let sessionCount: Int
+    let bounceCount: Int
     let totalSizeBytes: UInt64
     let appVersion: String
     let plugins: [PluginBackupItem]
     let projects: [ProjectBackupItem]
+    let bounces: [BounceBackupItem]
+
+    // Backwards-compatible decoding for manifests without bounces
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        backupId = try container.decode(String.self, forKey: .backupId)
+        userId = try container.decode(String.self, forKey: .userId)
+        backupName = try container.decode(String.self, forKey: .backupName)
+        scopeDescription = try container.decode(String.self, forKey: .scopeDescription)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        pluginCount = try container.decode(Int.self, forKey: .pluginCount)
+        projectCount = try container.decode(Int.self, forKey: .projectCount)
+        sessionCount = try container.decode(Int.self, forKey: .sessionCount)
+        bounceCount = try container.decodeIfPresent(Int.self, forKey: .bounceCount) ?? 0
+        totalSizeBytes = try container.decode(UInt64.self, forKey: .totalSizeBytes)
+        appVersion = try container.decode(String.self, forKey: .appVersion)
+        plugins = try container.decode([PluginBackupItem].self, forKey: .plugins)
+        projects = try container.decode([ProjectBackupItem].self, forKey: .projects)
+        bounces = try container.decodeIfPresent([BounceBackupItem].self, forKey: .bounces) ?? []
+    }
+
+    init(backupId: String, userId: String, backupName: String, scopeDescription: String,
+         createdAt: Date, pluginCount: Int, projectCount: Int, sessionCount: Int,
+         bounceCount: Int = 0, totalSizeBytes: UInt64, appVersion: String,
+         plugins: [PluginBackupItem], projects: [ProjectBackupItem],
+         bounces: [BounceBackupItem] = []) {
+        self.backupId = backupId
+        self.userId = userId
+        self.backupName = backupName
+        self.scopeDescription = scopeDescription
+        self.createdAt = createdAt
+        self.pluginCount = pluginCount
+        self.projectCount = projectCount
+        self.sessionCount = sessionCount
+        self.bounceCount = bounceCount
+        self.totalSizeBytes = totalSizeBytes
+        self.appVersion = appVersion
+        self.plugins = plugins
+        self.projects = projects
+        self.bounces = bounces
+    }
 }
 
 /// Individual plugin in a backup
@@ -98,6 +140,15 @@ struct SessionBackupItem: Codable {
     let format: String
     let originalPath: String
     let s3Key: String
+}
+
+/// Individual bounce file in a backup
+struct BounceBackupItem: Codable {
+    let fileName: String
+    let format: String
+    let s3Key: String
+    let fileSizeBytes: Int
+    let durationSeconds: Double?
 }
 
 /// Backup list item for UI display
@@ -154,6 +205,7 @@ class BackupService: ObservableObject {
     @Published var lastError:      String?            = nil
     @Published private(set) var uploadLog:      [BackupLogEntry]   = []
     @Published private(set) var currentBackupId: String?           = nil
+    @Published private(set) var currentBackupName: String?          = nil    /// Name of in-progress backup (for sidebar display)
     @Published private(set) var lastSuccessfulBackup: String?      = nil    /// Backup name of last successful upload
     @Published private(set) var availableBackups: [BackupListItem] = []     /// List of backups in S3
     @Published private(set) var isLoadingBackups: Bool             = false
@@ -206,6 +258,7 @@ class BackupService: ObservableObject {
         uploadProgress = 0
         lastError      = nil
         uploadLog      = []
+        currentBackupName = backupName
 
         // Generate unique backup ID for this session
         let backupId = BackupPath.generateBackupId()
@@ -256,15 +309,17 @@ class BackupService: ObservableObject {
 
         isUploading = false
         currentBackupId = nil
+        currentBackupName = nil
     }
 
     // MARK: – Unified backup
 
-    /// Backup both plugins and projects in a single operation
-    /// Splits progress: 0-50% for plugins, 50-100% for projects
+    /// Backup plugins, projects, and bounces in a single operation.
+    /// Progress is split dynamically across non-empty phases.
     func backupAll(
         plugins: [AudioPlugin],
         projects: [SessionProject],
+        bounces: [Bounce] = [],
         backupName: String = "Complete Backup",
         scopeDescription: String = ""
     ) async {
@@ -282,6 +337,7 @@ class BackupService: ObservableObject {
         uploadProgress = 0
         lastError = nil
         uploadLog = []
+        currentBackupName = backupName
 
         // Generate unique backup ID for this session
         let backupId = BackupPath.generateBackupId()
@@ -290,9 +346,16 @@ class BackupService: ObservableObject {
         // Track successfully uploaded items
         var uploadedPlugins: [(plugin: AudioPlugin, s3Key: String, checksum: String?)] = []
         var uploadedProjects: [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date)] = []
+        var uploadedBounces: [(bounce: Bounce, s3Key: String)] = []
 
-        // Phase 1: Upload plugins (0-50% progress)
+        // Calculate progress splits based on which phases are non-empty
+        let phaseCount = [!plugins.isEmpty, !projects.isEmpty, !bounces.isEmpty].filter { $0 }.count
+        let phaseWeight = phaseCount > 0 ? 1.0 / Double(phaseCount) : 1.0
+        var currentPhase = 0
+
+        // Phase 1: Upload plugins
         if !plugins.isEmpty {
+            let offset = Double(currentPhase) * phaseWeight
             let total = max(plugins.count, 1)
             for (i, plugin) in plugins.enumerated() {
                 let checksum = Self.sha256Checksum(forPluginAt: plugin.path)
@@ -308,27 +371,44 @@ class BackupService: ObservableObject {
                     uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .success))
                     uploadedPlugins.append((plugin, remote, checksum))
                 } catch {
-                    uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .failed(error.localizedDescription)))
-                    lastError = error.localizedDescription
+                    let detail = Self.detailedErrorMessage(error)
+                    uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .failed(detail)))
+                    lastError = detail
                 }
-                uploadProgress = 0.5 * Double(i + 1) / Double(total)
+                uploadProgress = offset + phaseWeight * Double(i + 1) / Double(total)
             }
+            currentPhase += 1
         }
 
-        // Phase 2: Upload projects (50-100% progress)
+        // Phase 2: Upload projects
         if !projects.isEmpty {
+            let offset = Double(currentPhase) * phaseWeight
             uploadedProjects = await backupProjects(
                 projects,
                 userId: userId,
                 backupId: backupId,
                 destination: dest,
-                progressOffset: 0.5,
-                progressScale: 0.5
+                progressOffset: offset,
+                progressScale: phaseWeight
+            )
+            currentPhase += 1
+        }
+
+        // Phase 3: Upload bounces
+        if !bounces.isEmpty {
+            let offset = Double(currentPhase) * phaseWeight
+            uploadedBounces = await backupBounces(
+                bounces,
+                userId: userId,
+                backupId: backupId,
+                destination: dest,
+                progressOffset: offset,
+                progressScale: phaseWeight
             )
         }
 
         // Upload unified metadata
-        if !uploadedPlugins.isEmpty || !uploadedProjects.isEmpty {
+        if !uploadedPlugins.isEmpty || !uploadedProjects.isEmpty || !uploadedBounces.isEmpty {
             await uploadUnifiedMetadata(
                 userId: userId,
                 backupId: backupId,
@@ -336,18 +416,23 @@ class BackupService: ObservableObject {
                 scopeDescription: scopeDescription,
                 uploadedPlugins: uploadedPlugins,
                 uploadedProjects: uploadedProjects,
+                uploadedBounces: uploadedBounces,
                 destination: dest
             )
         }
 
         // Set success message
-        if uploadedPlugins.count == plugins.count && uploadedProjects.count == projects.count {
+        let allPluginsOk = uploadedPlugins.count == plugins.count
+        let allProjectsOk = uploadedProjects.count == projects.count
+        let allBouncesOk = uploadedBounces.count == bounces.count
+        if allPluginsOk && allProjectsOk && allBouncesOk {
             lastSuccessfulBackup = backupName
             lastError = nil
         }
 
         isUploading = false
         currentBackupId = nil
+        currentBackupName = nil
     }
 
     // MARK: – Project backup
@@ -407,8 +492,9 @@ class BackupService: ObservableObject {
                 uploadLog.append(BackupLogEntry(path: projectPath, remote: s3Key, status: .success))
                 uploadedProjects.append((project, projectPath, s3Key, folderSize, modDate))
             } catch {
-                uploadLog.append(BackupLogEntry(path: projectPath, remote: s3Key, status: .failed(error.localizedDescription)))
-                lastError = "Project upload failed: \(error.localizedDescription)"
+                let detail = Self.detailedErrorMessage(error)
+                uploadLog.append(BackupLogEntry(path: projectPath, remote: s3Key, status: .failed(detail)))
+                lastError = "Project upload failed: \(detail)"
                 logger.error("Failed to upload project '\(project.name)': \(error)")
             }
 
@@ -417,6 +503,106 @@ class BackupService: ObservableObject {
         }
 
         return uploadedProjects
+    }
+
+    // MARK: – Bounce backup
+
+    /// Upload bounce files to the destination.
+    /// Returns metadata for uploaded bounces.
+    func backupBounces(
+        _ bounces: [Bounce],
+        userId: String,
+        backupId: String,
+        destination: BackupDestination,
+        progressOffset: Double = 0.0,
+        progressScale: Double = 1.0
+    ) async -> [(bounce: Bounce, s3Key: String)] {
+        var uploadedBounces: [(Bounce, String)] = []
+
+        let total = max(bounces.count, 1)
+        for (i, bounce) in bounces.enumerated() {
+            guard bounce.isLocallyAvailable else {
+                logger.warning("Skipping bounce '\(bounce.fileName)' - not locally available")
+                uploadLog.append(BackupLogEntry(
+                    path: bounce.filePath,
+                    remote: "",
+                    status: .failed("File not locally available")
+                ))
+                continue
+            }
+
+            let s3Key = BackupPath.bounceKey(
+                userId: userId,
+                backupId: backupId,
+                format: bounce.format,
+                fileName: bounce.fileName
+            )
+
+            do {
+                try await destination.upload(localPath: bounce.filePath, remotePath: s3Key)
+                uploadLog.append(BackupLogEntry(path: bounce.filePath, remote: s3Key, status: .success))
+                uploadedBounces.append((bounce, s3Key))
+            } catch {
+                let detail = Self.detailedErrorMessage(error)
+                uploadLog.append(BackupLogEntry(path: bounce.filePath, remote: s3Key, status: .failed(detail)))
+                lastError = "Bounce upload failed: \(detail)"
+                logger.error("Failed to upload bounce '\(bounce.fileName)': \(error)")
+            }
+
+            uploadProgress = progressOffset + (progressScale * Double(i + 1) / Double(total))
+        }
+
+        return uploadedBounces
+    }
+
+    // MARK: – Orphaned backup cleanup
+
+    /// Clean up orphaned backups that have objects but no metadata.json.
+    /// Called as a side-effect of loadAvailableBackups().
+    func cleanupOrphanedBackups() async {
+        guard let dest = destination, let userId = userId else { return }
+
+        do {
+            let prefix = BackupPath.userBackupsPrefix(userId: userId)
+            let objects = try await dest.list(prefix: prefix)
+
+            // Group objects by backup ID (3rd path component: users/{uid}/backups/{backupId}/...)
+            var objectsByBackupId: [String: [RemoteObject]] = [:]
+            for obj in objects {
+                let components = obj.id.split(separator: "/")
+                guard components.count >= 4 else { continue }
+                let backupId = String(components[3])
+                objectsByBackupId[backupId, default: []].append(obj)
+            }
+
+            // Find backup IDs with objects but no metadata.json
+            for (backupId, backupObjects) in objectsByBackupId {
+                let hasMetadata = backupObjects.contains { $0.id.hasSuffix("metadata.json") }
+                if !hasMetadata {
+                    logger.warning("Found orphaned backup \(backupId) with \(backupObjects.count) objects — cleaning up")
+                    for obj in backupObjects {
+                        do {
+                            try await dest.delete(key: obj.id)
+                            logger.info("Deleted orphaned object: \(obj.id)")
+                        } catch {
+                            logger.error("Failed to delete orphaned object \(obj.id): \(error)")
+                        }
+                    }
+                }
+            }
+        } catch {
+            logger.error("Failed to list objects for orphan cleanup: \(error)")
+        }
+    }
+
+    // MARK: – Error helpers
+
+    /// Extract detailed error message including HTTP status and S3 error body when available.
+    static func detailedErrorMessage(_ error: Error) -> String {
+        if let backupError = error as? BackupError {
+            return backupError.errorDescription ?? error.localizedDescription
+        }
+        return error.localizedDescription
     }
 
     /// Calculate the size of a plugin bundle or file
@@ -558,7 +744,7 @@ class BackupService: ObservableObject {
         }
     }
 
-    /// Upload unified metadata.json manifest including both plugins and projects
+    /// Upload unified metadata.json manifest including plugins, projects, and bounces
     private func uploadUnifiedMetadata(
         userId: String,
         backupId: String,
@@ -566,6 +752,7 @@ class BackupService: ObservableObject {
         scopeDescription: String,
         uploadedPlugins: [(plugin: AudioPlugin, s3Key: String, checksum: String?)],
         uploadedProjects: [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date)],
+        uploadedBounces: [(bounce: Bounce, s3Key: String)] = [],
         destination: BackupDestination
     ) async {
         // Build plugin items
@@ -623,6 +810,17 @@ class BackupService: ObservableObject {
             )
         }
 
+        // Build bounce items
+        let bounceItems = uploadedBounces.map { item in
+            BounceBackupItem(
+                fileName: item.bounce.fileName,
+                format: item.bounce.format,
+                s3Key: item.s3Key,
+                fileSizeBytes: item.bounce.fileSizeBytes,
+                durationSeconds: item.bounce.durationSeconds
+            )
+        }
+
         // Calculate total sizes
         let pluginSize = uploadedPlugins.reduce(UInt64(0)) { total, item in
             total + calculatePluginSize(item.plugin.path)
@@ -630,7 +828,10 @@ class BackupService: ObservableObject {
         let projectSize = uploadedProjects.reduce(UInt64(0)) { total, item in
             total + item.size
         }
-        let totalSize = pluginSize + projectSize
+        let bounceSize = uploadedBounces.reduce(UInt64(0)) { total, item in
+            total + UInt64(item.bounce.fileSizeBytes)
+        }
+        let totalSize = pluginSize + projectSize + bounceSize
 
         // Calculate total session count
         let sessionCount = uploadedProjects.reduce(0) { total, item in
@@ -646,10 +847,12 @@ class BackupService: ObservableObject {
             pluginCount: uploadedPlugins.count,
             projectCount: uploadedProjects.count,
             sessionCount: sessionCount,
+            bounceCount: uploadedBounces.count,
             totalSizeBytes: totalSize,
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0",
             plugins: pluginItems,
-            projects: projectItems
+            projects: projectItems,
+            bounces: bounceItems
         )
 
         // Serialize to JSON
@@ -780,6 +983,9 @@ class BackupService: ObservableObject {
         isLoadingBackups = true
         lastError = nil // Clear previous errors
         pluginBackupIndex = [:] // Reset index
+
+        // Clean up any orphaned backups from failed uploads
+        await cleanupOrphanedBackups()
 
         do {
             // List all objects in user's backup folder

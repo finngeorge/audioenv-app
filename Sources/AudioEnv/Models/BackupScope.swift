@@ -9,7 +9,7 @@ enum BackupScope: Equatable, Identifiable {
     case selectedPlugins([AudioPlugin])
     case selectedProjects([SessionProject])
     case custom(plugins: [AudioPlugin], projects: [SessionProject])
-    case collection(name: String, projects: [SessionProject], plugins: [AudioPlugin])
+    case collection(name: String, projects: [SessionProject], plugins: [AudioPlugin], bounces: [Bounce] = [])
 
     var id: String {
         switch self {
@@ -27,7 +27,7 @@ enum BackupScope: Equatable, Identifiable {
             return "projects-\(projects.count)"
         case .custom:
             return "custom"
-        case .collection(let name, _, _):
+        case .collection(let name, _, _, _):
             return "collection-\(name)"
         }
     }
@@ -53,7 +53,7 @@ enum BackupScope: Equatable, Identifiable {
                 projects.isEmpty ? nil : "\(projects.count) project\(projects.count == 1 ? "" : "s")"
             ].compactMap { $0 }
             return parts.joined(separator: " + ")
-        case .collection(let name, _, _):
+        case .collection(let name, _, _, _):
             return "\(name) Collection"
         }
     }
@@ -75,8 +75,12 @@ enum BackupScope: Equatable, Identifiable {
             return "\(projects.count) manually selected project\(projects.count == 1 ? "" : "s")"
         case .custom(let plugins, let projects):
             return "Custom selection: \(plugins.count) plugins, \(projects.count) projects"
-        case .collection(let name, let projects, let plugins):
-            return "Collection '\(name)': \(projects.count) projects, \(plugins.count) plugin dependencies"
+        case .collection(let name, let projects, let plugins, let bounces):
+            var parts: [String] = []
+            if !projects.isEmpty { parts.append("\(projects.count) projects") }
+            if !bounces.isEmpty { parts.append("\(bounces.count) bounces") }
+            if !plugins.isEmpty { parts.append("\(plugins.count) plugin dependencies") }
+            return "Collection '\(name)': \(parts.joined(separator: ", "))"
         }
     }
 }
@@ -86,9 +90,23 @@ struct BackupScopeStats {
     let pluginCount: Int
     let projectCount: Int
     let sessionCount: Int
+    let bounceCount: Int
     let totalSize: UInt64
     let pluginSize: UInt64
     let projectSize: UInt64
+    let bounceSize: UInt64
+
+    init(pluginCount: Int, projectCount: Int, sessionCount: Int, bounceCount: Int = 0,
+         totalSize: UInt64, pluginSize: UInt64, projectSize: UInt64, bounceSize: UInt64 = 0) {
+        self.pluginCount = pluginCount
+        self.projectCount = projectCount
+        self.sessionCount = sessionCount
+        self.bounceCount = bounceCount
+        self.totalSize = totalSize
+        self.pluginSize = pluginSize
+        self.projectSize = projectSize
+        self.bounceSize = bounceSize
+    }
 
     var formattedTotalSize: String {
         ByteCountFormatter.string(fromByteCount: Int64(totalSize), countStyle: .file)
@@ -102,8 +120,12 @@ struct BackupScopeStats {
         ByteCountFormatter.string(fromByteCount: Int64(projectSize), countStyle: .file)
     }
 
+    var formattedBounceSize: String {
+        ByteCountFormatter.string(fromByteCount: Int64(bounceSize), countStyle: .file)
+    }
+
     var isEmpty: Bool {
-        pluginCount == 0 && projectCount == 0
+        pluginCount == 0 && projectCount == 0 && bounceCount == 0
     }
 }
 
@@ -125,13 +147,28 @@ extension BackupScope {
 
         let sessionCount = projects.flatMap(\.sessions).count
 
+        // Calculate bounce sizes for collection scope
+        let bounces: [Bounce]
+        let bounceSize: UInt64
+        if case .collection(_, _, _, let collectionBounces) = self {
+            bounces = collectionBounces
+            bounceSize = collectionBounces.reduce(into: UInt64(0)) { result, bounce in
+                result += UInt64(bounce.fileSizeBytes)
+            }
+        } else {
+            bounces = []
+            bounceSize = 0
+        }
+
         return BackupScopeStats(
             pluginCount: plugins.count,
             projectCount: projects.count,
             sessionCount: sessionCount,
-            totalSize: pluginSize + projectSize,
+            bounceCount: bounces.count,
+            totalSize: pluginSize + projectSize + bounceSize,
             pluginSize: pluginSize,
-            projectSize: projectSize
+            projectSize: projectSize,
+            bounceSize: bounceSize
         )
     }
 
@@ -216,7 +253,7 @@ extension BackupScope {
         case .custom(let plugins, let projects):
             return (plugins, projects)
 
-        case .collection(_, let projects, let plugins):
+        case .collection(_, let projects, let plugins, _):
             return (plugins, projects)
         }
     }

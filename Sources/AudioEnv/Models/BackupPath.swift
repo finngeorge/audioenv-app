@@ -83,6 +83,19 @@ struct BackupPath {
         return "users/\(userId)/backups/\(backupId)/projects/\(safeProject).zip"
     }
 
+    /// Generate S3 key for a bounce file
+    /// - Parameters:
+    ///   - userId: User's UUID
+    ///   - backupId: Unique backup identifier
+    ///   - format: Audio format (wav, mp3, etc.)
+    ///   - fileName: Bounce file name
+    /// - Returns: S3 key like "users/ABC-123/backups/2026-02-06-XYZ/bounces/wav/MySong.wav"
+    static func bounceKey(userId: String, backupId: String, format: String, fileName: String) -> String {
+        let safeFormat = sanitizeForS3(format)
+        let safeFileName = sanitizeForS3(fileName)
+        return "users/\(userId)/backups/\(backupId)/bounces/\(safeFormat)/\(safeFileName)"
+    }
+
     /// List all backups for a user
     /// - Parameter userId: User's UUID
     /// - Returns: S3 prefix like "users/ABC-123/backups/"

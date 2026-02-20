@@ -7,8 +7,12 @@ struct BackupScopeSelector: View {
     @Binding var backupName: String
 
     @EnvironmentObject var collectionService: CollectionService
+    @EnvironmentObject var auth: AuthenticationService
+    @EnvironmentObject var bounceService: BounceService
 
     @State private var scopeType: ScopeType = .everything
+    @State private var collectionProjects: [CollectionService.CollectionProject] = []
+    @State private var collectionBounces: [CollectionService.CollectionBounce] = []
     @State private var selectedProject: SessionProject? = nil
     @State private var selectedPlugin: AudioPlugin? = nil
     @State private var selectedCollection: AudioCollection? = nil
@@ -275,9 +279,25 @@ struct BackupScopeSelector: View {
                     Text(collection.name).tag(collection as AudioCollection?)
                 }
             }
-            .onChange(of: selectedCollection) { _, _ in
+            .onChange(of: selectedCollection) { _, newCollection in
                 updateBackupName()
                 stats = nil
+                collectionProjects = []
+                collectionBounces = []
+                if let collection = newCollection, let token = auth.authToken {
+                    Task {
+                        if collection.hasProjects {
+                            collectionProjects = await collectionService.fetchCollectionProjects(
+                                collectionId: collection.id, token: token
+                            )
+                        }
+                        if collection.hasBounces {
+                            collectionBounces = await collectionService.fetchCollectionBounces(
+                                collectionId: collection.id, token: token
+                            )
+                        }
+                    }
+                }
             }
 
             if let collection = selectedCollection {
@@ -414,6 +434,9 @@ struct BackupScopeSelector: View {
                         StatRow(label: "Projects", value: "\(stats.projectCount) projects")
                         StatRow(label: "Sessions", value: "\(stats.sessionCount) files (\(stats.formattedProjectSize))")
                     }
+                    if stats.bounceCount > 0 {
+                        StatRow(label: "Bounces", value: "\(stats.bounceCount) files (\(stats.formattedBounceSize))")
+                    }
 
                     Divider()
 
@@ -456,12 +479,23 @@ struct BackupScopeSelector: View {
 
         case .collection:
             guard let collection = selectedCollection else { return nil }
-            // Resolve collection projects to local SessionProject objects
-            let allProjects = SessionProject.groupSessions(scanner.sessions)
-            // Match by name (collection projects reference scanned sessions)
-            let collectionProjects = allProjects // include all for now; filtered at backup time
-            // Resolve plugin dependencies from matched projects using fuzzy matching
-            let usedPluginNames = Set(collectionProjects.flatMap { project in
+            // Match fetched collection projects to local SessionProject objects by name
+            let allLocalProjects = SessionProject.groupSessions(scanner.sessions)
+            let collectionProjectNames = Set(collectionProjects.map {
+                ($0.projectName ?? $0.sessionName ?? "").lowercased()
+            }.filter { !$0.isEmpty })
+
+            let matchedProjects: [SessionProject]
+            if !collectionProjectNames.isEmpty {
+                matchedProjects = allLocalProjects.filter { localProject in
+                    collectionProjectNames.contains(localProject.name.lowercased())
+                }
+            } else {
+                matchedProjects = []
+            }
+
+            // Resolve plugin dependencies only from matched projects
+            let usedPluginNames = Set(matchedProjects.flatMap { project in
                 project.sessions.flatMap { session -> [String] in
                     guard let parsed = session.project else { return [] }
                     switch parsed {
@@ -470,14 +504,40 @@ struct BackupScopeSelector: View {
                     }
                 }
             })
-            let matchedPlugins = scanner.plugins.filter { plugin in
-                let pluginName = plugin.name.lowercased()
-                return usedPluginNames.contains { usedName in
-                    let name = usedName.lowercased()
-                    return name.contains(pluginName) || pluginName.contains(name)
+            let matchedPlugins: [AudioPlugin]
+            if usedPluginNames.isEmpty {
+                matchedPlugins = []
+            } else {
+                matchedPlugins = scanner.plugins.filter { plugin in
+                    let pluginName = plugin.name.lowercased()
+                    return usedPluginNames.contains { usedName in
+                        let name = usedName.lowercased()
+                        return name.contains(pluginName) || pluginName.contains(name)
+                    }
                 }
             }
-            return .collection(name: collection.name, projects: collectionProjects, plugins: matchedPlugins)
+
+            // Resolve bounces from collection
+            let matchedBounces: [Bounce] = collectionBounces.compactMap { cb in
+                guard let path = cb.filePath, let id = UUID(uuidString: cb.id) else { return nil }
+                let bounce = Bounce(
+                    id: id,
+                    userId: UUID(),
+                    bounceFolderId: UUID(),
+                    fileName: cb.fileName,
+                    filePath: path,
+                    fileSizeBytes: cb.fileSizeBytes ?? 0,
+                    format: cb.format ?? "wav",
+                    durationSeconds: cb.durationSeconds,
+                    sampleRate: cb.sampleRate,
+                    bitDepth: cb.bitDepth,
+                    createdAt: Date(),
+                    fileModifiedAt: Date()
+                )
+                return bounce.isLocallyAvailable ? bounce : nil
+            }
+
+            return .collection(name: collection.name, projects: matchedProjects, plugins: matchedPlugins, bounces: matchedBounces)
 
         case .project:
             guard let project = selectedProject else { return nil }

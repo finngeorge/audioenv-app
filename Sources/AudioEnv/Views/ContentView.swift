@@ -95,6 +95,33 @@ struct ContentView: View {
                     }
                     .tag(AppSection.profile)
                 }
+
+                if backup.isUploading {
+                    Section {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Image(systemName: "icloud.and.arrow.up")
+                                    .foregroundColor(.blue)
+                                Text("Backing up...")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                Spacer()
+                                Text("\(Int(backup.uploadProgress * 100))%")
+                                    .font(.caption)
+                                    .monospacedDigit()
+                            }
+                            ProgressView(value: backup.uploadProgress)
+                                .progressViewStyle(.linear)
+                            if let name = backup.currentBackupName {
+                                Text(name)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
             }
             .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 220)
             .navigationTitle("AudioEnv")

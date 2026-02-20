@@ -17,6 +17,8 @@ struct CollectionDetailView: View {
     @State private var showCollectionBuilder = false
     @State private var showDeleteConfirmation = false
     @State private var showBackupScopeSelector = false
+    @State private var showBackupConfirmation = false
+    @State private var backupConfirmationStats: BackupConfirmationStats?
     @State private var projects: [CollectionService.CollectionProject] = []
     @State private var bounces: [CollectionService.CollectionBounce] = []
     @State private var isLoadingProjects = false
@@ -98,6 +100,84 @@ struct CollectionDetailView: View {
         }
         .sheet(isPresented: $showCollectionBuilder) {
             CollectionBuilderPopup(collectionId: collectionId)
+        }
+        .sheet(isPresented: $showBackupConfirmation) {
+            if let stats = backupConfirmationStats {
+                VStack(spacing: 20) {
+                    Text("Backup Collection")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Collection: \(stats.collectionName)")
+                            .font(.headline)
+
+                        Divider()
+
+                        if stats.projectCount > 0 {
+                            HStack {
+                                Image(systemName: "folder")
+                                    .foregroundColor(.blue)
+                                Text("\(stats.projectCount) project\(stats.projectCount == 1 ? "" : "s")")
+                                Spacer()
+                            }
+                        }
+                        if stats.bounceCount > 0 {
+                            HStack {
+                                Image(systemName: "waveform")
+                                    .foregroundColor(.green)
+                                Text("\(stats.bounceCount) bounce\(stats.bounceCount == 1 ? "" : "s")")
+                                Spacer()
+                            }
+                        }
+                        if stats.pluginCount > 0 {
+                            HStack {
+                                Image(systemName: "puzzlepiece.extension")
+                                    .foregroundColor(.purple)
+                                Text("\(stats.pluginCount) plugin dependenc\(stats.pluginCount == 1 ? "y" : "ies")")
+                                Spacer()
+                            }
+                        }
+
+                        Divider()
+
+                        HStack {
+                            Text("Estimated size:")
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text(stats.formattedSize)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .padding()
+                    .background(Color.secondary.opacity(0.05))
+                    .cornerRadius(12)
+
+                    if stats.isEmpty {
+                        Text("Nothing to back up in this collection.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack {
+                        Button("Cancel") {
+                            showBackupConfirmation = false
+                        }
+                        .buttonStyle(.bordered)
+
+                        Spacer()
+
+                        Button("Start Backup") {
+                            showBackupConfirmation = false
+                            startBackup()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(stats.isEmpty)
+                    }
+                }
+                .padding()
+                .frame(width: 420)
+            }
         }
         .task(id: collectionId) {
             await loadContent()
@@ -576,10 +656,21 @@ struct CollectionDetailView: View {
     }
 
     private func backupCollection(_ collection: AudioCollection) {
-        // Resolve collection projects from local scanner data
-        let allProjects = SessionProject.groupSessions(scanner.sessions)
-        // Match plugin dependencies using fuzzy matching
-        let usedPluginNames = Set(allProjects.flatMap { project in
+        // Resolve collection projects by matching fetched collection projects to local scanner data
+        let allLocalProjects = SessionProject.groupSessions(scanner.sessions)
+        let collectionProjectNames = Set(projects.map { $0.displayName.lowercased() })
+
+        let matchedProjects: [SessionProject]
+        if collection.hasProjects && !collectionProjectNames.isEmpty {
+            matchedProjects = allLocalProjects.filter { localProject in
+                collectionProjectNames.contains(localProject.name.lowercased())
+            }
+        } else {
+            matchedProjects = []
+        }
+
+        // Resolve plugin dependencies only from collection's projects
+        let usedPluginNames = Set(matchedProjects.flatMap { project in
             project.sessions.flatMap { session -> [String] in
                 guard let parsed = session.project else { return [] }
                 switch parsed {
@@ -588,20 +679,59 @@ struct CollectionDetailView: View {
                 }
             }
         })
-        let matchedPlugins = scanner.plugins.filter { plugin in
-            let pluginName = plugin.name.lowercased()
-            return usedPluginNames.contains { usedName in
-                let name = usedName.lowercased()
-                return name.contains(pluginName) || pluginName.contains(name)
+        let matchedPlugins: [AudioPlugin]
+        if usedPluginNames.isEmpty {
+            matchedPlugins = []
+        } else {
+            matchedPlugins = scanner.plugins.filter { plugin in
+                let pluginName = plugin.name.lowercased()
+                return usedPluginNames.contains { usedName in
+                    let name = usedName.lowercased()
+                    return name.contains(pluginName) || pluginName.contains(name)
+                }
             }
         }
 
+        // Resolve bounces from collection
+        let matchedBounces: [Bounce]
+        if collection.hasBounces {
+            matchedBounces = bounces.compactMap(toBounce).filter(\.isLocallyAvailable)
+        } else {
+            matchedBounces = []
+        }
+
+        // Calculate stats and show confirmation
+        let totalBounceSize = matchedBounces.reduce(UInt64(0)) { $0 + UInt64($1.fileSizeBytes) }
+        let totalPluginSize = matchedPlugins.reduce(UInt64(0)) { total, plugin in
+            total + (FileSystemHelpers.calculateDirectorySize(plugin.path))
+        }
+        let totalProjectSize = matchedProjects.reduce(UInt64(0)) { total, project in
+            guard let first = project.sessions.first else { return total }
+            return total + FileSystemHelpers.calculateDirectorySize(FileSystemHelpers.getProjectFolderPath(from: first))
+        }
+
+        backupConfirmationStats = BackupConfirmationStats(
+            collectionName: collection.name,
+            projectCount: matchedProjects.count,
+            bounceCount: matchedBounces.count,
+            pluginCount: matchedPlugins.count,
+            totalSize: totalPluginSize + totalProjectSize + totalBounceSize,
+            matchedProjects: matchedProjects,
+            matchedPlugins: matchedPlugins,
+            matchedBounces: matchedBounces
+        )
+        showBackupConfirmation = true
+    }
+
+    private func startBackup() {
+        guard let stats = backupConfirmationStats else { return }
         Task {
             await backup.backupAll(
-                plugins: matchedPlugins,
-                projects: allProjects,
-                backupName: "\(collection.name) Collection",
-                scopeDescription: "Collection '\(collection.name)'"
+                plugins: stats.matchedPlugins,
+                projects: stats.matchedProjects,
+                bounces: stats.matchedBounces,
+                backupName: "\(stats.collectionName) Collection",
+                scopeDescription: "Collection '\(stats.collectionName)'"
             )
         }
     }
@@ -678,6 +808,27 @@ struct CollectionDetailView: View {
         }
         let secs = Int(seconds) % 60
         return "\(mins)m \(secs)s"
+    }
+}
+
+// MARK: - Backup Confirmation Stats
+
+struct BackupConfirmationStats {
+    let collectionName: String
+    let projectCount: Int
+    let bounceCount: Int
+    let pluginCount: Int
+    let totalSize: UInt64
+    let matchedProjects: [SessionProject]
+    let matchedPlugins: [AudioPlugin]
+    let matchedBounces: [Bounce]
+
+    var formattedSize: String {
+        ByteCountFormatter.string(fromByteCount: Int64(totalSize), countStyle: .file)
+    }
+
+    var isEmpty: Bool {
+        projectCount == 0 && bounceCount == 0 && pluginCount == 0
     }
 }
 
