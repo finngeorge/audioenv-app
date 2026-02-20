@@ -206,7 +206,7 @@ struct SummaryView: View {
     // MARK: – Stats grid
 
     private func statsGrid() -> some View {
-        LazyVGrid(columns: [GridItem(.flexible(minimum: 120)), GridItem(.flexible(minimum: 120))], spacing: 12) {
+        LazyVGrid(columns: [GridItem(.flexible(minimum: 140)), GridItem(.flexible(minimum: 140))], spacing: 12) {
             StatCard(title: "Total Plugins",  count: cachedTotalPlugins,
                      icon: "waveform",    color: .indigo, action: {
                 onNavigateToPlugins()
@@ -343,10 +343,11 @@ struct StatCard: View {
                     .foregroundColor(color)
                 Spacer()
                 Text("\(count)")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .monospacedDigit()
                     .foregroundColor(color)
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .minimumScaleFactor(0.7)
             }
             Text(title)
                 .font(.caption)
@@ -355,6 +356,7 @@ struct StatCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
+        .frame(maxWidth: .infinity)
         .background(Color.secondary.opacity(0.08))
         .cornerRadius(12)
         .contentShape(Rectangle())

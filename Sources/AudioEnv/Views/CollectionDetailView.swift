@@ -1,13 +1,16 @@
 import SwiftUI
 
 /// Detail view for a selected collection — shows its projects and/or bounces based on content_types.
+/// Defaults to playlist/reader mode; toggle edit mode to reveal CRUD controls.
 struct CollectionDetailView: View {
     let collectionId: UUID
     @EnvironmentObject var collectionService: CollectionService
     @EnvironmentObject var auth: AuthenticationService
     @EnvironmentObject var scanner: ScannerService
     @EnvironmentObject var bounceService: BounceService
+    @EnvironmentObject var audioPlayer: AudioPlayerService
 
+    @State private var isEditing = false
     @State private var showEditSheet = false
     @State private var showCollectionBuilder = false
     @State private var showDeleteConfirmation = false
@@ -19,6 +22,11 @@ struct CollectionDetailView: View {
     /// Live collection from service array — updates when fetchCollections refreshes.
     private var collection: AudioCollection? {
         collectionService.collections.first(where: { $0.id == collectionId })
+    }
+
+    /// Total duration of all bounces in the collection.
+    private var totalDuration: Double {
+        bounces.compactMap(\.durationSeconds).reduce(0, +)
     }
 
     var body: some View {
@@ -50,31 +58,33 @@ struct CollectionDetailView: View {
                     bouncesSection(collection)
                 }
 
-                // Quick actions
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Actions")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
+                // Quick actions (only in edit mode)
+                if isEditing {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Actions")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
 
-                    HStack(spacing: 12) {
-                        Button {
-                            showEditSheet = true
-                        } label: {
-                            Label("Edit Collection", systemImage: "pencil")
-                        }
-                        .buttonStyle(.bordered)
+                        HStack(spacing: 12) {
+                            Button {
+                                showEditSheet = true
+                            } label: {
+                                Label("Edit Collection", systemImage: "pencil")
+                            }
+                            .buttonStyle(.bordered)
 
-                        Button(role: .destructive) {
-                            showDeleteConfirmation = true
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+                            Button(role: .destructive) {
+                                showDeleteConfirmation = true
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
+                    .padding()
+                    .background(Color.secondary.opacity(0.05))
+                    .cornerRadius(12)
                 }
-                .padding()
-                .background(Color.secondary.opacity(0.05))
-                .cornerRadius(12)
 
                 Spacer()
             }
@@ -113,6 +123,87 @@ struct CollectionDetailView: View {
         }
     }
 
+    // MARK: - Header
+
+    private func header(_ collection: AudioCollection) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if let color = collection.color {
+                    Circle()
+                        .fill(Color(hex: color) ?? .blue)
+                        .frame(width: 16, height: 16)
+                }
+
+                Text(collection.name)
+                    .font(.title)
+                    .fontWeight(.bold)
+
+                if collection.isPack {
+                    Text("Pack")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.12))
+                        .cornerRadius(5)
+                }
+
+                Spacer()
+
+                // Play All button (when collection has bounces)
+                if collection.hasBounces && !bounces.isEmpty {
+                    Button {
+                        playAllBounces()
+                    } label: {
+                        Label("Play All", systemImage: "play.fill")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+
+                // Edit mode toggle
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isEditing.toggle()
+                    }
+                } label: {
+                    Image(systemName: isEditing ? "pencil.slash" : "pencil")
+                        .font(.body)
+                        .foregroundColor(isEditing ? .blue : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(isEditing ? "Exit edit mode" : "Edit collection")
+            }
+
+            if let desc = collection.description, !desc.isEmpty {
+                Text(desc)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
+            HStack(spacing: 16) {
+                if collection.hasProjects {
+                    Label("\(collection.projectCount) projects", systemImage: "folder")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                if collection.hasBounces {
+                    Label("\(collection.bounceCount) bounces", systemImage: "waveform")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if totalDuration > 0 {
+                        Text(formatTotalDuration(totalDuration))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Projects Section
 
     @ViewBuilder
@@ -123,14 +214,16 @@ struct CollectionDetailView: View {
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
-                Button {
-                    showCollectionBuilder = true
-                } label: {
-                    Label("Add Content", systemImage: "plus")
-                        .font(.caption)
+                if isEditing {
+                    Button {
+                        showCollectionBuilder = true
+                    } label: {
+                        Label("Add Content", systemImage: "plus")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
 
             if collection.projectCount == 0 {
@@ -141,11 +234,13 @@ struct CollectionDetailView: View {
                     Text("No projects in this collection")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Button("Add Content") {
-                        showCollectionBuilder = true
+                    if isEditing {
+                        Button("Add Content") {
+                            showCollectionBuilder = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
@@ -171,6 +266,10 @@ struct CollectionDetailView: View {
         .padding()
         .background(Color.secondary.opacity(0.05))
         .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isEditing ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 
     private func projectRow(_ project: CollectionService.CollectionProject) -> some View {
@@ -216,25 +315,27 @@ struct CollectionDetailView: View {
 
             Spacer()
 
-            Button(role: .destructive) {
-                Task {
-                    if let token = auth.authToken,
-                       let sessionId = UUID(uuidString: project.id) {
-                        await collectionService.removeProject(
-                            collectionId: collectionId,
-                            sessionId: sessionId,
-                            token: token
-                        )
-                        await loadProjects()
+            if isEditing {
+                Button(role: .destructive) {
+                    Task {
+                        if let token = auth.authToken,
+                           let sessionId = UUID(uuidString: project.id) {
+                            await collectionService.removeProject(
+                                collectionId: collectionId,
+                                sessionId: sessionId,
+                                token: token
+                            )
+                            await loadProjects()
+                        }
                     }
+                } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-            } label: {
-                Image(systemName: "xmark.circle")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .buttonStyle(.plain)
+                .help("Remove from collection")
             }
-            .buttonStyle(.plain)
-            .help("Remove from collection")
         }
         .padding(.vertical, 4)
     }
@@ -249,14 +350,16 @@ struct CollectionDetailView: View {
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
-                Button {
-                    showCollectionBuilder = true
-                } label: {
-                    Label("Add Content", systemImage: "plus")
-                        .font(.caption)
+                if isEditing {
+                    Button {
+                        showCollectionBuilder = true
+                    } label: {
+                        Label("Add Content", systemImage: "plus")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
 
             if collection.bounceCount == 0 {
@@ -267,11 +370,13 @@ struct CollectionDetailView: View {
                     Text("No bounces in this collection")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Button("Add Content") {
-                        showCollectionBuilder = true
+                    if isEditing {
+                        Button("Add Content") {
+                            showCollectionBuilder = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
@@ -297,20 +402,45 @@ struct CollectionDetailView: View {
         .padding()
         .background(Color.secondary.opacity(0.05))
         .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isEditing ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 
     private func bounceRow(_ bounce: CollectionService.CollectionBounce) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "waveform")
-                .font(.title3)
-                .foregroundColor(bounceFormatColor(bounce.format))
-                .frame(width: 24)
+        let isCurrentlyPlaying = audioPlayer.currentBounce?.id.uuidString == bounce.id
+        let isAvailable = bounce.filePath != nil && FileManager.default.fileExists(atPath: bounce.filePath!)
+
+        return HStack(spacing: 10) {
+            // Play button (playlist mode only, for locally available bounces)
+            if !isEditing && isAvailable {
+                Button {
+                    playBounce(bounce)
+                } label: {
+                    Image(systemName: isCurrentlyPlaying && audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle")
+                        .font(.title3)
+                        .foregroundColor(isCurrentlyPlaying ? .blue : .secondary)
+                }
+                .buttonStyle(.plain)
+            } else if !isEditing {
+                Image(systemName: "waveform")
+                    .font(.title3)
+                    .foregroundColor(bounceFormatColor(bounce.format))
+                    .frame(width: 24)
+            } else {
+                Image(systemName: "waveform")
+                    .font(.title3)
+                    .foregroundColor(bounceFormatColor(bounce.format))
+                    .frame(width: 24)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(bounce.fileName)
                     .font(.body)
                     .fontWeight(.medium)
                     .lineLimit(1)
+                    .foregroundColor(isCurrentlyPlaying ? .blue : .primary)
 
                 HStack(spacing: 8) {
                     if let fmt = bounce.format {
@@ -322,18 +452,13 @@ struct CollectionDetailView: View {
                             .foregroundColor(bounceFormatColor(fmt))
                             .cornerRadius(3)
                     }
-                    if let duration = bounce.durationSeconds {
-                        Text(formatDuration(duration))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                     if let sr = bounce.sampleRate {
                         Text("\(sr / 1000)kHz")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let size = bounce.fileSizeBytes {
-                        Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                    if let bd = bounce.bitDepth {
+                        Text("\(bd)-bit")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -342,27 +467,92 @@ struct CollectionDetailView: View {
 
             Spacer()
 
-            Button(role: .destructive) {
-                Task {
-                    if let token = auth.authToken,
-                       let bounceId = UUID(uuidString: bounce.id) {
-                        await collectionService.removeBounce(
-                            collectionId: collectionId,
-                            bounceId: bounceId,
-                            token: token
-                        )
-                        await loadBounces()
-                    }
-                }
-            } label: {
-                Image(systemName: "xmark.circle")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            if let duration = bounce.durationSeconds {
+                Text(formatDuration(duration))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
-            .help("Remove from collection")
+
+            if isEditing {
+                Button(role: .destructive) {
+                    Task {
+                        if let token = auth.authToken,
+                           let bounceId = UUID(uuidString: bounce.id) {
+                            await collectionService.removeBounce(
+                                collectionId: collectionId,
+                                bounceId: bounceId,
+                                token: token
+                            )
+                            await loadBounces()
+                        }
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove from collection")
+            }
         }
         .padding(.vertical, 4)
+        .padding(.horizontal, isCurrentlyPlaying ? 4 : 0)
+        .background(
+            isCurrentlyPlaying
+                ? RoundedRectangle(cornerRadius: 6).fill(Color.blue.opacity(0.06))
+                : nil
+        )
+        .overlay(alignment: .leading) {
+            if isCurrentlyPlaying {
+                Rectangle()
+                    .fill(Color.blue)
+                    .frame(width: 3)
+                    .cornerRadius(1.5)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            if !isEditing && isAvailable {
+                playBounce(bounce)
+            }
+        }
+    }
+
+    // MARK: - Playback
+
+    /// Convert a CollectionBounce to a Bounce for playback.
+    private func toBounce(_ cb: CollectionService.CollectionBounce) -> Bounce? {
+        guard let path = cb.filePath, let id = UUID(uuidString: cb.id) else { return nil }
+        return Bounce(
+            id: id,
+            userId: UUID(), // placeholder, not needed for playback
+            bounceFolderId: UUID(),
+            fileName: cb.fileName,
+            filePath: path,
+            fileSizeBytes: cb.fileSizeBytes ?? 0,
+            format: cb.format ?? "wav",
+            durationSeconds: cb.durationSeconds,
+            sampleRate: cb.sampleRate,
+            bitDepth: cb.bitDepth,
+            createdAt: Date(),
+            fileModifiedAt: Date()
+        )
+    }
+
+    private func playBounce(_ collectionBounce: CollectionService.CollectionBounce) {
+        guard let bounce = toBounce(collectionBounce) else { return }
+
+        if audioPlayer.currentBounce?.id.uuidString == collectionBounce.id {
+            audioPlayer.togglePlayPause()
+        } else {
+            audioPlayer.play(bounce: bounce)
+        }
+    }
+
+    private func playAllBounces() {
+        let playable = bounces.compactMap(toBounce).filter(\.isLocallyAvailable)
+        guard !playable.isEmpty else { return }
+        audioPlayer.playAll(bounces: playable)
     }
 
     // MARK: - Data Loading
@@ -423,50 +613,14 @@ struct CollectionDetailView: View {
         return String(format: "%d:%02d", mins, secs)
     }
 
-    private func header(_ collection: AudioCollection) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                if let color = collection.color {
-                    Circle()
-                        .fill(Color(hex: color) ?? .blue)
-                        .frame(width: 16, height: 16)
-                }
-
-                Text(collection.name)
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                if collection.isPack {
-                    Text("Pack")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.orange)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.orange.opacity(0.12))
-                        .cornerRadius(5)
-                }
-            }
-
-            if let desc = collection.description, !desc.isEmpty {
-                Text(desc)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-
-            HStack(spacing: 16) {
-                if collection.hasProjects {
-                    Label("\(collection.projectCount) projects", systemImage: "folder")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                if collection.hasBounces {
-                    Label("\(collection.bounceCount) bounces", systemImage: "waveform")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
+    private func formatTotalDuration(_ seconds: Double) -> String {
+        let hours = Int(seconds) / 3600
+        let mins = (Int(seconds) % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(mins)m"
         }
+        let secs = Int(seconds) % 60
+        return "\(mins)m \(secs)s"
     }
 }
 

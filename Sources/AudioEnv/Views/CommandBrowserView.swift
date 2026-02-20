@@ -24,6 +24,9 @@ struct CommandBrowserView: View {
                     // Quick commands
                     quickCommandsSection
 
+                    // Examples (shown when no recipes or on first use)
+                    examplesSection
+
                     // Saved recipes
                     recipesSection
 
@@ -104,6 +107,10 @@ struct CommandBrowserView: View {
                 .font(.headline)
                 .foregroundColor(.secondary)
 
+            Text("Query your library with text commands or the visual builder. Pipe results to actions like backup, tagging, or creating collections.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
             let suggestions = commandService.generateSuggestions(
                 scanner: scanner,
                 bounceService: bounceService
@@ -114,6 +121,11 @@ struct CommandBrowserView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else {
+                Text("Based on your scanned library")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
+
                 FlowLayout(spacing: 8) {
                     ForEach(suggestions, id: \.self) { suggestion in
                         Button {
@@ -129,6 +141,50 @@ struct CommandBrowserView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                }
+            }
+        }
+        .padding()
+        .background(Color.secondary.opacity(0.05))
+        .cornerRadius(12)
+    }
+
+    // MARK: - Examples
+
+    private static let exampleCommands: [(command: String, label: String)] = [
+        ("select plugins where format:vst3", "All VST3 plugins"),
+        ("select bounces where name:~master duration:>60", "Master bounces over 1 min"),
+        ("select projects where plugin:~serum", "Projects using Serum"),
+        ("select bounces where name:~mix | collect \"Latest Mixes\"", "Collect mix bounces"),
+    ]
+
+    private var examplesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Examples", systemImage: "lightbulb")
+                .font(.headline)
+                .foregroundColor(.secondary)
+
+            FlowLayout(spacing: 8) {
+                ForEach(Self.exampleCommands, id: \.command) { example in
+                    Button {
+                        commandText = example.command
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(example.label)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            Text(example.command)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.08))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }

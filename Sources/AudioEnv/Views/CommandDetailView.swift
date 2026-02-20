@@ -58,6 +58,9 @@ struct CommandDetailView: View {
                 // Footer buttons
                 footerActions
 
+                // How it works
+                howItWorksSection
+
                 Spacer()
             }
             .padding(20)
@@ -406,6 +409,68 @@ struct CommandDetailView: View {
         }
         .padding()
         .frame(width: 400, height: 280)
+    }
+
+    // MARK: - How It Works
+
+    private var howItWorksSection: some View {
+        DisclosureGroup("How it works") {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("DSL Syntax")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+
+                    Group {
+                        Text("select ").fontWeight(.semibold) + Text("<entity> ") + Text("where ").fontWeight(.semibold) + Text("<filters> ") + Text("| ").fontWeight(.semibold) + Text("<action>")
+                    }
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Entity types")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+
+                    Text("plugins, projects, bounces, collections")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Operators")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+
+                    Text(": (equals)  ~ (contains)  ^ (starts with)  > <  ! (not)")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Pipe actions")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+
+                    Text("backup, collect \"Name\", tag key:value, export json")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+
+                Text("Full documentation at audioenv.com/docs/commands")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                    .padding(.top, 4)
+            }
+            .padding(.top, 8)
+        }
+        .padding()
+        .background(Color.secondary.opacity(0.05))
+        .cornerRadius(12)
     }
 
     // MARK: - Helpers

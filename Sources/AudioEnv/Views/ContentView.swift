@@ -130,7 +130,7 @@ struct ContentView: View {
                     Spacer()
                 }
             }
-            .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 450)
+            .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
             .navigationTitle("")
             .toolbarTitleDisplayMode(.inline)
             // Clear detail selection whenever the sidebar category changes.

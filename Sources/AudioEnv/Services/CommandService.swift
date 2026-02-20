@@ -122,7 +122,7 @@ class CommandService: ObservableObject {
         for action in actions {
             switch action {
             case .createCollection(let name):
-                await collectionService.createCollection(
+                _ = await collectionService.createCollection(
                     name: name,
                     description: nil,
                     color: nil,
@@ -239,8 +239,10 @@ class CommandService: ObservableObject {
 
     func fetchRecipes(token: String) async {
         do {
-            let url = URL(string: "\(baseURL)/api/commands")!
-            var request = URLRequest(url: url)
+            var components = URLComponents(string: "\(baseURL)/api/commands")!
+            components.queryItems = [URLQueryItem(name: "per_page", value: "10000")]
+
+            var request = URLRequest(url: components.url!)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -250,10 +252,87 @@ class CommandService: ObservableObject {
             }
 
             let decoder = FlexibleISO8601.makeAPIDecoder()
-            recipes = try decoder.decode([Command].self, from: data)
+
+            // API returns CommandResponse schema — try paginated wrapper first, then bare array
+            if let paginated = try? decoder.decode(PaginatedResponse<CommandResponse>.self, from: data) {
+                recipes = paginated.items.map(\.toCommand)
+            } else if let items = try? decoder.decode([CommandResponse].self, from: data) {
+                recipes = items.map(\.toCommand)
+            } else {
+                // Fall back to direct Command decode for legacy compatibility
+                if let paginated = try? decoder.decode(PaginatedResponse<Command>.self, from: data) {
+                    recipes = paginated.items
+                } else {
+                    recipes = try decoder.decode([Command].self, from: data)
+                }
+            }
+
+            logger.info("Fetched \(self.recipes.count) recipes")
         } catch {
             lastError = error.localizedDescription
             logger.error("fetchRecipes failed: \(error)")
+        }
+    }
+
+    // MARK: - API Response Mapping
+
+    /// Matches the API schema for command responses (snake_case fields, JSON-encoded query/actions).
+    private struct CommandResponse: Decodable {
+        let id: UUID
+        let name: String?
+        let description: String?
+        let commandText: String?
+        let queryJson: String?
+        let actionsJson: String?
+        let createdAt: Date?
+        let updatedAt: Date?
+        let lastRunAt: Date?
+        let lastResultCount: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case id, name, description
+            case commandText = "command_text"
+            case queryJson = "query_json"
+            case actionsJson = "actions_json"
+            case createdAt = "created_at"
+            case updatedAt = "updated_at"
+            case lastRunAt = "last_run_at"
+            case lastResultCount = "last_result_count"
+        }
+
+        /// Convert API response to local Command model.
+        var toCommand: Command {
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+            var query = Query(entityType: .plugins, filters: [], combination: .all)
+            var actions: [CommandAction] = []
+
+            // Decode query from JSON string
+            if let jsonStr = queryJson, let jsonData = jsonStr.data(using: .utf8) {
+                if let decoded = try? decoder.decode(Query.self, from: jsonData) {
+                    query = decoded
+                }
+            }
+
+            // Decode actions from JSON string
+            if let jsonStr = actionsJson, let jsonData = jsonStr.data(using: .utf8) {
+                if let decoded = try? decoder.decode([CommandAction].self, from: jsonData) {
+                    actions = decoded
+                }
+            }
+
+            return Command(
+                id: id,
+                query: query,
+                actions: actions,
+                name: name,
+                description: description,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                lastRunAt: lastRunAt,
+                lastResultCount: lastResultCount
+            )
         }
     }
 
@@ -596,10 +675,7 @@ class CommandService: ObservableObject {
             case .format:
                 return matchString(project.format.rawValue, op: op, value: value)
             case .modifiedDate:
-                if let date = project.latestDate {
-                    return matchDate(date, op: op, value: value)
-                }
-                return false
+                return matchDate(project.latestDate, op: op, value: value)
             default:
                 return true
             }
