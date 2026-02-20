@@ -6,6 +6,7 @@ struct BounceDetailPanel: View {
     @EnvironmentObject var bounceService: BounceService
     @EnvironmentObject var auth: AuthenticationService
     @EnvironmentObject var audioPlayer: AudioPlayerService
+    @EnvironmentObject var backup: BackupService
 
     var body: some View {
         ScrollView {
@@ -46,16 +47,45 @@ struct BounceDetailPanel: View {
                 // Play button for local files
                 if bounce.isLocallyAvailable {
                     Button {
-                        audioPlayer.play(bounce: bounce)
+                        if audioPlayer.currentBounce?.id == bounce.id {
+                            audioPlayer.togglePlayPause()
+                        } else {
+                            audioPlayer.play(bounce: bounce)
+                        }
                     } label: {
                         HStack {
-                            Image(systemName: "play.circle.fill")
-                            Text(audioPlayer.currentBounce == bounce && audioPlayer.isPlaying ? "Now Playing" : "Play")
+                            Image(systemName: audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying
+                                  ? "pause.circle.fill" : "play.circle.fill")
+                            Text(audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying ? "Pause" : "Play")
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
-                    .disabled(audioPlayer.currentBounce == bounce && audioPlayer.isPlaying)
+                }
+
+                // Copy Link
+                Button {
+                    let url = "https://audioenv.app/share/bounce/\(bounce.id.uuidString)"
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url, forType: .string)
+                } label: {
+                    Label("Copy Link", systemImage: "link")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+
+                // Backup to Cloud
+                if bounce.isLocallyAvailable {
+                    Button {
+                        Task {
+                            await backup.backupBounce(bounce)
+                        }
+                    } label: {
+                        Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .disabled(backup.isUploading)
                 }
 
                 // Cloud bounce banner

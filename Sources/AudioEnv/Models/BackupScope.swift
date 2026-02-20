@@ -9,6 +9,7 @@ enum BackupScope: Equatable, Identifiable {
     case selectedPlugins([AudioPlugin])
     case selectedProjects([SessionProject])
     case custom(plugins: [AudioPlugin], projects: [SessionProject])
+    case collection(name: String, projects: [SessionProject], plugins: [AudioPlugin])
 
     var id: String {
         switch self {
@@ -26,6 +27,8 @@ enum BackupScope: Equatable, Identifiable {
             return "projects-\(projects.count)"
         case .custom:
             return "custom"
+        case .collection(let name, _, _):
+            return "collection-\(name)"
         }
     }
 
@@ -50,6 +53,8 @@ enum BackupScope: Equatable, Identifiable {
                 projects.isEmpty ? nil : "\(projects.count) project\(projects.count == 1 ? "" : "s")"
             ].compactMap { $0 }
             return parts.joined(separator: " + ")
+        case .collection(let name, _, _):
+            return "\(name) Collection"
         }
     }
 
@@ -70,6 +75,8 @@ enum BackupScope: Equatable, Identifiable {
             return "\(projects.count) manually selected project\(projects.count == 1 ? "" : "s")"
         case .custom(let plugins, let projects):
             return "Custom selection: \(plugins.count) plugins, \(projects.count) projects"
+        case .collection(let name, let projects, let plugins):
+            return "Collection '\(name)': \(projects.count) projects, \(plugins.count) plugin dependencies"
         }
     }
 }
@@ -207,6 +214,9 @@ extension BackupScope {
             return ([], projects)
 
         case .custom(let plugins, let projects):
+            return (plugins, projects)
+
+        case .collection(_, let projects, let plugins):
             return (plugins, projects)
         }
     }

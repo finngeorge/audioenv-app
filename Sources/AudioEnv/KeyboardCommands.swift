@@ -10,6 +10,7 @@ extension Notification.Name {
     static let navigateToSummary = Notification.Name("AudioEnv.navigateToSummary")
     static let navigateToProject = Notification.Name("AudioEnv.navigateToProject")
     static let navigateToCommands = Notification.Name("AudioEnv.navigateToCommands")
+    static let togglePlayPause = Notification.Name("AudioEnv.togglePlayPause")
 }
 
 // MARK: - App Commands
@@ -46,6 +47,13 @@ struct AudioEnvCommands: Commands {
                 NotificationCenter.default.post(name: .navigateToCommands, object: nil)
             }
             .keyboardShortcut("k", modifiers: .command)
+
+            Divider()
+
+            Button("Play / Pause") {
+                NotificationCenter.default.post(name: .togglePlayPause, object: nil)
+            }
+            .keyboardShortcut(.space, modifiers: [])
         }
     }
 }

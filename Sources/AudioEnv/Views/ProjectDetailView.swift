@@ -7,6 +7,7 @@ struct ProjectDetailView: View {
     @State private var showBackups = false
     @State private var isParsing = false
     @EnvironmentObject var scanner: ScannerService
+    @EnvironmentObject var backup: BackupService
 
     private var sessionsToShow: [AudioSession] {
         let base = project.sessions
@@ -106,6 +107,31 @@ struct ProjectDetailView: View {
                     .buttonStyle(.bordered)
                 Button("Copy Path") { copyProjectPath() }
                     .buttonStyle(.bordered)
+                Button {
+                    let url = "https://audioenv.app/share/project/\(project.id)"
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url, forType: .string)
+                } label: {
+                    Label("Copy Link", systemImage: "link")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    Task {
+                        let scope = BackupScope.projectWithDependencies(project)
+                        let (plugins, projects) = scope.resolve(scanner: scanner)
+                        await backup.backupAll(
+                            plugins: plugins,
+                            projects: projects,
+                            backupName: "\(project.name) + Dependencies",
+                            scopeDescription: scope.getDescription()
+                        )
+                    }
+                } label: {
+                    Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+                .disabled(backup.isUploading)
             }
             .fixedSize(horizontal: true, vertical: false)
         }

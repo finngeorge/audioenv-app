@@ -127,12 +127,16 @@ struct BounceBrowserView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: $selectedBounce) {
+                List {
                     ForEach(filteredBounces) { bounce in
                         HStack {
                             if bounce.isLocallyAvailable {
                                 Button {
-                                    audioPlayer.play(bounce: bounce)
+                                    if audioPlayer.currentBounce?.id == bounce.id {
+                                        audioPlayer.togglePlayPause()
+                                    } else {
+                                        audioPlayer.play(bounce: bounce)
+                                    }
                                 } label: {
                                     Image(systemName: audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying
                                           ? "pause.circle.fill" : "play.circle")
@@ -143,12 +147,20 @@ struct BounceBrowserView: View {
                             }
                             BounceRow(bounce: bounce)
                         }
-                        .tag(bounce)
+                        .contentShape(Rectangle())
                         .onTapGesture(count: 2) {
                             if bounce.isLocallyAvailable {
-                                audioPlayer.play(bounce: bounce)
+                                if audioPlayer.currentBounce?.id == bounce.id {
+                                    audioPlayer.togglePlayPause()
+                                } else {
+                                    audioPlayer.play(bounce: bounce)
+                                }
                             }
                         }
+                        .onTapGesture(count: 1) {
+                            selectedBounce = bounce
+                        }
+                        .listRowBackground(selectedBounce == bounce ? Color.accentColor.opacity(0.15) : Color.clear)
                     }
                 }
                 .listStyle(.inset)

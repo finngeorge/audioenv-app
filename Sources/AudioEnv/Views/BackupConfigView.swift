@@ -332,8 +332,7 @@ struct BackupConfigView: View {
             BackupScopeSelector(
                 scanner: scanner,
                 selectedScope: $selectedScope,
-                backupName: $backupName,
-                preferredFormat: $preferredFormat
+                backupName: $backupName
             )
         }
         .onChange(of: selectedScope) { _, newScope in

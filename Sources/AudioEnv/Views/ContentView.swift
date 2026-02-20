@@ -26,6 +26,7 @@ struct ContentView: View {
     @EnvironmentObject var scanner: ScannerService
     @EnvironmentObject var backup: BackupService
     @EnvironmentObject var auth: AuthenticationService
+    @EnvironmentObject var audioPlayer: AudioPlayerService
 
     @State private var section:         AppSection?    = .summary
     @State private var selectedProject: SessionProject? = nil
@@ -251,6 +252,9 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToCommands)) { _ in
             section = .commands
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .togglePlayPause)) { _ in
+            audioPlayer.togglePlayPause()
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToProject)) { notification in
             guard let projectPath = notification.userInfo?["projectPath"] as? String else { return }

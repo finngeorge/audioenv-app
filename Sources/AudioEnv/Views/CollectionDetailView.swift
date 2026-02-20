@@ -10,10 +10,13 @@ struct CollectionDetailView: View {
     @EnvironmentObject var bounceService: BounceService
     @EnvironmentObject var audioPlayer: AudioPlayerService
 
+    @EnvironmentObject var backup: BackupService
+
     @State private var isEditing = false
     @State private var showEditSheet = false
     @State private var showCollectionBuilder = false
     @State private var showDeleteConfirmation = false
+    @State private var showBackupScopeSelector = false
     @State private var projects: [CollectionService.CollectionProject] = []
     @State private var bounces: [CollectionService.CollectionBounce] = []
     @State private var isLoadingProjects = false
@@ -162,6 +165,29 @@ struct CollectionDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 }
+
+                // Copy Link
+                Button {
+                    let url = "https://audioenv.app/share/collection/\(collectionId.uuidString)"
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url, forType: .string)
+                } label: {
+                    Label("Copy Link", systemImage: "link")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                // Backup to Cloud
+                Button {
+                    backupCollection(collection)
+                } label: {
+                    Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(backup.isUploading)
 
                 // Edit mode toggle
                 Button {
@@ -546,6 +572,37 @@ struct CollectionDetailView: View {
             audioPlayer.togglePlayPause()
         } else {
             audioPlayer.play(bounce: bounce)
+        }
+    }
+
+    private func backupCollection(_ collection: AudioCollection) {
+        // Resolve collection projects from local scanner data
+        let allProjects = SessionProject.groupSessions(scanner.sessions)
+        // Match plugin dependencies using fuzzy matching
+        let usedPluginNames = Set(allProjects.flatMap { project in
+            project.sessions.flatMap { session -> [String] in
+                guard let parsed = session.project else { return [] }
+                switch parsed {
+                case .ableton(let p): return p.usedPlugins
+                case .logic(_), .proTools(_): return []
+                }
+            }
+        })
+        let matchedPlugins = scanner.plugins.filter { plugin in
+            let pluginName = plugin.name.lowercased()
+            return usedPluginNames.contains { usedName in
+                let name = usedName.lowercased()
+                return name.contains(pluginName) || pluginName.contains(name)
+            }
+        }
+
+        Task {
+            await backup.backupAll(
+                plugins: matchedPlugins,
+                projects: allProjects,
+                backupName: "\(collection.name) Collection",
+                scopeDescription: "Collection '\(collection.name)'"
+            )
         }
     }
 

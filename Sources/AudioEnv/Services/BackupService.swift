@@ -736,6 +736,33 @@ class BackupService: ObservableObject {
         isUploading    = false
     }
 
+    /// Upload a single bounce audio file to S3.
+    func backupBounce(_ bounce: Bounce) async {
+        guard let dest = destination else {
+            lastError = "No backup destination configured."
+            return
+        }
+        guard bounce.isLocallyAvailable else {
+            lastError = "Bounce is not locally available."
+            return
+        }
+        isUploading    = true
+        uploadProgress = 0
+        lastError      = nil
+
+        let remote = "bounces/\(bounce.format)/\(bounce.fileName)"
+        do {
+            try await dest.upload(localPath: bounce.filePath, remotePath: remote)
+            uploadLog.append(BackupLogEntry(path: bounce.filePath, remote: remote, status: .success))
+        } catch {
+            uploadLog.append(BackupLogEntry(path: bounce.filePath, remote: remote, status: .failed(error.localizedDescription)))
+            lastError = error.localizedDescription
+        }
+
+        uploadProgress = 1.0
+        isUploading    = false
+    }
+
     // MARK: – Backup Listing
 
     /// Load list of available backups from S3

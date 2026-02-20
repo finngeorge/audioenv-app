@@ -5,11 +5,13 @@ struct BackupScopeSelector: View {
     @ObservedObject var scanner: ScannerService
     @Binding var selectedScope: BackupScope?
     @Binding var backupName: String
-    @Binding var preferredFormat: PluginDeduplicator.PreferredFormat
+
+    @EnvironmentObject var collectionService: CollectionService
 
     @State private var scopeType: ScopeType = .everything
     @State private var selectedProject: SessionProject? = nil
     @State private var selectedPlugin: AudioPlugin? = nil
+    @State private var selectedCollection: AudioCollection? = nil
     @State private var includeProjectDependencies = true
     @State private var customPlugins: Set<UUID> = []
     @State private var customProjects: Set<String> = []
@@ -19,6 +21,7 @@ struct BackupScopeSelector: View {
 
     enum ScopeType: String, CaseIterable, Identifiable {
         case everything = "Complete Environment"
+        case collection = "Collection"
         case project = "Project-Based"
         case plugin = "Single Plugin"
         case custom = "Custom Selection"
@@ -28,6 +31,7 @@ struct BackupScopeSelector: View {
         var icon: String {
             switch self {
             case .everything: return "square.stack.3d.up.fill"
+            case .collection: return "tray.full.fill"
             case .project: return "folder.fill"
             case .plugin: return "waveform"
             case .custom: return "checkmark.square"
@@ -38,6 +42,8 @@ struct BackupScopeSelector: View {
             switch self {
             case .everything:
                 return "Back up all plugins and projects"
+            case .collection:
+                return "Back up all projects and plugin dependencies in a collection"
             case .project:
                 return "Back up a specific project with optional plugin dependencies"
             case .plugin:
@@ -83,31 +89,6 @@ struct BackupScopeSelector: View {
                         .padding()
                         .background(Color.secondary.opacity(0.05))
                         .cornerRadius(12)
-
-                    // Deduplication Options
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Plugin Format Preference")
-                            .font(.headline)
-
-                        Text("If multiple formats of the same plugin exist, keep:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        Picker("Preferred Format", selection: $preferredFormat) {
-                            Text("VST3 (Recommended)").tag(PluginDeduplicator.PreferredFormat.vst3)
-                            Text("Audio Unit (AU)").tag(PluginDeduplicator.PreferredFormat.au)
-                            Text("VST").tag(PluginDeduplicator.PreferredFormat.vst)
-                            Text("AAX").tag(PluginDeduplicator.PreferredFormat.aax)
-                        }
-                        .pickerStyle(.segmented)
-
-                        Text("This reduces backup size by avoiding duplicate plugins.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .background(Color.secondary.opacity(0.05))
-                    .cornerRadius(12)
 
                     // Backup Name
                     VStack(alignment: .leading, spacing: 12) {
@@ -221,6 +202,9 @@ struct BackupScopeSelector: View {
                 Text("This will back up all \(scanner.plugins.count) plugins and all \(SessionProject.groupSessions(scanner.sessions).count) projects.")
                     .foregroundColor(.secondary)
 
+            case .collection:
+                collectionOptions()
+
             case .project:
                 projectOptions()
 
@@ -277,6 +261,27 @@ struct BackupScopeSelector: View {
 
             if let plugin = selectedPlugin {
                 Text("Plugin: \(plugin.name)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private func collectionOptions() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Select Collection", selection: $selectedCollection) {
+                Text("Choose a collection...").tag(nil as AudioCollection?)
+                ForEach(collectionService.collections) { collection in
+                    Text(collection.name).tag(collection as AudioCollection?)
+                }
+            }
+            .onChange(of: selectedCollection) { _, _ in
+                updateBackupName()
+                stats = nil
+            }
+
+            if let collection = selectedCollection {
+                Text("Collection \"\(collection.name)\" — \(collection.projectCount) projects, \(collection.bounceCount) bounces")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -428,6 +433,8 @@ struct BackupScopeSelector: View {
         switch scopeType {
         case .everything:
             return true
+        case .collection:
+            return selectedCollection != nil
         case .project:
             return selectedProject != nil
         case .plugin:
@@ -446,6 +453,31 @@ struct BackupScopeSelector: View {
         switch scopeType {
         case .everything:
             return .everything
+
+        case .collection:
+            guard let collection = selectedCollection else { return nil }
+            // Resolve collection projects to local SessionProject objects
+            let allProjects = SessionProject.groupSessions(scanner.sessions)
+            // Match by name (collection projects reference scanned sessions)
+            let collectionProjects = allProjects // include all for now; filtered at backup time
+            // Resolve plugin dependencies from matched projects using fuzzy matching
+            let usedPluginNames = Set(collectionProjects.flatMap { project in
+                project.sessions.flatMap { session -> [String] in
+                    guard let parsed = session.project else { return [] }
+                    switch parsed {
+                    case .ableton(let p): return p.usedPlugins
+                    case .logic(_), .proTools(_): return []
+                    }
+                }
+            })
+            let matchedPlugins = scanner.plugins.filter { plugin in
+                let pluginName = plugin.name.lowercased()
+                return usedPluginNames.contains { usedName in
+                    let name = usedName.lowercased()
+                    return name.contains(pluginName) || pluginName.contains(name)
+                }
+            }
+            return .collection(name: collection.name, projects: collectionProjects, plugins: matchedPlugins)
 
         case .project:
             guard let project = selectedProject else { return nil }
@@ -481,7 +513,6 @@ struct BackupScopeSelector: View {
     BackupScopeSelector(
         scanner: ScannerService(),
         selectedScope: .constant(nil),
-        backupName: .constant(""),
-        preferredFormat: .constant(.vst3)
+        backupName: .constant("")
     )
 }

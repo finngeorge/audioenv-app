@@ -307,17 +307,43 @@ struct PluginDetailView: View {
     }
 
     private func actions() -> some View {
-        HStack(spacing: 10) {
-            Button("Show in Finder") { showInFinder() }
-                .buttonStyle(.bordered)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Button("Show in Finder") { showInFinder() }
+                    .buttonStyle(.bordered)
 
-            Button("Copy Path") { copyPath() }
-                .buttonStyle(.bordered)
+                Button("Copy Path") { copyPath() }
+                    .buttonStyle(.bordered)
 
-            Button("Copy Bundle ID") { copyBundleID() }
+                Button("Copy Bundle ID") { copyBundleID() }
+                    .buttonStyle(.bordered)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            HStack(spacing: 10) {
+                Button {
+                    let url = "https://audioenv.app/share/plugin/\(plugin.id.uuidString)"
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url, forType: .string)
+                } label: {
+                    Label("Copy Link", systemImage: "link")
+                }
                 .buttonStyle(.bordered)
+                .disabled(backup.backupsContaining(plugin: plugin).isEmpty)
+
+                Button {
+                    Task {
+                        await backup.backupPlugins([plugin],
+                            backupName: "\(plugin.name) Plugin",
+                            scopeDescription: "Single plugin: \(plugin.name) (\(plugin.format.rawValue))")
+                    }
+                } label: {
+                    Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+                .disabled(backup.isUploading)
+            }
         }
-        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func licenseMetadataHints() -> [(key: String, value: String)] {
