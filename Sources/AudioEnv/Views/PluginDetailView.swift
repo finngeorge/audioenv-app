@@ -322,7 +322,7 @@ struct PluginDetailView: View {
 
             HStack(spacing: 10) {
                 Button {
-                    let url = "https://audioenv.app/share/plugin/\(plugin.id.uuidString)"
+                    let url = "https://audioenv.com/share/plugin/\(plugin.id.uuidString)"
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url, forType: .string)
                 } label: {

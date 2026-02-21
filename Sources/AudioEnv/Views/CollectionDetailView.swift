@@ -182,28 +182,47 @@ struct CollectionDetailView: View {
                     .controlSize(.small)
                 }
 
-                // Copy Link
-                Button {
-                    let url = "https://audioenv.app/share/collection/\(collectionId.uuidString)"
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url, forType: .string)
-                } label: {
-                    Label("Copy Link", systemImage: "link")
-                        .font(.caption)
+                // Copy Link (only visible after backup exists)
+                if hasExistingBackup(for: collection) {
+                    Button {
+                        let url = "https://audioenv.com/share/collection/\(collectionId.uuidString)"
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(url, forType: .string)
+                    } label: {
+                        Label("Copy Link", systemImage: "link")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
 
-                // Backup to Cloud
-                Button {
-                    backupCollection(collection)
-                } label: {
-                    Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
-                        .font(.caption)
+                // Backup / Backed Up button
+                if hasExistingBackup(for: collection) {
+                    Menu {
+                        Button {
+                            backupCollection(collection)
+                        } label: {
+                            Label("New Backup", systemImage: "arrow.clockwise.icloud")
+                        }
+                        .disabled(backup.isUploading)
+                    } label: {
+                        Label("Backed Up", systemImage: "checkmark.icloud")
+                            .font(.caption)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .frame(width: 110)
+                    .controlSize(.small)
+                } else {
+                    Button {
+                        backupCollection(collection)
+                    } label: {
+                        Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(backup.isUploading)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(backup.isUploading)
 
                 // Edit mode toggle
                 Button {
@@ -653,6 +672,12 @@ struct CollectionDetailView: View {
             matchedBounces: matchedBounces
         )
         showBackupConfirmation = true
+    }
+
+    /// Check if this collection already has a backup in S3.
+    private func hasExistingBackup(for collection: AudioCollection) -> Bool {
+        let expectedName = "\(collection.name) Collection"
+        return backup.availableBackups.contains { $0.name == expectedName }
     }
 
     private var backupConfirmationTitle: String {

@@ -108,7 +108,7 @@ struct ProjectDetailView: View {
                 Button("Copy Path") { copyProjectPath() }
                     .buttonStyle(.bordered)
                 Button {
-                    let url = "https://audioenv.app/share/project/\(project.id)"
+                    let url = "https://audioenv.com/share/project/\(project.id)"
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url, forType: .string)
                 } label: {

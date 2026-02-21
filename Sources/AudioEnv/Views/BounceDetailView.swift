@@ -65,7 +65,7 @@ struct BounceDetailPanel: View {
 
                 // Copy Link
                 Button {
-                    let url = "https://audioenv.app/share/bounce/\(bounce.id.uuidString)"
+                    let url = "https://audioenv.com/share/bounce/\(bounce.id.uuidString)"
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url, forType: .string)
                 } label: {
