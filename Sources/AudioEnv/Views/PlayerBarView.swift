@@ -4,6 +4,7 @@ import SwiftUI
 /// Only visible when a bounce is currently loaded.
 struct PlayerBarView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
+    @EnvironmentObject var playbackTime: PlaybackTimeObserver
 
     var body: some View {
         if let bounce = audioPlayer.currentBounce {
@@ -83,7 +84,7 @@ struct PlayerBarView: View {
                         }
 
                         HStack(spacing: 6) {
-                            Text(formatTime(audioPlayer.currentTime))
+                            Text(formatTime(playbackTime.currentTime))
                                 .font(.system(size: 10, design: .monospaced))
                                 .foregroundColor(.secondary)
                                 .frame(width: 32, alignment: .trailing)
@@ -103,13 +104,13 @@ struct PlayerBarView: View {
                                     DragGesture(minimumDistance: 0)
                                         .onChanged { value in
                                             let fraction = max(0, min(1, value.location.x / geometry.size.width))
-                                            audioPlayer.seek(to: fraction * audioPlayer.duration)
+                                            audioPlayer.seek(to: fraction * playbackTime.duration)
                                         }
                                 )
                             }
                             .frame(height: 3)
 
-                            Text(formatTime(audioPlayer.duration))
+                            Text(formatTime(playbackTime.duration))
                                 .font(.system(size: 10, design: .monospaced))
                                 .foregroundColor(.secondary)
                                 .frame(width: 32, alignment: .leading)
@@ -137,8 +138,8 @@ struct PlayerBarView: View {
     }
 
     private func progressWidth(totalWidth: CGFloat) -> CGFloat {
-        guard audioPlayer.duration > 0 else { return 0 }
-        return totalWidth * CGFloat(audioPlayer.currentTime / audioPlayer.duration)
+        guard playbackTime.duration > 0 else { return 0 }
+        return totalWidth * CGFloat(playbackTime.currentTime / playbackTime.duration)
     }
 
     private func formatTime(_ time: TimeInterval) -> String {

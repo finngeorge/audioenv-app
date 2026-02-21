@@ -2,6 +2,13 @@ import AVFoundation
 import Foundation
 import os.log
 
+/// Fast-changing playback time state, isolated so only PlayerBarView re-renders on tick.
+@MainActor
+class PlaybackTimeObserver: ObservableObject {
+    @Published var currentTime: TimeInterval = 0
+    @Published var duration: TimeInterval = 0
+}
+
 /// Manages audio playback of bounce files with queue support.
 @MainActor
 class AudioPlayerService: NSObject, ObservableObject {
@@ -13,11 +20,12 @@ class AudioPlayerService: NSObject, ObservableObject {
     @Published var currentBounce: Bounce?
     @Published var queue: [Bounce] = []
     @Published var isPlaying = false
-    @Published var currentTime: TimeInterval = 0
-    @Published var duration: TimeInterval = 0
     @Published var volume: Float = 1.0 {
         didSet { player?.volume = volume }
     }
+
+    /// Time state split out so high-frequency updates don't invalidate all observers.
+    let timeObserver = PlaybackTimeObserver()
 
     // MARK: - Private State
 
@@ -47,8 +55,8 @@ class AudioPlayerService: NSObject, ObservableObject {
 
             player = newPlayer
             currentBounce = bounce
-            duration = newPlayer.duration
-            currentTime = 0
+            timeObserver.duration = newPlayer.duration
+            timeObserver.currentTime = 0
 
             newPlayer.play()
             isPlaying = true
@@ -112,7 +120,7 @@ class AudioPlayerService: NSObject, ObservableObject {
     /// Play the previous bounce in the queue, or restart current track.
     func previous() {
         // If more than 3 seconds in, restart current track
-        if currentTime > 3 {
+        if timeObserver.currentTime > 3 {
             seek(to: 0)
             return
         }
@@ -133,7 +141,7 @@ class AudioPlayerService: NSObject, ObservableObject {
     /// Seek to a specific time in seconds.
     func seek(to time: TimeInterval) {
         player?.currentTime = time
-        currentTime = time
+        timeObserver.currentTime = time
     }
 
     /// Play all provided bounces as a queue starting from the first.
@@ -171,8 +179,8 @@ class AudioPlayerService: NSObject, ObservableObject {
         player = nil
         isPlaying = false
         currentBounce = nil
-        currentTime = 0
-        duration = 0
+        timeObserver.currentTime = 0
+        timeObserver.duration = 0
         currentQueueIndex = nil
         stopTimer()
     }
@@ -182,7 +190,7 @@ class AudioPlayerService: NSObject, ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let player = self.player else { return }
-                self.currentTime = player.currentTime
+                self.timeObserver.currentTime = player.currentTime
             }
         }
     }
@@ -207,8 +215,8 @@ extension AudioPlayerService: AVAudioPlayerDelegate {
                 self.play(bounce: self.queue[idx + 1])
             } else {
                 self.currentBounce = nil
-                self.currentTime = 0
-                self.duration = 0
+                self.timeObserver.currentTime = 0
+                self.timeObserver.duration = 0
                 self.currentQueueIndex = nil
             }
         }

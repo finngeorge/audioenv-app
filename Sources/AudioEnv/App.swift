@@ -37,6 +37,7 @@ struct AudioEnvApp: App {
                 .environmentObject(collectionService)
                 .environmentObject(bounceService)
                 .environmentObject(audioPlayer)
+                .environmentObject(audioPlayer.timeObserver)
                 .environmentObject(commandService)
                 .environmentObject(patternService)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
