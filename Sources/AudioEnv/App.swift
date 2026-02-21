@@ -134,6 +134,11 @@ struct AudioEnvApp: App {
                     // Rebuild menu bar to reflect scan state
                     menuBar.rebuildMenu()
                 }
+                .onChange(of: backup.destination != nil) { _, hasDestination in
+                    if hasDestination {
+                        Task { await backup.loadAvailableBackups() }
+                    }
+                }
                 .onChange(of: sync.isSyncing) { _, _ in
                     menuBar.rebuildMenu()
                 }
