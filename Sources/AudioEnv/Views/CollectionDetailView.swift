@@ -531,8 +531,8 @@ struct CollectionDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let br = bounce.formattedBitrate {
-                        Text(br)
+                    if let br = bounce.bitrate {
+                        Text("\(br) kbps")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
