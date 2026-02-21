@@ -10,6 +10,7 @@ struct AudioCollection: Identifiable, Hashable, Codable {
     let description: String?
     let color: String?
     let contentTypes: [String]
+    let downloadsEnabled: Bool
     let createdAt: Date
     let updatedAt: Date
     let projectCount: Int
@@ -21,6 +22,7 @@ struct AudioCollection: Identifiable, Hashable, Codable {
         case userId = "user_id"
         case name, description, color, source
         case contentTypes = "content_types"
+        case downloadsEnabled = "downloads_enabled"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case projectCount = "project_count"
@@ -35,6 +37,7 @@ struct AudioCollection: Identifiable, Hashable, Codable {
         description = try container.decodeIfPresent(String.self, forKey: .description)
         color = try container.decodeIfPresent(String.self, forKey: .color)
         contentTypes = try container.decodeIfPresent([String].self, forKey: .contentTypes) ?? ["projects"]
+        downloadsEnabled = try container.decodeIfPresent(Bool.self, forKey: .downloadsEnabled) ?? true
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         projectCount = try container.decodeIfPresent(Int.self, forKey: .projectCount) ?? 0

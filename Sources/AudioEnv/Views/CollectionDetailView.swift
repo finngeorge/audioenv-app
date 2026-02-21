@@ -23,6 +23,7 @@ struct CollectionDetailView: View {
     @State private var bounces: [CollectionService.CollectionBounce] = []
     @State private var isLoadingProjects = false
     @State private var isLoadingBounces = false
+    @State private var showSharePopup = false
 
     /// Live collection from service array — updates when fetchCollections refreshes.
     private var collection: AudioCollection? {
@@ -188,12 +189,19 @@ struct CollectionDetailView: View {
                         let url = "https://audioenv.com/share/collection/\(collectionId.uuidString)"
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(url, forType: .string)
+                        showSharePopup = true
                     } label: {
                         Label("Copy Link", systemImage: "link")
                             .font(.caption)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .popover(isPresented: $showSharePopup, arrowEdge: .bottom) {
+                        ShareLinkPopover(
+                            collection: collection,
+                            isPresented: $showSharePopup
+                        )
+                    }
                 }
 
                 // Backup / Backed Up button
@@ -792,6 +800,78 @@ struct CollectionDetailView: View {
     }
 }
 
+// MARK: - Share Link Popover
+
+struct ShareLinkPopover: View {
+    let collection: AudioCollection
+    @Binding var isPresented: Bool
+    @EnvironmentObject var collectionService: CollectionService
+    @EnvironmentObject var auth: AuthenticationService
+
+    @State private var downloadsEnabled: Bool
+    @State private var autoDismissTask: Task<Void, Never>?
+
+    init(collection: AudioCollection, isPresented: Binding<Bool>) {
+        self.collection = collection
+        self._isPresented = isPresented
+        _downloadsEnabled = State(initialValue: collection.downloadsEnabled)
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                Text("Link Copied")
+                    .font(.headline)
+            }
+
+            Divider()
+
+            Toggle("Allow Downloads", isOn: $downloadsEnabled)
+                .toggleStyle(.switch)
+                .font(.subheadline)
+                .onChange(of: downloadsEnabled) { _, newValue in
+                    resetAutoDismiss()
+                    Task {
+                        if let token = auth.authToken {
+                            await collectionService.updateCollection(
+                                id: collection.id,
+                                name: nil,
+                                description: nil,
+                                color: nil,
+                                downloadsEnabled: newValue,
+                                token: token
+                            )
+                        }
+                    }
+                }
+        }
+        .padding()
+        .frame(width: 220)
+        .onAppear {
+            scheduleAutoDismiss()
+        }
+        .onDisappear {
+            autoDismissTask?.cancel()
+        }
+    }
+
+    private func scheduleAutoDismiss() {
+        autoDismissTask?.cancel()
+        autoDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if !Task.isCancelled {
+                isPresented = false
+            }
+        }
+    }
+
+    private func resetAutoDismiss() {
+        scheduleAutoDismiss()
+    }
+}
+
 // MARK: - Backup Confirmation Stats
 
 struct BackupConfirmationStats {
@@ -819,12 +899,14 @@ struct EditCollectionSheet: View {
     let collection: AudioCollection
     @EnvironmentObject var collectionService: CollectionService
     @EnvironmentObject var auth: AuthenticationService
+    @EnvironmentObject var backup: BackupService
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String
     @State private var description: String
     @State private var selectedColor: String
     @State private var selectedContentTypes: Set<CollectionContentType>
+    @State private var downloadsEnabled: Bool
 
     private let colorOptions = [
         "3B82F6", "EF4444", "10B981", "F59E0B",
@@ -838,6 +920,12 @@ struct EditCollectionSheet: View {
         _selectedColor = State(initialValue: collection.color ?? "3B82F6")
         let types = Set(collection.contentTypes.compactMap { CollectionContentType(rawValue: $0) })
         _selectedContentTypes = State(initialValue: types.isEmpty ? [.projects] : types)
+        _downloadsEnabled = State(initialValue: collection.downloadsEnabled)
+    }
+
+    private var hasExistingBackup: Bool {
+        let expectedName = "\(collection.name) Collection"
+        return backup.availableBackups.contains { $0.name == expectedName }
     }
 
     var body: some View {
@@ -895,6 +983,16 @@ struct EditCollectionSheet: View {
                         }
                     }
                 }
+
+                if hasExistingBackup {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Sharing")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Toggle("Allow Downloads", isOn: $downloadsEnabled)
+                            .toggleStyle(.switch)
+                    }
+                }
             }
             .formStyle(.grouped)
 
@@ -911,6 +1009,7 @@ struct EditCollectionSheet: View {
                                 description: description.isEmpty ? nil : description,
                                 color: selectedColor,
                                 contentTypes: types,
+                                downloadsEnabled: downloadsEnabled,
                                 token: token
                             )
                         }
@@ -922,7 +1021,7 @@ struct EditCollectionSheet: View {
             }
         }
         .padding()
-        .frame(width: 500, height: 420)
+        .frame(width: 500, height: 480)
     }
 }
 

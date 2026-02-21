@@ -91,7 +91,7 @@ class CollectionService: ObservableObject {
         }
     }
 
-    func updateCollection(id: UUID, name: String?, description: String?, color: String?, contentTypes: [String]? = nil, token: String) async {
+    func updateCollection(id: UUID, name: String?, description: String?, color: String?, contentTypes: [String]? = nil, downloadsEnabled: Bool? = nil, token: String) async {
         do {
             let url = URL(string: "\(baseURL)/api/collections/\(id)")!
             var request = URLRequest(url: url)
@@ -104,6 +104,7 @@ class CollectionService: ObservableObject {
             if let d = description { payload["description"] = d }
             if let c = color { payload["color"] = c }
             if let ct = contentTypes { payload["content_types"] = ct }
+            if let de = downloadsEnabled { payload["downloads_enabled"] = de }
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
             let (data, response) = try await URLSession.shared.data(for: request)
