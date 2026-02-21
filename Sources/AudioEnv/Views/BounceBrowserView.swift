@@ -28,33 +28,20 @@ struct BounceBrowserView: View {
         }
     }
 
-    private static let formatOptions = ["wav", "mp3", "aiff", "flac"]
+    private var availableFormats: [String] {
+        let formats = Set(bounceService.bounces.map { $0.format })
+        let order = ["wav", "mp3", "aiff", "flac", "m4a"]
+        return order.filter { formats.contains($0) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Search bar
-            HStack(spacing: 10) {
+            // Search bar + actions
+            HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                 TextField("Search bounces...", text: $search)
                     .textFieldStyle(.roundedBorder)
-            }
-            .padding([.leading, .trailing])
-
-            // Filters
-            HStack(spacing: 10) {
-                // Format filter
-                Picker("Format", selection: $formatFilter) {
-                    Text("All").tag(nil as String?)
-                    ForEach(Self.formatOptions, id: \.self) { fmt in
-                        Text(fmt.uppercased()).tag(fmt as String?)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 220)
-
-                Spacer()
 
                 // Play all button
                 if !filteredBounces.isEmpty {
@@ -79,7 +66,20 @@ struct BounceBrowserView: View {
                 .controlSize(.small)
             }
             .padding(.horizontal)
-            .padding(.top, 4)
+
+            // Format filter (only when multiple formats exist)
+            if availableFormats.count > 1 {
+                Picker("Format", selection: $formatFilter) {
+                    Text("All").tag(nil as String?)
+                    ForEach(availableFormats, id: \.self) { fmt in
+                        Text(fmt.uppercased()).tag(fmt as String?)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal)
+                .padding(.top, 4)
+            }
 
             // Folder filter chips
             if !bounceService.bounceFolders.isEmpty {
@@ -189,13 +189,6 @@ struct BounceBrowserView: View {
                 await bounceService.fetchSuggestions(token: token)
             }
         }
-        .onChange(of: formatFilter) { _, newFormat in
-            Task {
-                if let token = auth.authToken {
-                    await bounceService.fetchBounces(token: token, folderId: folderFilter, format: newFormat, linked: linkedFilter)
-                }
-            }
-        }
         .sheet(isPresented: $showLinkFolderPrompt) {
             LinkBounceFolderSheet()
         }
@@ -209,7 +202,7 @@ struct BounceBrowserView: View {
             Text("No Bounce Folders Linked")
                 .font(.headline)
                 .foregroundColor(.secondary)
-            Text("Link a folder containing your audio bounces\n(WAV, MP3, AIFF, FLAC)")
+            Text("Link a folder containing your audio bounces\n(WAV, MP3, AIFF, FLAC, M4A)")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
