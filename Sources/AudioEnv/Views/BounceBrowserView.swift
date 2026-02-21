@@ -312,6 +312,7 @@ private struct BounceRow: View {
         case "mp3":  return Color(red: 0.94, green: 0.79, blue: 0.53) // #f0c987
         case "aiff": return Color(red: 0.79, green: 0.70, blue: 0.90) // #c9b3e6
         case "flac": return Color(red: 0.66, green: 0.90, blue: 0.81) // #a8e6cf
+        case "m4a":  return Color(red: 0.91, green: 0.77, blue: 0.60) // #e8c49a
         default:     return .secondary
         }
     }

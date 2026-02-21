@@ -26,7 +26,7 @@ class BounceService: ObservableObject {
     private static let scanThrottleSeconds: TimeInterval = 30
 
     /// Supported audio file extensions for bounces.
-    private static let audioExtensions: Set<String> = ["wav", "mp3", "aiff", "aif", "flac"]
+    private static let audioExtensions: Set<String> = ["wav", "mp3", "aiff", "aif", "flac", "m4a"]
 
     private let baseURL: String = {
         if let override = UserDefaults.standard.string(forKey: "apiBaseURL"), !override.isEmpty {
@@ -203,6 +203,7 @@ class BounceService: ObservableObject {
             case "mp3": format = "mp3"
             case "aiff", "aif": format = "aiff"
             case "flac": format = "flac"
+            case "m4a": format = "m4a"
             default: format = ext
             }
 
@@ -230,8 +231,8 @@ class BounceService: ObservableObject {
         let url = URL(fileURLWithPath: path)
         let ext = (path as NSString).pathExtension.lowercased()
 
-        // AVAudioFile works for WAV, AIFF, FLAC but not MP3 — skip it for MP3 to avoid console error spam
-        if ext != "mp3", let audioFile = try? AVAudioFile(forReading: url) {
+        // AVAudioFile works for WAV, AIFF, FLAC but not MP3/M4A — skip compressed formats to use AVURLAsset for bitrate
+        if ext != "mp3" && ext != "m4a", let audioFile = try? AVAudioFile(forReading: url) {
             let format = audioFile.fileFormat
             let duration = Double(audioFile.length) / format.sampleRate
             let sampleRate = Int(format.sampleRate)
