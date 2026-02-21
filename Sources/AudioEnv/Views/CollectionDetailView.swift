@@ -101,82 +101,18 @@ struct CollectionDetailView: View {
         .sheet(isPresented: $showCollectionBuilder) {
             CollectionBuilderPopup(collectionId: collectionId)
         }
-        .sheet(isPresented: $showBackupConfirmation) {
+        .confirmationDialog(
+            backupConfirmationTitle,
+            isPresented: $showBackupConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Start Backup") {
+                startBackup()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
             if let stats = backupConfirmationStats {
-                VStack(spacing: 20) {
-                    Text("Backup Collection")
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Collection: \(stats.collectionName)")
-                            .font(.headline)
-
-                        Divider()
-
-                        if stats.projectCount > 0 {
-                            HStack {
-                                Image(systemName: "folder")
-                                    .foregroundColor(.blue)
-                                Text("\(stats.projectCount) project\(stats.projectCount == 1 ? "" : "s")")
-                                Spacer()
-                            }
-                        }
-                        if stats.bounceCount > 0 {
-                            HStack {
-                                Image(systemName: "waveform")
-                                    .foregroundColor(.green)
-                                Text("\(stats.bounceCount) bounce\(stats.bounceCount == 1 ? "" : "s")")
-                                Spacer()
-                            }
-                        }
-                        if stats.pluginCount > 0 {
-                            HStack {
-                                Image(systemName: "puzzlepiece.extension")
-                                    .foregroundColor(.purple)
-                                Text("\(stats.pluginCount) plugin dependenc\(stats.pluginCount == 1 ? "y" : "ies")")
-                                Spacer()
-                            }
-                        }
-
-                        Divider()
-
-                        HStack {
-                            Text("Estimated size:")
-                                .fontWeight(.medium)
-                            Spacer()
-                            Text(stats.formattedSize)
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .padding()
-                    .background(Color.secondary.opacity(0.05))
-                    .cornerRadius(12)
-
-                    if stats.isEmpty {
-                        Text("Nothing to back up in this collection.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack {
-                        Button("Cancel") {
-                            showBackupConfirmation = false
-                        }
-                        .buttonStyle(.bordered)
-
-                        Spacer()
-
-                        Button("Start Backup") {
-                            showBackupConfirmation = false
-                            startBackup()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(stats.isEmpty)
-                    }
-                }
-                .padding()
-                .frame(width: 420)
+                Text(backupConfirmationMessage(stats))
             }
         }
         .task(id: collectionId) {
@@ -717,6 +653,30 @@ struct CollectionDetailView: View {
             matchedBounces: matchedBounces
         )
         showBackupConfirmation = true
+    }
+
+    private var backupConfirmationTitle: String {
+        if let stats = backupConfirmationStats {
+            return "Backup \"\(stats.collectionName)\"?"
+        }
+        return "Backup Collection?"
+    }
+
+    private func backupConfirmationMessage(_ stats: BackupConfirmationStats) -> String {
+        var parts: [String] = []
+        if stats.projectCount > 0 {
+            parts.append("\(stats.projectCount) project\(stats.projectCount == 1 ? "" : "s")")
+        }
+        if stats.bounceCount > 0 {
+            parts.append("\(stats.bounceCount) bounce\(stats.bounceCount == 1 ? "" : "s")")
+        }
+        if stats.pluginCount > 0 {
+            parts.append("\(stats.pluginCount) plugin dependenc\(stats.pluginCount == 1 ? "y" : "ies")")
+        }
+        if parts.isEmpty {
+            return "Nothing to back up in this collection."
+        }
+        return "This will back up \(parts.joined(separator: ", ")) (\(stats.formattedSize))."
     }
 
     private func startBackup() {
