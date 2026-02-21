@@ -656,103 +656,67 @@ struct CollectionDetailView: View {
     }
 
     private func backupCollection(_ collection: AudioCollection) {
-        // Capture values needed for background work
-        let sessions = scanner.sessions
-        let allPlugins = scanner.plugins
-        let collectionProjectList = projects
-        let collectionBounceList = bounces
-        let hasProjects = collection.hasProjects
-        let hasBounces = collection.hasBounces
-        let collectionName = collection.name
+        // Resolve collection projects by matching fetched collection projects to local scanner data
+        let allLocalProjects = SessionProject.groupSessions(scanner.sessions)
+        let collectionProjectNames = Set(projects.map { $0.displayName.lowercased() })
 
-        Task.detached {
-            // Resolve collection projects by matching fetched collection projects to local scanner data
-            let allLocalProjects = SessionProject.groupSessions(sessions)
-            let collectionProjectNames = Set(collectionProjectList.map { $0.displayName.lowercased() })
-
-            let matchedProjects: [SessionProject]
-            if hasProjects && !collectionProjectNames.isEmpty {
-                matchedProjects = allLocalProjects.filter { localProject in
-                    collectionProjectNames.contains(localProject.name.lowercased())
-                }
-            } else {
-                matchedProjects = []
+        let matchedProjects: [SessionProject]
+        if collection.hasProjects && !collectionProjectNames.isEmpty {
+            matchedProjects = allLocalProjects.filter { localProject in
+                collectionProjectNames.contains(localProject.name.lowercased())
             }
+        } else {
+            matchedProjects = []
+        }
 
-            // Resolve plugin dependencies only from collection's projects
-            let usedPluginNames = Set(matchedProjects.flatMap { project in
-                project.sessions.flatMap { session -> [String] in
-                    guard let parsed = session.project else { return [] }
-                    switch parsed {
-                    case .ableton(let p): return p.usedPlugins
-                    case .logic(_), .proTools(_): return []
-                    }
-                }
-            })
-            let matchedPlugins: [AudioPlugin]
-            if usedPluginNames.isEmpty {
-                matchedPlugins = []
-            } else {
-                matchedPlugins = allPlugins.filter { plugin in
-                    let pluginName = plugin.name.lowercased()
-                    return usedPluginNames.contains { usedName in
-                        let name = usedName.lowercased()
-                        return name.contains(pluginName) || pluginName.contains(name)
-                    }
+        // Resolve plugin dependencies only from collection's projects
+        let usedPluginNames = Set(matchedProjects.flatMap { project in
+            project.sessions.flatMap { session -> [String] in
+                guard let parsed = session.project else { return [] }
+                switch parsed {
+                case .ableton(let p): return p.usedPlugins
+                case .logic(_), .proTools(_): return []
                 }
             }
-
-            // Resolve bounces from collection
-            let matchedBounces: [Bounce]
-            if hasBounces {
-                matchedBounces = collectionBounceList.compactMap { cb -> Bounce? in
-                    guard let path = cb.filePath, let id = UUID(uuidString: cb.id) else { return nil }
-                    let bounce = Bounce(
-                        id: id,
-                        userId: UUID(),
-                        bounceFolderId: UUID(),
-                        fileName: cb.fileName,
-                        filePath: path,
-                        fileSizeBytes: cb.fileSizeBytes ?? 0,
-                        format: cb.format ?? "wav",
-                        durationSeconds: cb.durationSeconds,
-                        sampleRate: cb.sampleRate,
-                        bitDepth: cb.bitDepth,
-                        createdAt: Date(),
-                        fileModifiedAt: Date()
-                    )
-                    return bounce.isLocallyAvailable ? bounce : nil
+        })
+        let matchedPlugins: [AudioPlugin]
+        if usedPluginNames.isEmpty {
+            matchedPlugins = []
+        } else {
+            matchedPlugins = scanner.plugins.filter { plugin in
+                let pluginName = plugin.name.lowercased()
+                return usedPluginNames.contains { usedName in
+                    let name = usedName.lowercased()
+                    return name.contains(pluginName) || pluginName.contains(name)
                 }
-            } else {
-                matchedBounces = []
-            }
-
-            // Calculate stats off the main thread
-            let totalBounceSize = matchedBounces.reduce(UInt64(0)) { $0 + UInt64($1.fileSizeBytes) }
-            let totalPluginSize = matchedPlugins.reduce(UInt64(0)) { total, plugin in
-                total + FileSystemHelpers.calculateDirectorySize(plugin.path)
-            }
-            let totalProjectSize = matchedProjects.reduce(UInt64(0)) { total, project in
-                guard let first = project.sessions.first else { return total }
-                return total + FileSystemHelpers.calculateDirectorySize(FileSystemHelpers.getProjectFolderPath(from: first))
-            }
-
-            let stats = BackupConfirmationStats(
-                collectionName: collectionName,
-                projectCount: matchedProjects.count,
-                bounceCount: matchedBounces.count,
-                pluginCount: matchedPlugins.count,
-                totalSize: totalPluginSize + totalProjectSize + totalBounceSize,
-                matchedProjects: matchedProjects,
-                matchedPlugins: matchedPlugins,
-                matchedBounces: matchedBounces
-            )
-
-            await MainActor.run {
-                backupConfirmationStats = stats
-                showBackupConfirmation = true
             }
         }
+
+        // Resolve bounces from collection
+        let matchedBounces: [Bounce]
+        if collection.hasBounces {
+            matchedBounces = bounces.compactMap(toBounce).filter(\.isLocallyAvailable)
+        } else {
+            matchedBounces = []
+        }
+
+        // Use bounce fileSizeBytes directly (no filesystem calls needed)
+        let totalBounceSize = matchedBounces.reduce(UInt64(0)) { $0 + UInt64($1.fileSizeBytes) }
+        // Skip expensive size calculations for confirmation — show count only
+        // Actual sizes are computed during backup
+        let totalSize = totalBounceSize
+
+        backupConfirmationStats = BackupConfirmationStats(
+            collectionName: collection.name,
+            projectCount: matchedProjects.count,
+            bounceCount: matchedBounces.count,
+            pluginCount: matchedPlugins.count,
+            totalSize: totalSize,
+            matchedProjects: matchedProjects,
+            matchedPlugins: matchedPlugins,
+            matchedBounces: matchedBounces
+        )
+        showBackupConfirmation = true
     }
 
     private func startBackup() {
