@@ -20,32 +20,43 @@ struct SessionBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // ── Search bar ────────────────────────────────────
+            // ── Search bar + export ──────────────────────────
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                 TextField("Search…", text: $search)
                     .textFieldStyle(.roundedBorder)
                     .focused($isSearchFocused)
+
+                Menu {
+                    Button(action: { self.exportProjects(format: .csv) }) {
+                        Label("Export as CSV", systemImage: "doc.text")
+                    }
+                    Button(action: { self.exportProjects(format: .json) }) {
+                        Label("Export as JSON", systemImage: "doc.badge.gearshape")
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.body)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .frame(width: 24)
+                .help("Export project list")
             }
             .padding([.leading, .trailing])
 
             // ── Format picker ─────────────────────────────────
-            HStack(spacing: 10) {
-                Picker("Format", selection: $formatFilter) {
-                    Text("All").tag(nil as SessionFormat?)
-                    ForEach(SessionFormat.allCases) { f in
-                        Text(shortName(for: f)).tag(f as SessionFormat?)
-                    }
+            Picker("Format", selection: $formatFilter) {
+                Text("All").tag(nil as SessionFormat?)
+                ForEach(SessionFormat.allCases) { f in
+                    Text(shortName(for: f)).tag(f as SessionFormat?)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 230)
-
-                Spacer()
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(.horizontal)
-            .padding(.top, 2)
+            .padding(.top, 4)
 
             Divider().padding(.top, 2)
 
@@ -92,6 +103,76 @@ struct SessionBrowserView: View {
         case .logic:    return "Logic"
         case .proTools: return "Pro Tools"
         }
+    }
+
+    // MARK: - Export
+
+    enum ExportFormat {
+        case csv, json
+    }
+
+    private func exportProjects(format: ExportFormat) {
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = format == .csv ? [.commaSeparatedText] : [.json]
+        savePanel.nameFieldStringValue = "projects.\(format == .csv ? "csv" : "json")"
+        savePanel.title = "Export Project List"
+        savePanel.message = "Choose where to save your project list"
+
+        savePanel.begin { response in
+            guard response == .OK, let url = savePanel.url else { return }
+
+            let content: String
+            switch format {
+            case .csv:
+                content = generateCSV(projects: projects)
+            case .json:
+                content = generateJSON(projects: projects)
+            }
+
+            try? content.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func generateCSV(projects: [SessionProject]) -> String {
+        var csv = "Name,Format,Sessions,Latest Date,Path\n"
+        for project in projects {
+            let name = escapeCSV(project.name)
+            let format = project.format.rawValue
+            let sessions = "\(project.sessions.count)"
+            let date = ISO8601DateFormatter().string(from: project.latestDate)
+            let path = escapeCSV(project.sessions.first?.path ?? "")
+            csv += "\(name),\(format),\(sessions),\(date),\(path)\n"
+        }
+        return csv
+    }
+
+    private func escapeCSV(_ value: String) -> String {
+        if value.contains(",") || value.contains("\"") || value.contains("\n") {
+            return "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+        }
+        return value
+    }
+
+    private func generateJSON(projects: [SessionProject]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        let exportData = projects.map { project in
+            [
+                "name": project.name,
+                "format": project.format.rawValue,
+                "sessions": "\(project.sessions.count)",
+                "latestDate": ISO8601DateFormatter().string(from: project.latestDate),
+                "path": project.sessions.first?.path ?? ""
+            ]
+        }
+
+        guard let jsonData = try? encoder.encode(exportData),
+              let jsonString = String(data: jsonData, encoding: .utf8) else {
+            return "[]"
+        }
+
+        return jsonString
     }
 }
 

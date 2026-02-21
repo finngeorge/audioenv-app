@@ -18,6 +18,10 @@ struct CommandDetailView: View {
     @State private var recipeName = ""
     @State private var recipeDescription = ""
     @State private var showSaveRecipe = false
+    @State private var showCreateCollection = false
+    @State private var newCollectionName = ""
+    @State private var newCollectionColor = "3B82F6"
+    @State private var pendingCommand: Command?
 
     init(command: Command) {
         self.command = command
@@ -58,18 +62,21 @@ struct CommandDetailView: View {
                 // Footer buttons
                 footerActions
 
-                // How it works
-                howItWorksSection
-
                 Spacer()
             }
             .padding(20)
         }
         .onAppear {
-            commandText = commandService.serialize(command)
+            syncFromCommand()
+        }
+        .onChange(of: command) { _, _ in
+            syncFromCommand()
         }
         .sheet(isPresented: $showSaveRecipe) {
             saveRecipeSheet
+        }
+        .sheet(isPresented: $showCreateCollection) {
+            createCollectionSheet
         }
     }
 
@@ -411,73 +418,85 @@ struct CommandDetailView: View {
         .frame(width: 400, height: 280)
     }
 
-    // MARK: - How It Works
+    // MARK: - Create Collection Sheet
 
-    private var howItWorksSection: some View {
-        DisclosureGroup("How it works") {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("DSL Syntax")
+    private static let colorOptions = [
+        "3B82F6", "EF4444", "10B981", "F59E0B",
+        "8B5CF6", "EC4899", "06B6D4", "F97316",
+    ]
+
+    private var createCollectionSheet: some View {
+        VStack(spacing: 20) {
+            Text("Create Collection")
+                .font(.title2)
+                .bold()
+
+            Form {
+                TextField("Name", text: $newCollectionName)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Color")
                         .font(.caption)
-                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
 
-                    Group {
-                        Text("select ").fontWeight(.semibold) + Text("<entity> ") + Text("where ").fontWeight(.semibold) + Text("<filters> ") + Text("| ").fontWeight(.semibold) + Text("<action>")
+                    HStack(spacing: 10) {
+                        ForEach(Self.colorOptions, id: \.self) { hex in
+                            Circle()
+                                .fill(Color(hex: hex) ?? .blue)
+                                .frame(width: 28, height: 28)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.primary, lineWidth: newCollectionColor == hex ? 2 : 0)
+                                )
+                                .onTapGesture { newCollectionColor = hex }
+                        }
                     }
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.secondary)
                 }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Entity types")
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-
-                    Text("plugins, projects, bounces, collections")
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundColor(.secondary)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Operators")
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-
-                    Text(": (equals)  ~ (contains)  ^ (starts with)  > <  ! (not)")
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundColor(.secondary)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Pipe actions")
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-
-                    Text("backup, collect \"Name\", tag key:value, export json")
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundColor(.secondary)
-                }
-
-                Text("Full documentation at audioenv.com/docs/commands")
-                    .font(.caption2)
-                    .foregroundColor(.blue)
-                    .padding(.top, 4)
             }
-            .padding(.top, 8)
+            .formStyle(.grouped)
+
+            if let result, !result.isEmpty {
+                Text("\(result.totalMatchCount) items will be added")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    showCreateCollection = false
+                    pendingCommand = nil
+                }
+                .buttonStyle(.bordered)
+
+                Button("Create") {
+                    showCreateCollection = false
+                    if let cmd = pendingCommand {
+                        executeWithCollection(cmd)
+                    }
+                    pendingCommand = nil
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(newCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
         }
         .padding()
-        .background(Color.secondary.opacity(0.05))
-        .cornerRadius(12)
+        .frame(width: 440, height: 360)
     }
 
     // MARK: - Helpers
 
-    private func runCommand() {
-        guard let token = auth.authToken else { return }
+    /// Sync all local state from the current command and pick up pre-computed results.
+    private func syncFromCommand() {
+        commandText = commandService.serialize(command)
+        editableQuery = command.query
+        editableActions = command.actions
+        // Use pre-computed result from the browser's parse+execute
+        if let precomputed = commandService.lastResult {
+            result = precomputed
+        }
+    }
 
+    private func runCommand() {
         // If in visual mode, build command from visual state
         let command: Command
         if isVisualMode {
@@ -497,7 +516,20 @@ struct CommandDetailView: View {
             collectionService: collectionService
         )
 
-        // Execute actions if any
+        // If any action is createCollection, prompt the user first
+        if let collectAction = command.actions.first(where: {
+            if case .createCollection = $0 { return true }
+            return false
+        }), case .createCollection(let name) = collectAction {
+            newCollectionName = name
+            newCollectionColor = "3B82F6"
+            pendingCommand = command
+            showCreateCollection = true
+            return
+        }
+
+        // Execute non-collection actions immediately
+        guard let token = auth.authToken else { return }
         if !command.actions.isEmpty {
             Task {
                 let actionResults = await commandService.executeActions(
@@ -508,6 +540,74 @@ struct CommandDetailView: View {
                 )
                 result?.actionResults = actionResults
             }
+        }
+    }
+
+    /// Execute a command after the user has confirmed collection name/color via the sheet.
+    private func executeWithCollection(_ command: Command) {
+        guard let token = auth.authToken else { return }
+        guard let currentResult = result else { return }
+
+        Task {
+            // Create the collection with the user's chosen name and color
+            let created = await collectionService.createCollection(
+                name: newCollectionName,
+                description: nil,
+                color: newCollectionColor,
+                contentTypes: commandService.determineContentTypes(from: currentResult),
+                token: token
+            )
+
+            var actionResults: [ActionResult] = []
+
+            if let collection = created {
+                actionResults.append(ActionResult(
+                    action: .createCollection(newCollectionName),
+                    success: true,
+                    message: "Created collection \"\(newCollectionName)\""
+                ))
+
+                // Add matched items to the new collection
+                if !currentResult.matchedProjects.isEmpty {
+                    let sessionIds = await collectionService.resolveSessionIds(for: currentResult.matchedProjects, token: token)
+                    if !sessionIds.isEmpty {
+                        await collectionService.addProjects(collectionId: collection.id, sessionIds: sessionIds, token: token)
+                    }
+                }
+                if !currentResult.matchedBounces.isEmpty {
+                    let bounceIds = currentResult.matchedBounces.map(\.id)
+                    await collectionService.addBounces(collectionId: collection.id, bounceIds: bounceIds, token: token)
+                }
+
+                actionResults.append(ActionResult(
+                    action: .addToCollection(collection.id),
+                    success: true,
+                    message: "Added \(currentResult.totalMatchCount) items to \"\(newCollectionName)\""
+                ))
+            } else {
+                actionResults.append(ActionResult(
+                    action: .createCollection(newCollectionName),
+                    success: false,
+                    message: "Failed to create collection"
+                ))
+            }
+
+            // Execute remaining non-collection actions
+            let otherActions = command.actions.filter {
+                if case .createCollection = $0 { return false }
+                return true
+            }
+            if !otherActions.isEmpty {
+                let otherResults = await commandService.executeActions(
+                    otherActions,
+                    on: currentResult,
+                    collectionService: collectionService,
+                    token: token
+                )
+                actionResults.append(contentsOf: otherResults)
+            }
+
+            result?.actionResults = actionResults
         }
     }
 

@@ -13,6 +13,7 @@ class CommandService: ObservableObject {
     @Published var recentCommands: [Command] = []
     @Published var isExecuting = false
     @Published var lastError: String?
+    @Published var lastResult: CommandResult?
 
     private let baseURL: String = {
         if let override = UserDefaults.standard.string(forKey: "apiBaseURL"), !override.isEmpty {
@@ -247,7 +248,8 @@ class CommandService: ObservableObject {
 
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                lastError = "Failed to fetch recipes"
+                // Not an error if there are simply no recipes yet
+                recipes = []
                 return
             }
 
@@ -790,7 +792,7 @@ class CommandService: ObservableObject {
 
     // MARK: - Private: Helpers
 
-    private func addToRecent(_ command: Command, resultCount: Int) {
+    func addToRecent(_ command: Command, resultCount: Int) {
         var recent = command
         recent.lastRunAt = Date()
         recent.lastResultCount = resultCount
@@ -800,7 +802,7 @@ class CommandService: ObservableObject {
         }
     }
 
-    private func determineContentTypes(from result: CommandResult) -> [String] {
+    func determineContentTypes(from result: CommandResult) -> [String] {
         var types: [String] = []
         if !result.matchedProjects.isEmpty { types.append("projects") }
         if !result.matchedBounces.isEmpty { types.append("bounces") }

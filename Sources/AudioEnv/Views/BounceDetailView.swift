@@ -44,48 +44,48 @@ struct BounceDetailPanel: View {
                 }
                 .padding(.bottom, 8)
 
-                // Play button for local files
-                if bounce.isLocallyAvailable {
-                    Button {
-                        if audioPlayer.currentBounce?.id == bounce.id {
-                            audioPlayer.togglePlayPause()
-                        } else {
-                            audioPlayer.play(bounce: bounce)
+                // Action buttons
+                HStack(spacing: 8) {
+                    if bounce.isLocallyAvailable {
+                        Button {
+                            if audioPlayer.currentBounce?.id == bounce.id {
+                                audioPlayer.togglePlayPause()
+                            } else {
+                                audioPlayer.play(bounce: bounce)
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying
+                                      ? "pause.circle.fill" : "play.circle.fill")
+                                Text(audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying ? "Pause" : "Play")
+                            }
                         }
-                    } label: {
-                        HStack {
-                            Image(systemName: audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying
-                                  ? "pause.circle.fill" : "play.circle.fill")
-                            Text(audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying ? "Pause" : "Play")
-                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                }
 
-                // Copy Link
-                Button {
-                    let url = "https://audioenv.com/share/bounce/\(bounce.id.uuidString)"
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url, forType: .string)
-                } label: {
-                    Label("Copy Link", systemImage: "link")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-
-                // Backup to Cloud
-                if bounce.isLocallyAvailable {
                     Button {
-                        Task {
-                            await backup.backupBounce(bounce)
-                        }
+                        let url = "https://audioenv.com/share/bounce/\(bounce.id.uuidString)"
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(url, forType: .string)
                     } label: {
-                        Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                        Label("Copy Link", systemImage: "link")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.regular)
-                    .disabled(backup.isUploading)
+
+                    if bounce.isLocallyAvailable {
+                        Button {
+                            Task {
+                                await backup.backupBounce(bounce)
+                            }
+                        } label: {
+                            Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                        .disabled(backup.isUploading)
+                    }
                 }
 
                 // Cloud bounce banner

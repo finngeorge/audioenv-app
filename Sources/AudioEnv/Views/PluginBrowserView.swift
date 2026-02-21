@@ -21,29 +21,13 @@ struct PluginBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // ── Search bar ────────────────────────────────────────────
+            // ── Search bar + export ──────────────────────────────────
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                 TextField("Search…", text: $search)
                     .textFieldStyle(.roundedBorder)
                     .focused($isSearchFocused)
-            }
-            .padding([.leading, .trailing])
-
-            // ── Format picker + export ───────────────────────────────
-            HStack(spacing: 10) {
-                Picker("Format", selection: $formatFilter) {
-                    Text("All").tag(nil as PluginFormat?)
-                    ForEach(PluginFormat.allCases) { f in
-                        Text(f.rawValue).tag(f as PluginFormat?)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 220)
-
-                Spacer()
 
                 Menu {
                     Button(action: { self.exportPlugins(format: .csv) }) {
@@ -57,11 +41,23 @@ struct PluginBrowserView: View {
                         .font(.body)
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .frame(width: 24)
                 .help("Export plugin list")
             }
+            .padding([.leading, .trailing])
+
+            // ── Format picker ────────────────────────────────────────
+            Picker("Format", selection: $formatFilter) {
+                Text("All").tag(nil as PluginFormat?)
+                ForEach(PluginFormat.allCases) { f in
+                    Text(f.rawValue).tag(f as PluginFormat?)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(.horizontal)
-            .padding(.top, 2)
+            .padding(.top, 4)
 
             Divider().padding(.top, 2)
 

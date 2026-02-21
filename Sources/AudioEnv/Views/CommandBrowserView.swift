@@ -7,6 +7,7 @@ struct CommandBrowserView: View {
     @EnvironmentObject var commandService: CommandService
     @EnvironmentObject var scanner: ScannerService
     @EnvironmentObject var bounceService: BounceService
+    @EnvironmentObject var collectionService: CollectionService
     @EnvironmentObject var auth: AuthenticationService
 
     @State private var commandText = ""
@@ -32,6 +33,9 @@ struct CommandBrowserView: View {
 
                     // Recent commands
                     recentsSection
+
+                    // Syntax reference (always visible)
+                    syntaxReferenceSection
                 }
                 .padding()
             }
@@ -39,7 +43,11 @@ struct CommandBrowserView: View {
         .navigationTitle("Commands")
         .task {
             if let token = auth.authToken {
-                await commandService.fetchRecipes(token: token)
+                async let recipes: () = commandService.fetchRecipes(token: token)
+                // Ensure bounces are loaded so bounce queries return results
+                // even if the user hasn't visited the Bounces tab yet.
+                async let bounces: () = bounceService.fetchBounces(token: token)
+                _ = await (recipes, bounces)
             }
         }
     }
@@ -130,6 +138,7 @@ struct CommandBrowserView: View {
                     ForEach(suggestions, id: \.self) { suggestion in
                         Button {
                             commandText = suggestion
+                            runCurrentCommand()
                         } label: {
                             Text(suggestion)
                                 .font(.caption)
@@ -168,6 +177,7 @@ struct CommandBrowserView: View {
                 ForEach(Self.exampleCommands, id: \.command) { example in
                     Button {
                         commandText = example.command
+                        runCurrentCommand()
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(example.label)
@@ -225,7 +235,8 @@ struct CommandBrowserView: View {
 
     private func recipeRow(_ recipe: Command) -> some View {
         Button {
-            selectedCommand = recipe
+            commandText = commandService.serialize(recipe)
+            runCurrentCommand()
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "doc.text")
@@ -288,7 +299,7 @@ struct CommandBrowserView: View {
                 ForEach(commandService.recentCommands) { command in
                     Button {
                         commandText = commandService.serialize(command)
-                        selectedCommand = command
+                        runCurrentCommand()
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "clock.arrow.circlepath")
@@ -324,14 +335,111 @@ struct CommandBrowserView: View {
         .cornerRadius(12)
     }
 
+    // MARK: - Syntax Reference
+
+    private var syntaxReferenceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Syntax Reference", systemImage: "book")
+                .font(.headline)
+                .foregroundColor(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("DSL Syntax")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+
+                Group {
+                    Text("select ").fontWeight(.semibold) + Text("<entity> ") + Text("where ").fontWeight(.semibold) + Text("<filters> ") + Text("| ").fontWeight(.semibold) + Text("<action>")
+                }
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Entity types")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+
+                Text("plugins, projects, bounces, collections")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Operators")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+
+                Text(": (equals)  ~ (contains)  ^ (starts with)  > <  ! (not)")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Pipe actions")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+
+                Text("backup, collect \"Name\", tag key:value, export json")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+
+            Text("Full documentation at audioenv.com/docs/commands")
+                .font(.caption2)
+                .foregroundColor(.blue)
+                .padding(.top, 4)
+        }
+        .padding()
+        .background(Color.secondary.opacity(0.05))
+        .cornerRadius(12)
+    }
+
     // MARK: - Actions
 
     private func runCurrentCommand() {
         guard !commandText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
 
-        // Parse and select the command to show in detail
+        commandService.lastError = nil
+
+        // Parse, execute locally, and select — single step
         do {
             let command = try commandService.parse(commandText)
+
+            let result = commandService.executeQueryLocally(
+                command.query,
+                scanner: scanner,
+                bounceService: bounceService,
+                collectionService: collectionService
+            )
+            commandService.lastResult = result
+
+            // Execute piped actions that don't need user input.
+            // createCollection is handled by CommandDetailView via a sheet prompt.
+            let autoActions = command.actions.filter {
+                if case .createCollection = $0 { return false }
+                return true
+            }
+            if !autoActions.isEmpty, let token = auth.authToken {
+                var mutableResult = result
+                Task {
+                    let actionResults = await commandService.executeActions(
+                        autoActions,
+                        on: result,
+                        collectionService: collectionService,
+                        token: token
+                    )
+                    mutableResult.actionResults = actionResults
+                    commandService.lastResult = mutableResult
+                }
+            }
+
+            // Track in recents
+            commandService.addToRecent(command, resultCount: result.totalMatchCount)
+
             selectedCommand = command
         } catch {
             commandService.lastError = error.localizedDescription
