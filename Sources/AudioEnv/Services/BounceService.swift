@@ -18,6 +18,7 @@ class BounceService: ObservableObject {
     @Published var isScanning = false
     @Published var isDownloading = false
     @Published var lastError: String?
+    @Published var lastScanCompletedAt: Date?
 
     // MARK: - Private State
 
@@ -168,6 +169,7 @@ class BounceService: ObservableObject {
         // Refresh bounce list
         await fetchBounces(token: token)
 
+        lastScanCompletedAt = Date()
         isScanning = false
     }
 

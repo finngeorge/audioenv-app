@@ -51,7 +51,8 @@ class CollectionService: ObservableObject {
 
             let decoder = FlexibleISO8601.makeAPIDecoder()
             collections = Self.decodeItems(data: data, decoder: decoder) ?? []
-            logger.info("Fetched \(self.collections.count) collections")
+            let smartCount = collections.filter(\.isSmart).count
+            logger.info("Fetched \(self.collections.count) collections (\(smartCount) smart)")
         } catch {
             lastError = error.localizedDescription
             logger.error("fetchCollections failed: \(error)")
@@ -91,7 +92,7 @@ class CollectionService: ObservableObject {
         }
     }
 
-    func updateCollection(id: UUID, name: String?, description: String?, color: String?, contentTypes: [String]? = nil, downloadsEnabled: Bool? = nil, token: String) async {
+    func updateCollection(id: UUID, name: String?, description: String?, color: String?, contentTypes: [String]? = nil, downloadsEnabled: Bool? = nil, source: String? = nil, token: String) async {
         do {
             let url = URL(string: "\(baseURL)/api/collections/\(id)")!
             var request = URLRequest(url: url)
@@ -105,16 +106,19 @@ class CollectionService: ObservableObject {
             if let c = color { payload["color"] = c }
             if let ct = contentTypes { payload["content_types"] = ct }
             if let de = downloadsEnabled { payload["downloads_enabled"] = de }
+            if let s = source { payload["source"] = s }
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
-
-            let decoder = FlexibleISO8601.makeAPIDecoder()
-            let updated = try decoder.decode(AudioCollection.self, from: data)
-            if let idx = collections.firstIndex(where: { $0.id == id }) {
-                collections[idx] = updated
+            if let s = source { logger.info("Sending source field: \(s.prefix(80))...") }
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                logger.error("updateCollection PUT returned \(status)")
+                return
             }
+
+            // Re-fetch all collections to get the canonical state from the server.
+            await fetchCollections(token: token)
         } catch {
             lastError = error.localizedDescription
             logger.error("updateCollection failed: \(error)")
@@ -136,6 +140,87 @@ class CollectionService: ObservableObject {
         } catch {
             lastError = error.localizedDescription
             logger.error("deleteCollection failed: \(error)")
+        }
+    }
+
+    // MARK: - Smart Collection Evaluation
+
+    /// Evaluate all smart collections: run their queries against current data,
+    /// add any new matching bounces, and optionally trigger auto-backup.
+    func evaluateSmartCollections(
+        bounceService: BounceService,
+        commandService: CommandService,
+        scanner: ScannerService,
+        backup: BackupService,
+        token: String
+    ) async {
+        let smartCollections = collections.filter(\.isSmart)
+        guard !smartCollections.isEmpty else { return }
+
+        for collection in smartCollections {
+            guard case .smart(let query) = collection.collectionSource else { continue }
+
+            // Execute query locally
+            let result = commandService.executeQueryLocally(
+                query,
+                scanner: scanner,
+                bounceService: bounceService,
+                collectionService: self
+            )
+
+            // Get current bounce IDs in the collection
+            let currentBounces = await fetchCollectionBounces(collectionId: collection.id, token: token)
+            let currentBounceIds = Set(currentBounces.compactMap { UUID(uuidString: $0.id) })
+
+            // Diff: find new bounce IDs not already in collection
+            let matchedBounceIds = Set(result.matchedBounces.map(\.id))
+            let newBounceIds = matchedBounceIds.subtracting(currentBounceIds)
+
+            if !newBounceIds.isEmpty {
+                await addBounces(collectionId: collection.id, bounceIds: Array(newBounceIds), token: token)
+                logger.info("Smart collection '\(collection.name)': added \(newBounceIds.count) new bounces")
+
+                // Check auto-backup preference
+                let autoBackupKey = "smartAutoBackup-\(collection.id)"
+                if UserDefaults.standard.bool(forKey: autoBackupKey) {
+                    let expectedBackupName = "\(collection.name) Collection"
+                    let hasBackup = backup.availableBackups.contains { $0.name == expectedBackupName }
+                    if hasBackup {
+                        // Gather locally available bounces for backup
+                        let allBounces = await fetchCollectionBounces(collectionId: collection.id, token: token)
+                        let localBounces = allBounces.compactMap { cb -> Bounce? in
+                            guard let path = cb.filePath,
+                                  FileManager.default.fileExists(atPath: path),
+                                  let id = UUID(uuidString: cb.id) else { return nil }
+                            return Bounce(
+                                id: id,
+                                userId: UUID(),
+                                bounceFolderId: UUID(),
+                                fileName: cb.fileName,
+                                filePath: path,
+                                fileSizeBytes: cb.fileSizeBytes ?? 0,
+                                format: cb.format ?? "wav",
+                                durationSeconds: cb.durationSeconds,
+                                sampleRate: cb.sampleRate,
+                                bitDepth: cb.bitDepth,
+                                bitrate: cb.bitrate,
+                                createdAt: Date(),
+                                fileModifiedAt: Date()
+                            )
+                        }
+                        if !localBounces.isEmpty {
+                            await backup.backupAll(
+                                plugins: [],
+                                projects: [],
+                                bounces: localBounces,
+                                backupName: expectedBackupName,
+                                scopeDescription: "Smart collection '\(collection.name)' auto-backup"
+                            )
+                            logger.info("Smart collection '\(collection.name)': auto-backup triggered")
+                        }
+                    }
+                }
+            }
         }
     }
 

@@ -16,6 +16,9 @@ struct CollectionDetailView: View {
     @State private var showEditSheet = false
     @State private var showCollectionBuilder = false
     @State private var showDeleteConfirmation = false
+    @State private var showSmartQuerySheet = false
+    @State private var isRenaming = false
+    @State private var renameText = ""
     @State private var showBackupScopeSelector = false
     @State private var showBackupConfirmation = false
     @State private var backupConfirmationStats: BackupConfirmationStats?
@@ -24,6 +27,8 @@ struct CollectionDetailView: View {
     @State private var isLoadingProjects = false
     @State private var isLoadingBounces = false
     @State private var showSharePopup = false
+    @State private var stackBounceFormats = false
+    @State private var expandedBounceGroups: Set<String> = []
 
     /// Live collection from service array — updates when fetchCollections refreshes.
     private var collection: AudioCollection? {
@@ -33,6 +38,37 @@ struct CollectionDetailView: View {
     /// Total duration of all bounces in the collection.
     private var totalDuration: Double {
         bounces.compactMap(\.durationSeconds).reduce(0, +)
+    }
+
+    /// Format priority for stacked display (preferred format shown first).
+    private static let formatPriority: [String] = ["wav", "aiff", "flac", "m4a", "mp3"]
+
+    /// Group bounces by base name + duration for stacked display.
+    private var groupedBounces: [BounceGroup] {
+        // Key: (baseName lowercased, rounded duration)
+        var groups: [String: [CollectionService.CollectionBounce]] = [:]
+        var order: [String] = []
+
+        for bounce in bounces {
+            let baseName = (bounce.fileName as NSString).deletingPathExtension.lowercased()
+            let duration = bounce.durationSeconds.map { Int($0) } ?? -1
+            let key = "\(baseName)|\(duration)"
+            if groups[key] == nil { order.append(key) }
+            groups[key, default: []].append(bounce)
+        }
+
+        return order.compactMap { key -> BounceGroup? in
+            guard var items = groups[key], !items.isEmpty else { return nil }
+            // Sort by format priority — preferred format first
+            items.sort { a, b in
+                let aIdx = Self.formatPriority.firstIndex(of: a.format?.lowercased() ?? "") ?? Self.formatPriority.count
+                let bIdx = Self.formatPriority.firstIndex(of: b.format?.lowercased() ?? "") ?? Self.formatPriority.count
+                return aIdx < bIdx
+            }
+            let primary = items[0]
+            let variants = Array(items.dropFirst())
+            return BounceGroup(key: key, primary: primary, variants: variants)
+        }
     }
 
     var body: some View {
@@ -64,34 +100,6 @@ struct CollectionDetailView: View {
                     bouncesSection(collection)
                 }
 
-                // Quick actions (only in edit mode)
-                if isEditing {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Actions")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-
-                        HStack(spacing: 12) {
-                            Button {
-                                showEditSheet = true
-                            } label: {
-                                Label("Edit Collection", systemImage: "pencil")
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button(role: .destructive) {
-                                showDeleteConfirmation = true
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                    .padding()
-                    .background(Color.secondary.opacity(0.05))
-                    .cornerRadius(12)
-                }
-
                 Spacer()
             }
             .padding(20)
@@ -101,6 +109,9 @@ struct CollectionDetailView: View {
         }
         .sheet(isPresented: $showCollectionBuilder) {
             CollectionBuilderPopup(collectionId: collectionId)
+        }
+        .sheet(isPresented: $showSmartQuerySheet) {
+            SmartWatchSheet(collection: collection)
         }
         .confirmationDialog(
             backupConfirmationTitle,
@@ -117,6 +128,7 @@ struct CollectionDetailView: View {
             }
         }
         .task(id: collectionId) {
+            stackBounceFormats = UserDefaults.standard.bool(forKey: "stackBounceFormats-\(collectionId)")
             await loadContent()
         }
         .onChange(of: collection.projectCount) { _, _ in
@@ -154,9 +166,31 @@ struct CollectionDetailView: View {
                         .frame(width: 16, height: 16)
                 }
 
-                Text(collection.name)
-                    .font(.title)
-                    .fontWeight(.bold)
+                if isRenaming {
+                    TextField("Collection name", text: $renameText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .onSubmit {
+                            let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+                            if !trimmed.isEmpty, let token = auth.authToken {
+                                Task {
+                                    await collectionService.updateCollection(
+                                        id: collectionId,
+                                        name: trimmed,
+                                        description: nil,
+                                        color: nil,
+                                        token: token
+                                    )
+                                }
+                            }
+                            isRenaming = false
+                        }
+                } else {
+                    Text(collection.name)
+                        .font(.title)
+                        .fontWeight(.bold)
+                }
 
                 if collection.isPack {
                     Text("Pack")
@@ -166,6 +200,26 @@ struct CollectionDetailView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color.orange.opacity(0.12))
+                        .cornerRadius(5)
+                }
+
+                if collection.isSmart {
+                    Label("Smart", systemImage: "sparkles")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.purple.opacity(0.12))
+                        .cornerRadius(5)
+                }
+
+                if hasExistingBackup(for: collection) {
+                    Label("Backed Up", systemImage: "checkmark.icloud")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.green.opacity(0.1))
                         .cornerRadius(5)
                 }
 
@@ -204,35 +258,77 @@ struct CollectionDetailView: View {
                     }
                 }
 
-                // Backup / Backed Up button
-                if hasExistingBackup(for: collection) {
-                    Menu {
+                // Ellipsis menu consolidating all collection actions
+                Menu {
+                    Button {
+                        renameText = collection.name
+                        isRenaming = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+
+                    Button {
+                        showEditSheet = true
+                    } label: {
+                        Label("Edit Details...", systemImage: "slider.horizontal.3")
+                    }
+
+                    Divider()
+
+                    Button {
+                        showSmartQuerySheet = true
+                    } label: {
+                        Label("Set Up Smart Watch...", systemImage: "sparkles")
+                    }
+
+                    if collection.hasBounces {
+                        Divider()
+
+                        Button {
+                            stackBounceFormats.toggle()
+                            UserDefaults.standard.set(stackBounceFormats, forKey: "stackBounceFormats-\(collectionId)")
+                        } label: {
+                            Label(
+                                stackBounceFormats ? "Unstack Formats" : "Stack Formats",
+                                systemImage: stackBounceFormats ? "rectangle.expand.vertical" : "rectangle.compress.vertical"
+                            )
+                        }
+                    }
+
+                    Divider()
+
+                    if hasExistingBackup(for: collection) {
                         Button {
                             backupCollection(collection)
                         } label: {
-                            Label("New Backup", systemImage: "arrow.clockwise.icloud")
+                            Label("Update Backup", systemImage: "arrow.clockwise.icloud")
                         }
                         .disabled(backup.isUploading)
-                    } label: {
-                        Label("Backed Up", systemImage: "checkmark.icloud")
-                            .font(.caption)
+                    } else {
+                        Button {
+                            backupCollection(collection)
+                        } label: {
+                            Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                        }
+                        .disabled(backup.isUploading)
                     }
-                    .menuStyle(.borderlessButton)
-                    .frame(width: 110)
-                    .controlSize(.small)
-                } else {
-                    Button {
-                        backupCollection(collection)
-                    } label: {
-                        Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(backup.isUploading)
-                }
 
-                // Edit mode toggle
+                    Divider()
+
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Collection", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
+                .menuStyle(.borderlessButton)
+                .frame(width: 30)
+
+                // Edit mode toggle (standalone for quick access)
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isEditing.toggle()
@@ -270,7 +366,70 @@ struct CollectionDetailView: View {
                     }
                 }
             }
+
+            // Smart Watch card
+            if collection.isSmart {
+                smartWatchCard(collection)
+            }
         }
+    }
+
+    // MARK: - Smart Watch Card
+
+    private func smartWatchCard(_ collection: AudioCollection) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wand.and.stars")
+                .font(.title3)
+                .foregroundColor(.purple)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Smart Watch Active")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.purple)
+
+                if case .smart(let query) = collection.collectionSource {
+                    Text(smartWatchSummary(query))
+                        .font(.caption)
+                        .foregroundColor(.primary.opacity(0.7))
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                showSmartQuerySheet = true
+            } label: {
+                Text("Edit")
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(Color.purple.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+        )
+        .cornerRadius(10)
+    }
+
+    /// Build a human-readable summary of a smart watch query.
+    private func smartWatchSummary(_ query: Query) -> String {
+        let entityLabel = query.entityType.label.lowercased()
+        if query.filters.isEmpty {
+            return "Watching all \(entityLabel)"
+        }
+        let combiner = query.combination == .any ? " or " : " and "
+        let filterDescriptions = query.filters.map { filter -> String in
+            let fieldLabel = filter.field.label.lowercased()
+            let opLabel = filter.op.label
+            return "\(fieldLabel) \(opLabel) \"\(filter.value)\""
+        }
+        return "Watching \(entityLabel) where \(filterDescriptions.joined(separator: combiner))"
     }
 
     // MARK: - Projects Section
@@ -459,6 +618,13 @@ struct CollectionDetailView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
+            } else if stackBounceFormats {
+                ForEach(groupedBounces) { group in
+                    stackedBounceRow(group)
+                    if group.key != groupedBounces.last?.key {
+                        Divider()
+                    }
+                }
             } else {
                 ForEach(bounces) { bounce in
                     bounceRow(bounce)
@@ -533,6 +699,176 @@ struct CollectionDetailView: View {
                     }
                     if let br = bounce.bitrate {
                         Text("\(br) kbps")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Spacer()
+
+            if let duration = bounce.durationSeconds {
+                Text(formatDuration(duration))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            if isEditing {
+                Button(role: .destructive) {
+                    Task {
+                        if let token = auth.authToken,
+                           let bounceId = UUID(uuidString: bounce.id) {
+                            await collectionService.removeBounce(
+                                collectionId: collectionId,
+                                bounceId: bounceId,
+                                token: token
+                            )
+                            await loadBounces()
+                        }
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove from collection")
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, isCurrentlyPlaying ? 4 : 0)
+        .background(
+            isCurrentlyPlaying
+                ? RoundedRectangle(cornerRadius: 6).fill(Color.blue.opacity(0.06))
+                : nil
+        )
+        .overlay(alignment: .leading) {
+            if isCurrentlyPlaying {
+                Rectangle()
+                    .fill(Color.blue)
+                    .frame(width: 3)
+                    .cornerRadius(1.5)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            if !isEditing && isAvailable {
+                playBounce(bounce)
+            }
+        }
+    }
+
+    // MARK: - Stacked Bounce Row
+
+    @ViewBuilder
+    private func stackedBounceRow(_ group: BounceGroup) -> some View {
+        VStack(spacing: 0) {
+            // Primary row (preferred format)
+            HStack(spacing: 10) {
+                bounceRowContent(group.primary)
+
+                if group.hasVariants {
+                    // Format badges for variants
+                    HStack(spacing: 3) {
+                        ForEach(group.variants, id: \.id) { variant in
+                            Text(variant.format?.uppercased() ?? "?")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.secondary.opacity(0.1))
+                                .cornerRadius(3)
+                        }
+                    }
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            if expandedBounceGroups.contains(group.key) {
+                                expandedBounceGroups.remove(group.key)
+                            } else {
+                                expandedBounceGroups.insert(group.key)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: expandedBounceGroups.contains(group.key) ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Expanded variants
+            if group.hasVariants && expandedBounceGroups.contains(group.key) {
+                ForEach(group.variants, id: \.id) { variant in
+                    Divider().padding(.leading, 34)
+                    HStack(spacing: 10) {
+                        Spacer().frame(width: 14)
+                        bounceRowContent(variant)
+                    }
+                    .padding(.leading, 6)
+                    .background(Color.secondary.opacity(0.03))
+                }
+            }
+        }
+    }
+
+    /// Shared bounce row content used by both flat and stacked views.
+    private func bounceRowContent(_ bounce: CollectionService.CollectionBounce) -> some View {
+        let isCurrentlyPlaying = audioPlayer.currentBounce?.id.uuidString == bounce.id
+        let isAvailable = bounce.filePath != nil && FileManager.default.fileExists(atPath: bounce.filePath!)
+
+        return HStack(spacing: 10) {
+            if !isEditing && isAvailable {
+                Button {
+                    playBounce(bounce)
+                } label: {
+                    Image(systemName: isCurrentlyPlaying && audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle")
+                        .font(.title3)
+                        .foregroundColor(isCurrentlyPlaying ? .blue : .secondary)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Image(systemName: "waveform")
+                    .font(.title3)
+                    .foregroundColor(bounceFormatColor(bounce.format))
+                    .frame(width: 24)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(bounce.fileName)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .foregroundColor(isCurrentlyPlaying ? .blue : .primary)
+
+                HStack(spacing: 8) {
+                    if let fmt = bounce.format {
+                        Text(fmt.uppercased())
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(bounceFormatColor(fmt).opacity(0.15))
+                            .foregroundColor(bounceFormatColor(fmt))
+                            .cornerRadius(3)
+                    }
+                    if let sr = bounce.sampleRate {
+                        Text("\(sr / 1000)kHz")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let bd = bounce.bitDepth {
+                        Text("\(bd)-bit")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let br = bounce.bitrate {
+                        Text("\(br) kbps")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let size = bounce.fileSizeBytes {
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -875,6 +1211,24 @@ struct ShareLinkPopover: View {
 
     private func resetAutoDismiss() {
         scheduleAutoDismiss()
+    }
+}
+
+// MARK: - Bounce Group
+
+/// A group of bounces that are the same recording in different formats.
+struct BounceGroup: Identifiable {
+    let key: String
+    let primary: CollectionService.CollectionBounce
+    let variants: [CollectionService.CollectionBounce]
+
+    var id: String { key }
+    var hasVariants: Bool { !variants.isEmpty }
+    var allBounces: [CollectionService.CollectionBounce] { [primary] + variants }
+
+    var formatSummary: String {
+        let formats = allBounces.compactMap { $0.format?.uppercased() }
+        return formats.joined(separator: ", ")
     }
 }
 

@@ -68,7 +68,15 @@ struct AudioCollection: Identifiable, Hashable, Codable {
     var totalItemCount: Int { projectCount + bounceCount }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
-    static func == (lhs: AudioCollection, rhs: AudioCollection) -> Bool { lhs.id == rhs.id }
+    static func == (lhs: AudioCollection, rhs: AudioCollection) -> Bool {
+        lhs.id == rhs.id
+            && lhs.name == rhs.name
+            && lhs.source == rhs.source
+            && lhs.updatedAt == rhs.updatedAt
+            && lhs.projectCount == rhs.projectCount
+            && lhs.bounceCount == rhs.bounceCount
+            && lhs.downloadsEnabled == rhs.downloadsEnabled
+    }
 }
 
 // MARK: - Content type enum for UI

@@ -145,6 +145,18 @@ struct AudioEnvApp: App {
                 .onChange(of: sessionMonitor.activeSessions.count) { _, _ in
                     menuBar.rebuildMenu()
                 }
+                .onChange(of: bounceService.lastScanCompletedAt) { _, _ in
+                    guard auth.isAuthenticated, let token = auth.authToken else { return }
+                    Task {
+                        await collectionService.evaluateSmartCollections(
+                            bounceService: bounceService,
+                            commandService: commandService,
+                            scanner: scanner,
+                            backup: backup,
+                            token: token
+                        )
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .sessionSnapshotCaptured)) { _ in
                     menuBar.rebuildMenu()
                 }

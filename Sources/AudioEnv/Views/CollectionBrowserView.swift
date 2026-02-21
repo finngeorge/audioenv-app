@@ -9,6 +9,10 @@ struct CollectionBrowserView: View {
 
     @State private var showNewCollectionSheet = false
     @State private var search = ""
+    @State private var renamingCollectionId: UUID?
+    @State private var renameText = ""
+    @State private var collectionToDelete: AudioCollection?
+    @State private var showDeleteConfirmation = false
 
     private var filteredCollections: [AudioCollection] {
         if search.isEmpty { return collectionService.collections }
@@ -79,11 +83,54 @@ struct CollectionBrowserView: View {
             } else {
                 List(selection: $selectedCollection) {
                     ForEach(filteredCollections) { collection in
-                        CollectionRow(collection: collection)
-                            .tag(collection)
+                        CollectionRow(
+                            collection: collection,
+                            renamingCollectionId: $renamingCollectionId,
+                            renameText: $renameText
+                        )
+                        .tag(collection)
+                        .contextMenu {
+                            Button {
+                                renameText = collection.name
+                                renamingCollectionId = collection.id
+                            } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+
+                            Button {
+                                duplicateCollection(collection)
+                            } label: {
+                                Label("Duplicate", systemImage: "plus.square.on.square")
+                            }
+
+                            Divider()
+
+                            Button(role: .destructive) {
+                                collectionToDelete = collection
+                                showDeleteConfirmation = true
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
                 }
                 .listStyle(.inset)
+                .confirmationDialog(
+                    "Delete \"\(collectionToDelete?.name ?? "")\"?",
+                    isPresented: $showDeleteConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) {
+                        if let collection = collectionToDelete, let token = auth.authToken {
+                            Task {
+                                await collectionService.deleteCollection(id: collection.id, token: token)
+                            }
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will remove the collection but not the projects or bounces themselves.")
+                }
             }
         }
         .task {
@@ -95,12 +142,35 @@ struct CollectionBrowserView: View {
             NewCollectionSheet()
         }
     }
+
+    private func duplicateCollection(_ collection: AudioCollection) {
+        guard let token = auth.authToken else { return }
+        Task {
+            _ = await collectionService.createCollection(
+                name: "\(collection.name) Copy",
+                description: collection.description,
+                color: collection.color,
+                contentTypes: collection.contentTypes,
+                token: token
+            )
+        }
+    }
 }
 
 // MARK: - Collection Row
 
 private struct CollectionRow: View {
     let collection: AudioCollection
+    @Binding var renamingCollectionId: UUID?
+    @Binding var renameText: String
+    @EnvironmentObject var collectionService: CollectionService
+    @EnvironmentObject var auth: AuthenticationService
+    @EnvironmentObject var backup: BackupService
+
+    private var isBackedUp: Bool {
+        let expectedName = "\(collection.name) Collection"
+        return backup.availableBackups.contains { $0.name == expectedName }
+    }
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -118,10 +188,31 @@ private struct CollectionRow: View {
                         .frame(width: 10, height: 10)
                 }
 
-                Text(collection.name)
-                    .font(.body)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
+                if renamingCollectionId == collection.id {
+                    TextField("Collection name", text: $renameText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body)
+                        .onSubmit {
+                            let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+                            if !trimmed.isEmpty, let token = auth.authToken {
+                                Task {
+                                    await collectionService.updateCollection(
+                                        id: collection.id,
+                                        name: trimmed,
+                                        description: nil,
+                                        color: nil,
+                                        token: token
+                                    )
+                                }
+                            }
+                            renamingCollectionId = nil
+                        }
+                } else {
+                    Text(collection.name)
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                }
 
                 if collection.isPack {
                     Text("Pack")
@@ -132,6 +223,22 @@ private struct CollectionRow: View {
                         .padding(.vertical, 2)
                         .background(Color.orange.opacity(0.12))
                         .cornerRadius(4)
+                }
+
+                if collection.isSmart {
+                    Label("Smart", systemImage: "sparkles")
+                        .font(.caption2)
+                        .foregroundColor(.purple)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.purple.opacity(0.12))
+                        .cornerRadius(4)
+                }
+
+                if isBackedUp {
+                    Image(systemName: "checkmark.icloud")
+                        .font(.caption2)
+                        .foregroundColor(.green)
                 }
 
                 Spacer()
