@@ -43,6 +43,7 @@ struct Bounce: Identifiable, Hashable, Codable {
     let durationSeconds: Double?
     let sampleRate: Int?
     let bitDepth: Int?
+    let bitrate: Int?
     let createdAt: Date
     let fileModifiedAt: Date
 
@@ -57,6 +58,7 @@ struct Bounce: Identifiable, Hashable, Codable {
         case durationSeconds = "duration_seconds"
         case sampleRate = "sample_rate"
         case bitDepth = "bit_depth"
+        case bitrate
         case createdAt = "created_at"
         case fileModifiedAt = "file_modified_at"
     }
@@ -80,6 +82,12 @@ struct Bounce: Identifiable, Hashable, Codable {
         let mins = Int(dur) / 60
         let secs = Int(dur) % 60
         return String(format: "%d:%02d", mins, secs)
+    }
+
+    /// Formatted bitrate (e.g. "320 kbps")
+    var formattedBitrate: String? {
+        guard let br = bitrate else { return nil }
+        return "\(br) kbps"
     }
 
     /// Formatted sample rate (e.g. "48 kHz")
@@ -141,5 +149,6 @@ struct LocalBounceInfo {
     let durationSeconds: Double?
     let sampleRate: Int?
     let bitDepth: Int?
+    let bitrate: Int?
     let fileModifiedAt: Date
 }

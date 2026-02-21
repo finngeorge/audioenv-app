@@ -296,6 +296,11 @@ private struct BounceRow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+                if let br = bounce.formattedBitrate {
+                    Text(br)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .padding(.vertical, 2)

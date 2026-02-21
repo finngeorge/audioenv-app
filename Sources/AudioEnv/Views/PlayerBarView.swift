@@ -39,6 +39,11 @@ struct PlayerBarView: View {
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
+                            if let br = bounce.formattedBitrate {
+                                Text(br)
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
 
                             Text(bounce.formattedSize)
                                 .font(.system(size: 10))

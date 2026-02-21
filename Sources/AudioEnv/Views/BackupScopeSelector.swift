@@ -531,6 +531,7 @@ struct BackupScopeSelector: View {
                     durationSeconds: cb.durationSeconds,
                     sampleRate: cb.sampleRate,
                     bitDepth: cb.bitDepth,
+                    bitrate: cb.bitrate,
                     createdAt: Date(),
                     fileModifiedAt: Date()
                 )

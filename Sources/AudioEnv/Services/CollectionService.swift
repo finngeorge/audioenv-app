@@ -305,6 +305,7 @@ class CollectionService: ObservableObject {
         let durationSeconds: Double?
         let sampleRate: Int?
         let bitDepth: Int?
+        let bitrate: Int?
         let createdAt: String?
         let fileModifiedAt: String?
         let addedAt: String?
@@ -318,6 +319,7 @@ class CollectionService: ObservableObject {
             case durationSeconds = "duration_seconds"
             case sampleRate = "sample_rate"
             case bitDepth = "bit_depth"
+            case bitrate
             case createdAt = "created_at"
             case fileModifiedAt = "file_modified_at"
             case addedAt = "added_at"

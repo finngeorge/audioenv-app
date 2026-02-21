@@ -531,6 +531,11 @@ struct CollectionDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if let br = bounce.formattedBitrate {
+                        Text(br)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -603,6 +608,7 @@ struct CollectionDetailView: View {
             durationSeconds: cb.durationSeconds,
             sampleRate: cb.sampleRate,
             bitDepth: cb.bitDepth,
+            bitrate: cb.bitrate,
             createdAt: Date(),
             fileModifiedAt: Date()
         )

@@ -142,6 +142,9 @@ struct BounceDetailPanel: View {
                     if let bd = bounce.bitDepth {
                         InfoRow(label: "Bit Depth", value: "\(bd)-bit")
                     }
+                    if let br = bounce.formattedBitrate {
+                        InfoRow(label: "Bitrate", value: br)
+                    }
                     InfoRow(label: "File Size", value: bounce.formattedSize)
                     InfoRow(label: "Format", value: bounce.format.uppercased())
                 }

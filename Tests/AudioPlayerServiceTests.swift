@@ -21,6 +21,7 @@ final class AudioPlayerServiceTests: XCTestCase {
             durationSeconds: 120,
             sampleRate: 44100,
             bitDepth: 24,
+            bitrate: nil,
             createdAt: Date(),
             fileModifiedAt: Date()
         )

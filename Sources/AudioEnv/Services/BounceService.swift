@@ -207,7 +207,7 @@ class BounceService: ObservableObject {
             }
 
             // Extract audio metadata
-            let (duration, sampleRate, bitDepth) = await Self.extractAudioMetadata(path: filePath)
+            let (duration, sampleRate, bitDepth, bitrate) = await Self.extractAudioMetadata(path: filePath)
 
             results.append(LocalBounceInfo(
                 fileName: fileName,
@@ -217,6 +217,7 @@ class BounceService: ObservableObject {
                 durationSeconds: duration,
                 sampleRate: sampleRate,
                 bitDepth: bitDepth,
+                bitrate: bitrate,
                 fileModifiedAt: modDate
             ))
         }
@@ -224,18 +225,18 @@ class BounceService: ObservableObject {
         return results
     }
 
-    /// Extract duration, sample rate, and bit depth from an audio file.
-    private nonisolated static func extractAudioMetadata(path: String) async -> (duration: Double?, sampleRate: Int?, bitDepth: Int?) {
+    /// Extract duration, sample rate, bit depth, and bitrate from an audio file.
+    private nonisolated static func extractAudioMetadata(path: String) async -> (duration: Double?, sampleRate: Int?, bitDepth: Int?, bitrate: Int?) {
         let url = URL(fileURLWithPath: path)
         let ext = (path as NSString).pathExtension.lowercased()
 
         // AVAudioFile works for WAV, AIFF, FLAC but not MP3 — skip it for MP3 to avoid console error spam
         if ext != "mp3", let audioFile = try? AVAudioFile(forReading: url) {
-            let format = audioFile.processingFormat
+            let format = audioFile.fileFormat
             let duration = Double(audioFile.length) / format.sampleRate
             let sampleRate = Int(format.sampleRate)
             let bitDepth = Int(format.streamDescription.pointee.mBitsPerChannel)
-            return (duration, sampleRate, bitDepth > 0 ? bitDepth : nil)
+            return (duration, sampleRate, bitDepth > 0 ? bitDepth : nil, nil)
         }
 
         // AVURLAsset fallback (works for MP3 and others)
@@ -247,15 +248,19 @@ class BounceService: ObservableObject {
         // Try to get format details from audio tracks
         if let track = try? await asset.loadTracks(withMediaType: .audio).first {
             let descriptions = try? await track.load(.formatDescriptions)
+            let estimatedRate = try? await track.load(.estimatedDataRate)
+            let bitrateKbps = estimatedRate.flatMap { $0 > 0 ? Int($0 / 1000) : nil }
+
             if let desc = descriptions?.first {
                 let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee
                 let sr = asbd.map { Int($0.mSampleRate) }
                 let bd = asbd.map { Int($0.mBitsPerChannel) }
-                return (validDuration, sr, bd != nil && bd! > 0 ? bd : nil)
+                return (validDuration, sr, bd != nil && bd! > 0 ? bd : nil, bitrateKbps)
             }
+            return (validDuration, nil, nil, bitrateKbps)
         }
 
-        return (validDuration, nil, nil)
+        return (validDuration, nil, nil, nil)
     }
 
     /// Sync local scan results to the API.
@@ -273,6 +278,7 @@ class BounceService: ObservableObject {
                 "duration_seconds": b.durationSeconds,
                 "sample_rate": b.sampleRate,
                 "bit_depth": b.bitDepth,
+                "bitrate": b.bitrate,
                 "file_modified_at": dateFormatter.string(from: b.fileModifiedAt),
             ]
         }
