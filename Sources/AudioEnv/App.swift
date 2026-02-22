@@ -251,6 +251,12 @@ struct AudioEnvApp: App {
     private static func handleURL(_ url: URL, scanner: ScannerService, sync: SyncService, auth: AuthenticationService) {
         logger.info("Received URL: \(url)")
 
+        // Google OAuth callback from default browser
+        if url.scheme == "com.googleusercontent.apps.809075910499-o01a42a6k9vo2e6a1sfcnifpei3bqnv9" {
+            auth.handleGoogleOAuthCallback(url)
+            return
+        }
+
         guard url.scheme == "audioenv" else { return }
 
         switch url.host {

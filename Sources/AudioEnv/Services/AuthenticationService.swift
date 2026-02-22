@@ -15,6 +15,9 @@ class AuthenticationService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    /// Continuation for Google OAuth callback from default browser
+    private var googleOAuthContinuation: CheckedContinuation<URL, Error>?
+
     private let baseURL: String = {
         if let override = UserDefaults.standard.string(forKey: "apiBaseURL"), !override.isEmpty {
             return override
@@ -297,21 +300,8 @@ class AuthenticationService: ObservableObject {
         }
 
         let callbackURL: URL = try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(
-                url: authURL,
-                callbackURLScheme: callbackScheme
-            ) { url, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else if let url = url {
-                    continuation.resume(returning: url)
-                } else {
-                    continuation.resume(throwing: AuthError.invalidResponse)
-                }
-            }
-            session.prefersEphemeralWebBrowserSession = false
-            session.presentationContextProvider = ASWebAuthSessionContextProvider.shared
-            session.start()
+            self.googleOAuthContinuation = continuation
+            NSWorkspace.shared.open(authURL)
         }
 
         // Extract authorization code from query params
@@ -347,6 +337,12 @@ class AuthenticationService: ObservableObject {
         try await signInWithOAuth(provider: "google", idToken: idToken)
     }
 
+    /// Handle the OAuth callback URL from the default browser.
+    func handleGoogleOAuthCallback(_ url: URL) {
+        googleOAuthContinuation?.resume(returning: url)
+        googleOAuthContinuation = nil
+    }
+
     func logout() {
         // Note: We do NOT clear S3 config from keychain on logout
         // This allows users to keep their S3 credentials between sessions
@@ -362,15 +358,17 @@ class AuthenticationService: ObservableObject {
 
     // MARK: - Token Refresh
 
-    /// Returns a valid access token, refreshing proactively if near expiry.
+    /// Returns a valid access token, refreshing proactively if near expiry or unknown age.
     /// Use this instead of accessing `authToken` directly for API calls.
     func validToken() async throws -> String {
-        guard let token = authToken else {
+        guard let token = authToken, !token.trimmingCharacters(in: .whitespaces).isEmpty else {
             throw AuthError.invalidResponse
         }
 
-        // Check if token is near expiry and we have a refresh token
-        if isTokenNearExpiry(), (loadRefreshTokenFromFile() ?? loadRefreshTokenFromKeychain()) != nil {
+        // Refresh if near expiry OR if we don't know when the token was obtained
+        // (disk-loaded tokens have no tokenObtainedAt and may be expired)
+        let needsRefresh = isTokenNearExpiry() || tokenObtainedAt == nil
+        if needsRefresh, (loadRefreshTokenFromFile() ?? loadRefreshTokenFromKeychain()) != nil {
             do {
                 try await refreshToken()
                 return self.authToken ?? token
@@ -646,16 +644,6 @@ class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAut
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         continuation?.resume(throwing: error)
         continuation = nil
-    }
-}
-
-// MARK: - ASWebAuthenticationSession Context Provider
-
-class ASWebAuthSessionContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
-    static let shared = ASWebAuthSessionContextProvider()
-
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        NSApplication.shared.mainWindow ?? ASPresentationAnchor()
     }
 }
 
