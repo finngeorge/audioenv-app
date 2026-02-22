@@ -496,14 +496,12 @@ enum LogicParser {
                   let sub = decodeFourCC(subInt)
             else { continue }
 
-            // Resolve name: installed plugin description > installed plugin name > raw codes
-            let pluginName: String
+            // Resolve name from installed plugins only — skip unresolvable entries
+            // (internal Logic components like "ksWV" share the same plist format
+            // but are not user-facing plugins)
             let auKey = "\(mfr):\(sub)"
-            if let installed = auIndex[auKey] {
-                pluginName = installed.auDescription ?? installed.name
-            } else {
-                pluginName = "\(mfr) \(sub)"
-            }
+            guard let installed = auIndex[auKey] else { continue }
+            let pluginName = installed.auDescription ?? installed.name
 
             // Find the last OCuA marker before this plist
             var bestChannel: String?

@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import AVFAudio
 import os
 
 /// Central observable that drives the entire scan → parse pipeline.
@@ -580,8 +581,53 @@ class ScannerService: ObservableObject {
 
     // ── Plugin discovery ──────────────────────────────────────────
 
+    /// Build a lookup of AU display names from AVAudioUnitComponentManager.
+    ///
+    /// This is the same system registry that DAWs (Logic, Ableton, etc.) query
+    /// to display plugin names. The `.name` property on AVAudioUnitComponent
+    /// returns the correct human-readable name regardless of how the vendor
+    /// structured their Info.plist (some put display names in `description`,
+    /// others in the `name` field as "Manufacturer: PluginName").
+    ///
+    /// Keyed by "manufacturerCode:subtypeCode" using 4-char ASCII strings
+    /// derived from the component's AudioComponentDescription UInt32 codes.
+    private nonisolated static func buildAUComponentNameLookup() -> [String: String] {
+        var lookup: [String: String] = [:]
+        let desc = AudioComponentDescription(
+            componentType: 0, componentSubType: 0,
+            componentManufacturer: 0, componentFlags: 0,
+            componentFlagsMask: 0
+        )
+        let components = AVAudioUnitComponentManager.shared().components(matching: desc)
+        for comp in components {
+            let d = comp.audioComponentDescription
+            let mfr = fourCCString(d.componentManufacturer)
+            let sub = fourCCString(d.componentSubType)
+            let key = "\(mfr):\(sub)"
+            // First registration wins (matches AU host behavior)
+            if lookup[key] == nil {
+                lookup[key] = comp.name
+            }
+        }
+        return lookup
+    }
+
+    /// Convert a UInt32 FourCC code to its 4-character ASCII string.
+    private nonisolated static func fourCCString(_ value: UInt32) -> String {
+        let bytes: [UInt8] = [
+            UInt8((value >> 24) & 0xFF),
+            UInt8((value >> 16) & 0xFF),
+            UInt8((value >> 8) & 0xFF),
+            UInt8(value & 0xFF),
+        ]
+        return String(bytes: bytes, encoding: .ascii) ?? "????"
+    }
+
     /// Discover all plugins on disk. This is a pure I/O operation safe to call off the main actor.
     private nonisolated static func discoverPlugins() -> [AudioPlugin] {
+        // Query the system AU component registry once — same source DAWs use
+        let auNameLookup = buildAUComponentNameLookup()
+
         var results: [AudioPlugin] = []
         let fm = FileManager.default
 
@@ -599,18 +645,30 @@ class ScannerService: ObservableObject {
 
                 let full     = (dir as NSString).appendingPathComponent(rel)
                 let baseName = ((rel as NSString).lastPathComponent as NSString).deletingPathExtension
+                let format   = formatFor(ext)
                 let info     = readBundleInfo(at: full)
+
+                // AU identity fields only apply to AU-format plugins.
+                // Other formats (AAX, VST3) may include AudioComponents in
+                // their Info.plist but those aren't registered with the system
+                // AU host and would produce wrong format badges.
+                let isAU = (format == .audioUnit)
+                var resolvedAUName: String? = nil
+                if isAU, let mfr = info.auManufacturerCode, let sub = info.auSubtypeCode {
+                    let key = "\(mfr):\(sub)"
+                    resolvedAUName = auNameLookup[key] ?? info.auDescription
+                }
 
                 results.append(AudioPlugin(
                     name:               baseName,
                     path:               full,
-                    format:             formatFor(ext),
+                    format:             format,
                     bundleID:           info.bundleID,
                     version:            info.version,
                     manufacturer:       info.manufacturer,
-                    auManufacturerCode: info.auManufacturerCode,
-                    auSubtypeCode:      info.auSubtypeCode,
-                    auDescription:      info.auDescription
+                    auManufacturerCode: isAU ? info.auManufacturerCode : nil,
+                    auSubtypeCode:      isAU ? info.auSubtypeCode : nil,
+                    auDescription:      resolvedAUName
                 ))
             }
         }
@@ -645,6 +703,7 @@ class ScannerService: ObservableObject {
            let first = components.first {
             auMfr = first["manufacturer"] as? String
             auSub = first["subtype"] as? String
+            // Read both name and description — resolved later via AU component manager
             auDesc = first["description"] as? String
         }
 

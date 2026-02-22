@@ -24,7 +24,7 @@ struct AudioPlugin: Identifiable, Hashable, Codable {
     let manufacturer:        String?  /// CFBundlePackageType (best-effort)
     let auManufacturerCode:  String?  /// AudioComponents[0].manufacturer (AU 4-char code)
     let auSubtypeCode:       String?  /// AudioComponents[0].subtype (AU 4-char code)
-    let auDescription:       String?  /// AudioComponents[0].description (human-readable name)
+    let auDescription:       String?  /// AU display name (from system component registry, same as DAWs)
 
     init(name: String, path: String, format: PluginFormat,
          bundleID: String? = nil, version: String? = nil,

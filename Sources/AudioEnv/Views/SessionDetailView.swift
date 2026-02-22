@@ -182,15 +182,28 @@ struct SessionDetailView: View {
     /// Build a format lookup keyed by both the plugin's filename and its AU description,
     /// so plugins displayed by their AU description (e.g. "UADx SSL G Bus") can still
     /// resolve to a format badge.
+    /// Preferred format priority: AU > VST3 > VST > AAX.
+    /// When multiple installed formats share a name (e.g. "ValhallaVintageVerb"
+    /// exists as AU, VST3, and AAX), the format shown in session detail should
+    /// reflect what the DAW actually loaded — AU for Logic, etc.
+    private static let formatPriority: [PluginFormat: Int] = [
+        .audioUnit: 0, .vst3: 1, .vst: 2, .aax: 3,
+    ]
+
     private static func buildPluginFormatLookup(from plugins: [AudioPlugin]) -> [String: PluginFormat] {
         var lookup: [String: PluginFormat] = [:]
+
         for plugin in plugins {
-            lookup[plugin.name] = plugin.format
-            if let desc = plugin.auDescription {
-                // First plugin to claim a description wins
-                if lookup[desc] == nil {
-                    lookup[desc] = plugin.format
-                }
+            let dominated = { (name: String) -> Bool in
+                guard let existing = lookup[name] else { return false }
+                return (formatPriority[plugin.format] ?? 9) >= (formatPriority[existing] ?? 9)
+            }
+
+            if !dominated(plugin.name) {
+                lookup[plugin.name] = plugin.format
+            }
+            if let desc = plugin.auDescription, !dominated(desc) {
+                lookup[desc] = plugin.format
             }
         }
         return lookup

@@ -10,8 +10,6 @@ targets:
     platform: macOS
     sources:
       - Sources/AudioEnv
-      - path: audioenv.icns
-        buildPhase: resources
     resources:
       - path: Sources/AudioEnv/Resources
         type: folder
