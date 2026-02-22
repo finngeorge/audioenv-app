@@ -70,6 +70,7 @@ struct PlayerBarView: View {
                             } label: {
                                 Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                                     .font(.system(size: 16))
+                                    .frame(width: 20, height: 20)
                             }
                             .buttonStyle(.plain)
 
@@ -130,9 +131,9 @@ struct PlayerBarView: View {
                     .frame(width: 120, alignment: .trailing)
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.top, 14)
+                .padding(.bottom, 14)
             }
-            .frame(height: 65)
             .background(.bar)
         }
     }

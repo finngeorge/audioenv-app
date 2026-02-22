@@ -23,10 +23,13 @@ struct AudioPlugin: Identifiable, Hashable, Codable {
     let version:             String?  /// CFBundleShortVersionString
     let manufacturer:        String?  /// CFBundlePackageType (best-effort)
     let auManufacturerCode:  String?  /// AudioComponents[0].manufacturer (AU 4-char code)
+    let auSubtypeCode:       String?  /// AudioComponents[0].subtype (AU 4-char code)
+    let auDescription:       String?  /// AudioComponents[0].description (human-readable name)
 
     init(name: String, path: String, format: PluginFormat,
          bundleID: String? = nil, version: String? = nil,
-         manufacturer: String? = nil, auManufacturerCode: String? = nil) {
+         manufacturer: String? = nil, auManufacturerCode: String? = nil,
+         auSubtypeCode: String? = nil, auDescription: String? = nil) {
         self.id                 = UUID()
         self.name               = name
         self.path               = path
@@ -35,6 +38,8 @@ struct AudioPlugin: Identifiable, Hashable, Codable {
         self.version            = version
         self.manufacturer       = manufacturer
         self.auManufacturerCode = auManufacturerCode
+        self.auSubtypeCode      = auSubtypeCode
+        self.auDescription      = auDescription
     }
 
     // Equality / hashing driven by on-disk path (stable identity)

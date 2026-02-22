@@ -58,6 +58,7 @@ class AudioPlayerService: NSObject, ObservableObject {
             timeObserver.duration = newPlayer.duration
             timeObserver.currentTime = 0
 
+            newPlayer.prepareToPlay()
             newPlayer.play()
             isPlaying = true
             startTimer()
@@ -70,16 +71,16 @@ class AudioPlayerService: NSObject, ObservableObject {
 
     /// Pause current playback.
     func pause() {
-        player?.pause()
         isPlaying = false
         stopTimer()
+        player?.pause()
     }
 
     /// Resume paused playback.
     func resume() {
         guard player != nil else { return }
-        player?.play()
         isPlaying = true
+        player?.play()
         startTimer()
     }
 

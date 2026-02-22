@@ -218,7 +218,7 @@ struct SummaryView: View {
             StatCard(title: "Sessions", count: cachedTotalSessions,
                      icon: "doc.on.doc", color: .orange, action: {})
             StatCard(title: "Ableton Live",   count: cachedFormatCounts[.ableton] ?? 0,
-                     icon: "circle.fill", color: .teal, action: {
+                     icon: "circle.fill", color: .gray, action: {
                 onNavigateToProjects(.ableton)
             })
             StatCard(title: "Logic Pro",      count: cachedFormatCounts[.logic] ?? 0,
@@ -226,7 +226,7 @@ struct SummaryView: View {
                 onNavigateToProjects(.logic)
             })
             StatCard(title: "Pro Tools",      count: cachedFormatCounts[.proTools] ?? 0,
-                     icon: "circle.fill", color: .purple, action: {
+                     icon: "circle.fill", color: Color(red: 0.427, green: 0.141, blue: 0.890), action: {
                 onNavigateToProjects(.proTools)
             })
         }
@@ -321,7 +321,7 @@ struct SummaryView: View {
         switch f {
         case .ableton:  return .gray
         case .logic:    return .blue
-        case .proTools: return .purple
+        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
         }
     }
 }

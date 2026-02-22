@@ -9,6 +9,10 @@ struct SessionProject: Identifiable, Hashable {
     let latestDate: Date
 
     var totalSessions: Int { sessions.count }
+
+    var isStandaloneBundle: Bool {
+        format == .logic && sessions.count == 1 && backups.isEmpty
+    }
 }
 
 extension SessionProject {

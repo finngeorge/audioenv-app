@@ -82,7 +82,7 @@ enum LogicParser {
 
     // MARK: – Main parse entry point
 
-    static func parse(path: String) -> LogicProject? {
+    static func parse(path: String, plugins: [AudioPlugin] = []) -> LogicProject? {
         let fm = FileManager.default
         guard fm.fileExists(atPath: path) else { return nil }
 
@@ -127,6 +127,22 @@ enum LogicParser {
         let bouncedFiles = discoverBouncedFiles(in: path)
         let pluginHints  = extractPluginHints(in: path)
 
+        // Step 4b: Binary parsing of ProjectData for track names and per-track plugins
+        var trackNames: [String: String] = [:]
+        var trackPlugins: [String: [String]] = [:]
+        let projectDataCandidates = [
+            (path as NSString).appendingPathComponent("Alternatives/000/ProjectData"),
+            (path as NSString).appendingPathComponent("ProjectData"),
+            (path as NSString).appendingPathComponent("Contents/ProjectData"),
+        ]
+        for dataPath in projectDataCandidates {
+            if let projectData = fm.contents(atPath: dataPath) {
+                trackNames = findTrackNames(in: projectData)
+                trackPlugins = findChannelStripPlugins(in: projectData, plugins: plugins)
+                break
+            }
+        }
+
         // Step 5: Discover alternatives, map to human-readable names if available
         let rawAlternatives = discoverAlternatives(in: path)
         let alternatives: [String]
@@ -170,7 +186,9 @@ enum LogicParser {
             quicksamplerFiles: rich?.quicksamplerFiles.nilIfEmpty.map(stripToFilename),
             ultrabeatFiles: rich?.ultrabeatFiles.nilIfEmpty.map(stripToFilename),
             unusedAudioFiles: rich?.unusedAudioFiles.nilIfEmpty.map(stripToFilename),
-            logicVersion: projInfo?.lastSavedFrom
+            logicVersion: projInfo?.lastSavedFrom,
+            trackNames: trackNames,
+            trackPlugins: trackPlugins
         )
     }
 
@@ -296,60 +314,290 @@ enum LogicParser {
         return hints.sorted()
     }
 
-    // MARK: – Known-plugin matching
+    // MARK: – Binary track name extraction (ivnE records)
 
-    /// Match AU plugin codes found in binary data against installed plugins.
-    /// Returns an array of PluginMatch with confidence levels.
-    static func matchKnownPlugins(in data: Data, against plugins: [AudioPlugin]) -> [PluginMatch] {
-        let auCodes = scanBinaryForAUPlugins(data)
-        var matches: [PluginMatch] = []
-        var matchedNames: Set<String> = []
+    /// Names that are system/internal environment objects, not user tracks.
+    private static let enviSkipNames: Set<String> = [
+        "No Output", "Sequencer Input", "Physical Input", "Preview",
+        "Click", "MIDI Click", "(Folder)", "Stereo Out",
+    ]
 
-        // Strategy 1: Match manufacturer code from AU plugin bundleIDs
-        for plugin in plugins where plugin.format == .audioUnit {
-            guard !matchedNames.contains(plugin.name) else { continue }
-            if let bundleID = plugin.bundleID {
-                let bundleLower = bundleID.lowercased()
-                for code in auCodes {
-                    let parts = code.split(separator: ":")
-                    guard parts.count == 3 else { continue }
-                    let mfr = String(parts[2]).lowercased()
-                    if bundleLower.contains(mfr) {
-                        matches.append(PluginMatch(name: plugin.name, confidence: .auCodeMatch))
-                        matchedNames.insert(plugin.name)
-                        break
-                    }
-                }
+    /// Marker bytes for ivnE (Environment) records.
+    private static let ivnEMarker: [UInt8] = [0x69, 0x76, 0x6E, 0x45]
+
+    /// Extract channel-strip → track-name mapping from ivnE Environment records.
+    ///
+    /// Each record contains a name string and a channel strip index byte that
+    /// identifies which channel strip (Audio N, Aux N, etc.) the track is assigned to.
+    static func findTrackNames(in data: Data) -> [String: String] {
+        let bytes = [UInt8](data)
+        var mapping: [String: String] = [:]
+
+        for i in 0..<(bytes.count - 4) {
+            guard bytes[i] == ivnEMarker[0],
+                  bytes[i+1] == ivnEMarker[1],
+                  bytes[i+2] == ivnEMarker[2],
+                  bytes[i+3] == ivnEMarker[3]
+            else { continue }
+
+            let regionEnd = min(i + 400, bytes.count)
+            let regionLen = regionEnd - i
+            guard regionLen >= 200 else { continue }
+
+            // Name length at offset 194 (UInt16 LE)
+            let nameLen = Int(bytes[i + 194]) | (Int(bytes[i + 195]) << 8)
+            guard nameLen > 0, nameLen <= 200 else { continue }
+            guard i + 196 + nameLen <= bytes.count else { continue }
+
+            let nameData = Data(bytes[(i + 196)..<(i + 196 + nameLen)])
+            guard let name = String(data: nameData, encoding: .utf8) else { continue }
+
+            // Skip system objects
+            if name.hasPrefix("@") || enviSkipNames.contains(name) { continue }
+
+            // Channel index byte sits after the name, aligned to 2-byte boundary
+            var nameEnd = 196 + nameLen
+            if nameEnd % 2 == 1 { nameEnd += 1 }
+            guard i + nameEnd < bytes.count else { continue }
+            let chanByte = bytes[i + nameEnd]
+
+            // Decode channel strip ID
+            let chan: String
+            if chanByte >= 0x01 && chanByte <= 0x2B {
+                chan = "Audio \(chanByte)"
+            } else if chanByte >= 0x40 && chanByte <= 0x4A {
+                chan = "Aux \(chanByte - 0x3F)"
+            } else if chanByte >= 0x4B && chanByte <= 0x4F {
+                chan = "Inst \(chanByte - 0x4A)"
+            } else if chanByte == 0x64 {
+                chan = "Output 1-2"
+            } else {
+                continue
+            }
+
+            // First-seen wins
+            if mapping[chan] == nil {
+                mapping[chan] = name
             }
         }
 
-        // Strategy 2: Search for plugin names as UTF-8 strings in the binary
-        let bytes = [UInt8](data)
-        for plugin in plugins {
-            guard !matchedNames.contains(plugin.name) else { continue }
-            guard plugin.name.count >= 4 else { continue }
+        return mapping
+    }
 
-            let nameBytes = Array(plugin.name.utf8)
-            if containsSubsequence(bytes, nameBytes) {
-                matches.append(PluginMatch(name: plugin.name, confidence: .nameMatch))
-                matchedNames.insert(plugin.name)
+    // MARK: – Binary channel strip plugin extraction (OCuA + embedded plists)
+
+    /// Marker bytes for OCuA (Audio Channel Object).
+    private static let ocuAMarker: [UInt8] = Array("OCuA".utf8)
+
+    /// Channel strip name pattern (e.g. "Audio 12", "Aux 3", "Inst 1", "Output 1-2", "Bus 5").
+    private static let channelStripPattern = try! NSRegularExpression(
+        pattern: #"Audio \d+|Aux \d+|Inst \d+|Output \d+-\d+|Bus \d+"#
+    )
+
+    /// Decode a 4-char code from a big-endian UInt32 integer.
+    private static func decodeFourCC(_ value: Int) -> String? {
+        let uint = UInt32(clamping: value)
+        var bytes = uint.bigEndian
+        return withUnsafeBytes(of: &bytes) { buf -> String? in
+            guard let ptr = buf.baseAddress else { return nil }
+            let data = Data(bytes: ptr, count: 4)
+            guard let s = String(data: data, encoding: .ascii),
+                  s.allSatisfy({ $0.isASCII && !$0.isNewline && $0 != "\0" })
+            else { return nil }
+            return s
+        }
+    }
+
+    /// Find all OCuA markers and extract the channel strip name from nearby bytes.
+    private static func findOCuAMarkers(in bytes: [UInt8]) -> [(offset: Int, channel: String)] {
+        var results: [(Int, String)] = []
+
+        for i in 0..<(bytes.count - 4) {
+            guard bytes[i] == ocuAMarker[0],
+                  bytes[i+1] == ocuAMarker[1],
+                  bytes[i+2] == ocuAMarker[2],
+                  bytes[i+3] == ocuAMarker[3]
+            else { continue }
+
+            let regionEnd = min(i + 200, bytes.count)
+            let regionData = Data(bytes[i..<regionEnd])
+            // Search for channel name as ASCII in the region
+            guard let regionStr = String(data: regionData, encoding: .ascii) else { continue }
+            let range = NSRange(regionStr.startIndex..., in: regionStr)
+            if let match = channelStripPattern.firstMatch(in: regionStr, range: range),
+               let swiftRange = Range(match.range, in: regionStr) {
+                results.append((i, String(regionStr[swiftRange])))
+            }
+        }
+
+        return results
+    }
+
+    /// Find all embedded XML plists in the binary data. Returns (offset, plistData) pairs.
+    private static func findEmbeddedPlists(in data: Data) -> [(offset: Int, data: Data)] {
+        // Scan for <?xml version ... </plist> blocks using latin-1 interpretation
+        guard let text = String(data: data, encoding: .isoLatin1) else { return [] }
+
+        var results: [(Int, Data)] = []
+        let xmlHeader = "<?xml version"
+        let plistEnd = "</plist>"
+
+        var searchStart = text.startIndex
+        while let headerRange = text.range(of: xmlHeader, range: searchStart..<text.endIndex) {
+            guard let endRange = text.range(of: plistEnd, range: headerRange.lowerBound..<text.endIndex) else {
+                break
+            }
+            let plistString = String(text[headerRange.lowerBound..<endRange.upperBound])
+            let offset = text.distance(from: text.startIndex, to: headerRange.lowerBound)
+            if let plistData = plistString.data(using: .isoLatin1) {
+                results.append((offset, plistData))
+            }
+            searchStart = endRange.upperBound
+        }
+
+        return results
+    }
+
+    /// Extract per-channel-strip plugin lists from ProjectData binary.
+    ///
+    /// Finds OCuA channel strip markers, then associates embedded AU plists
+    /// with the nearest preceding OCuA marker. Each plist's manufacturer and
+    /// subtype integers are decoded to 4-char codes for plugin identification.
+    ///
+    /// Plugin names are resolved by matching (manufacturer, subtype) against
+    /// installed plugins' AudioComponents metadata, falling back to the raw
+    /// 4-char codes only when no installed plugin matches.
+    static func findChannelStripPlugins(in data: Data, plugins: [AudioPlugin] = []) -> [String: [String]] {
+        let bytes = [UInt8](data)
+
+        // Build lookup index: (manufacturer, subtype) → installed plugin
+        let auIndex = buildAUIndex(from: plugins)
+
+        // 1. Find all OCuA markers with channel names
+        let ocuaList = findOCuAMarkers(in: bytes)
+        guard !ocuaList.isEmpty else { return [:] }
+
+        // 2. Find all embedded plists
+        let plists = findEmbeddedPlists(in: data)
+
+        // 3. For each plist, parse AU identity and associate with nearest preceding OCuA
+        var channelPlugins: [String: [String]] = [:]
+
+        for (plistOffset, plistData) in plists {
+            guard let plist = try? PropertyListSerialization.propertyList(
+                from: plistData, options: [], format: nil) as? [String: Any]
+            else { continue }
+
+            guard let mfrInt = plist["manufacturer"] as? Int,
+                  let subInt = plist["subtype"] as? Int
+            else { continue }
+
+            guard let mfr = decodeFourCC(mfrInt),
+                  let sub = decodeFourCC(subInt)
+            else { continue }
+
+            // Resolve name: installed plugin description > installed plugin name > raw codes
+            let pluginName: String
+            let auKey = "\(mfr):\(sub)"
+            if let installed = auIndex[auKey] {
+                pluginName = installed.auDescription ?? installed.name
+            } else {
+                pluginName = "\(mfr) \(sub)"
+            }
+
+            // Find the last OCuA marker before this plist
+            var bestChannel: String?
+            for (ocuaOffset, channel) in ocuaList {
+                if ocuaOffset < plistOffset {
+                    bestChannel = channel
+                }
+            }
+
+            guard let channel = bestChannel else { continue }
+            channelPlugins[channel, default: []].append(pluginName)
+        }
+
+        return channelPlugins
+    }
+
+    /// Build an index of installed AU plugins keyed by "manufacturer:subtype".
+    /// This gives O(1) lookup when matching embedded plist identities.
+    private static func buildAUIndex(from plugins: [AudioPlugin]) -> [String: AudioPlugin] {
+        var index: [String: AudioPlugin] = [:]
+        for plugin in plugins where plugin.format == .audioUnit {
+            if let mfr = plugin.auManufacturerCode, let sub = plugin.auSubtypeCode {
+                let key = "\(mfr):\(sub)"
+                // First plugin wins (avoid duplicates from multiple AU registrations)
+                if index[key] == nil {
+                    index[key] = plugin
+                }
+            }
+        }
+        return index
+    }
+
+    // MARK: – Known-plugin matching
+
+    /// Match AU plugin identities found in binary data against installed plugins.
+    ///
+    /// Uses two reliable strategies based on structured data in the binary:
+    /// 1. Embedded XML plists contain `manufacturer` and `subtype` as integers,
+    ///    which map 1:1 to an installed AU plugin's AudioComponents identity.
+    /// 2. Raw AU type code triplets (aufx/aumu/aumf + subtype + manufacturer)
+    ///    appear as 12-byte ASCII sequences, matched against installed plugins.
+    ///
+    /// No raw string searching is performed — plugin identification is always
+    /// grounded in structured AU identity codes, not arbitrary text in the binary.
+    static func matchKnownPlugins(in data: Data, against plugins: [AudioPlugin]) -> [PluginMatch] {
+        // Build lookup index: "manufacturer:subtype" → installed plugin
+        let auIndex = buildAUIndex(from: plugins)
+
+        var matches: [PluginMatch] = []
+        var matchedIdentities: Set<String> = []  // "mfr:sub" pairs already matched
+
+        // Strategy 1: Match embedded plist manufacturer+subtype against installed plugins.
+        // Each embedded plist represents an actual plugin instance on a channel strip.
+        let embeddedPlists = findEmbeddedPlists(in: data)
+        for (_, plistData) in embeddedPlists {
+            guard let plist = try? PropertyListSerialization.propertyList(
+                from: plistData, options: [], format: nil) as? [String: Any],
+                  let mfrInt = plist["manufacturer"] as? Int,
+                  let subInt = plist["subtype"] as? Int,
+                  let mfr = decodeFourCC(mfrInt),
+                  let sub = decodeFourCC(subInt)
+            else { continue }
+
+            let auKey = "\(mfr):\(sub)"
+            guard !matchedIdentities.contains(auKey) else { continue }
+            matchedIdentities.insert(auKey)
+
+            if let installed = auIndex[auKey] {
+                let displayName = installed.auDescription ?? installed.name
+                matches.append(PluginMatch(name: displayName, confidence: .auCodeMatch))
+            }
+        }
+
+        // Strategy 2: Match raw AU type code triplets (12-byte ASCII sequences).
+        // These appear as e.g. "aufxU3BYUADx" in the binary — type(4)+subtype(4)+mfr(4).
+        let auCodes = scanBinaryForAUPlugins(data)
+        for code in auCodes {
+            let parts = code.split(separator: ":")
+            guard parts.count == 3 else { continue }
+            let mfr = String(parts[2])
+            let sub = String(parts[1])
+            let auKey = "\(mfr):\(sub)"
+            guard !matchedIdentities.contains(auKey) else { continue }
+            matchedIdentities.insert(auKey)
+
+            if let installed = auIndex[auKey] {
+                let displayName = installed.auDescription ?? installed.name
+                matches.append(PluginMatch(name: displayName, confidence: .auCodeMatch))
             }
         }
 
         return matches
     }
 
-    /// Check if bytes contains the given subsequence.
-    private static func containsSubsequence(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
-        guard needle.count <= haystack.count else { return false }
-        let limit = haystack.count - needle.count
-        for i in 0...limit {
-            if haystack[i..<(i + needle.count)].elementsEqual(needle) {
-                return true
-            }
-        }
-        return false
-    }
 }
 
 // MARK: – Array helper

@@ -256,6 +256,16 @@ class WebSocketService: ObservableObject {
             content.body = body
             content.sound = .default
 
+            // Attach app icon
+            if let iconURL = Bundle.main.url(forResource: "audioenv", withExtension: "icns"),
+               let attachment = try? UNNotificationAttachment(
+                   identifier: "appIcon",
+                   url: iconURL,
+                   options: [UNNotificationAttachmentOptionsTypeHintKey: "public.icns"]
+               ) {
+                content.attachments = [attachment]
+            }
+
             let request = UNNotificationRequest(
                 identifier: UUID().uuidString,
                 content: content,

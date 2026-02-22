@@ -78,6 +78,17 @@ class DAWIconLoader {
         return icon(for: format)
     }
 
+    /// Returns the macOS document icon for a specific file path (e.g. a .logicx bundle).
+    static func documentIcon(forFile path: String) -> NSImage {
+        NSWorkspace.shared.icon(forFile: path)
+    }
+
+    /// Returns the Logic Pro session thumbnail (WindowImage.jpg) if it exists inside a .logicx bundle.
+    static func logicThumbnail(forBundle path: String) -> NSImage? {
+        let thumbPath = (path as NSString).appendingPathComponent("Alternatives/000/WindowImage.jpg")
+        return NSImage(contentsOfFile: thumbPath)
+    }
+
     private static func loadFromBundle(_ bundle: Bundle, iconName: String) -> NSImage? {
         // SwiftPM flattens Resources folder, so icons are at bundle root
         // Try .icns extension first

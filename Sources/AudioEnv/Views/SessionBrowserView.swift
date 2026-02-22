@@ -8,15 +8,8 @@ struct SessionBrowserView: View {
     @Binding var selectedProject:    SessionProject?
     @Binding var formatFilter: SessionFormat?
     @State   private var search       = ""
+    @State   private var projects: [SessionProject] = []
     @FocusState private var isSearchFocused: Bool
-
-    private var projects: [SessionProject] {
-        let filtered = scanner.sessions
-            .filter { formatFilter == nil || $0.format == formatFilter }
-            .filter { search.isEmpty || $0.projectDisplayName.lowercased().contains(search.lowercased()) || $0.name.lowercased().contains(search.lowercased()) }
-
-        return SessionProject.groupSessions(filtered)
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -76,6 +69,18 @@ struct SessionBrowserView: View {
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             isSearchFocused = true
         }
+        .onChange(of: search) { _, _ in refilter() }
+        .onChange(of: formatFilter) { _, _ in refilter() }
+        .onChange(of: scanner.sessions) { _, _ in refilter() }
+        .onAppear { refilter() }
+    }
+
+    private func refilter() {
+        let q = search.lowercased()
+        let filtered = scanner.sessions
+            .filter { formatFilter == nil || $0.format == formatFilter }
+            .filter { q.isEmpty || $0.projectDisplayName.lowercased().contains(q) || $0.name.lowercased().contains(q) }
+        projects = SessionProject.groupSessions(filtered)
     }
 
     private func sessionEmptyState() -> some View {
@@ -180,6 +185,7 @@ struct SessionBrowserView: View {
 
 private struct ProjectRow: View {
     let project: SessionProject
+    @EnvironmentObject var scanner: ScannerService
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -191,8 +197,15 @@ private struct ProjectRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                // DAW icon only (no folder icon)
-                if let dawIcon = DAWIconLoader.icon(for: project.format) {
+                // Standalone Logic bundles use session-level icon instead of folder
+                if project.isStandaloneBundle,
+                   let sessionIcon = DAWIconLoader.sessionIcon(for: project.format) {
+                    Image(nsImage: sessionIcon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 32, height: 32)
+                        .cornerRadius(4)
+                } else if let dawIcon = DAWIconLoader.icon(for: project.format) {
                     Image(nsImage: dawIcon)
                         .resizable()
                         .scaledToFit()
@@ -234,7 +247,7 @@ private struct ProjectRow: View {
                 }
             }
 
-            if let summary = usedPluginsSummary() {
+            if let summary = pluginSummary {
                 Text(summary)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -249,7 +262,7 @@ private struct ProjectRow: View {
         switch project.format {
         case .ableton:  return .gray
         case .logic:    return .blue
-        case .proTools: return .purple
+        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
         }
     }
 
@@ -262,9 +275,22 @@ private struct ProjectRow: View {
     }
 
     private func parsedBadge() -> some View {
-        let parsedCount = project.sessions.filter { $0.project != nil }.count
-        let text = parsedCount > 0 ? "Parsed" : "Unparsed"
-        let color = parsedCount > 0 ? Color.green : Color.yellow
+        // Check if the newest session (by date) is parsed, using live scanner data
+        let liveSessionsByPath = Dictionary(
+            scanner.sessions.map { ($0.path, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let newest = project.sessions
+            .sorted { $0.modifiedDate > $1.modifiedDate }
+            .first
+        let isParsed: Bool
+        if let newest, let live = liveSessionsByPath[newest.path] {
+            isParsed = live.project != nil
+        } else {
+            isParsed = newest?.project != nil
+        }
+        let text = isParsed ? "Parsed" : "Unparsed"
+        let color = isParsed ? Color.green : Color.yellow
         return Text(text)
             .font(.caption2)
             .foregroundColor(color)
@@ -273,16 +299,31 @@ private struct ProjectRow: View {
             .cornerRadius(4)
     }
 
-    private func usedPluginsSummary() -> String? {
-        guard project.format == .ableton else { return nil }
+    private var pluginSummary: String? {
+        let liveSessionsByPath = Dictionary(
+            scanner.sessions.map { ($0.path, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         var pluginSet: [String] = []
         for session in project.sessions {
-            if case .ableton(let p) = session.project {
+            let live = liveSessionsByPath[session.path] ?? session
+            switch live.project {
+            case .ableton(let p):
                 pluginSet.append(contentsOf: p.usedPlugins)
+            case .logic(let p):
+                pluginSet.append(contentsOf: p.trackPlugins.values.flatMap { $0 })
+            default:
+                break
             }
         }
+        guard !pluginSet.isEmpty else {
+            // Only show "none detected" for formats we can parse plugins from
+            if project.format == .ableton || project.format == .logic {
+                return "Plugins: none detected"
+            }
+            return nil
+        }
         let unique = Array(Set(pluginSet)).sorted()
-        guard !unique.isEmpty else { return "Plugins: none detected" }
         let top = unique.prefix(3)
         let extra = unique.count - top.count
         if extra > 0 {

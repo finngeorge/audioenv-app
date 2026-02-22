@@ -55,37 +55,3 @@ struct AbletonClip: Codable {
     let length:     Double          /// length in project-timeline ticks
     let samplePath: String?         /// resolved sample path (audio clips only)
 }
-
-// MARK: – Logic project (metadata extracted from bundle)
-
-struct LogicProject: Codable {
-    let name:       String
-    let path:       String
-    let metadata:   [String: String]   /// key/value pairs pulled from plist files inside the bundle
-    let tempo:      Double?            /// extracted from metadata if available
-    let sampleRate: Int?               /// extracted from metadata if available
-    let mediaFiles: [String]           /// audio files discovered inside the bundle
-    let midiFiles:  [String]           /// MIDI files discovered inside the bundle
-    let bouncedFiles: [String]         /// bounced audio files discovered inside the bundle
-    let alternatives: [String]         /// named alternatives found in Alternatives/ subdirectory
-    let pluginHints: [String]          /// AU plugin IDs found via binary string scan of ProjectData
-
-    // Structured fields from Alternatives/000/MetaData.plist
-    let trackCount: Int?
-    let songKey: String?               /// e.g. "C", "F#"
-    let songScale: String?             /// e.g. "major", "minor" (from SongGenderKey)
-    let timeSignatureNumerator: Int?
-    let timeSignatureDenominator: Int?
-    let hasARAPlugins: Bool?
-
-    // Asset file arrays from MetaData.plist (filenames only, paths stripped)
-    let samplerInstrumentFiles: [String]?
-    let alchemyFiles: [String]?
-    let impulseResponseFiles: [String]?
-    let quicksamplerFiles: [String]?
-    let ultrabeatFiles: [String]?
-    let unusedAudioFiles: [String]?
-
-    // From Resources/ProjectInformation.plist
-    let logicVersion: String?          /// e.g. "Logic Pro X 11.0.0 (6011)"
-}

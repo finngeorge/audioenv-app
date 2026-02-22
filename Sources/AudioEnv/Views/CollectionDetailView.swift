@@ -29,6 +29,18 @@ struct CollectionDetailView: View {
     @State private var showSharePopup = false
     @State private var stackBounceFormats = false
     @State private var expandedBounceGroups: Set<String> = []
+    @State private var bounceSortOrder: BounceSortOrder = .newestFirst
+
+    enum BounceSortOrder: String, CaseIterable {
+        case newestFirst = "Newest First"
+        case oldestFirst = "Oldest First"
+        case aToZ = "A → Z"
+        case zToA = "Z → A"
+        case longestFirst = "Longest First"
+        case shortestFirst = "Shortest First"
+        case largestFirst = "Largest First"
+        case smallestFirst = "Smallest First"
+    }
 
     /// Live collection from service array — updates when fetchCollections refreshes.
     private var collection: AudioCollection? {
@@ -40,6 +52,35 @@ struct CollectionDetailView: View {
         bounces.compactMap(\.durationSeconds).reduce(0, +)
     }
 
+    /// Total file size of all bounces in the collection.
+    private var totalSize: Int64 {
+        bounces.compactMap(\.fileSizeBytes).reduce(0) { $0 + Int64($1) }
+    }
+
+    /// Bounces sorted by the current sort order.
+    private var sortedBounces: [CollectionService.CollectionBounce] {
+        bounces.sorted { a, b in
+            switch bounceSortOrder {
+            case .newestFirst:
+                return (a.fileModifiedAt ?? a.createdAt ?? "") > (b.fileModifiedAt ?? b.createdAt ?? "")
+            case .oldestFirst:
+                return (a.fileModifiedAt ?? a.createdAt ?? "") < (b.fileModifiedAt ?? b.createdAt ?? "")
+            case .aToZ:
+                return a.fileName.localizedCaseInsensitiveCompare(b.fileName) == .orderedAscending
+            case .zToA:
+                return a.fileName.localizedCaseInsensitiveCompare(b.fileName) == .orderedDescending
+            case .longestFirst:
+                return (a.durationSeconds ?? 0) > (b.durationSeconds ?? 0)
+            case .shortestFirst:
+                return (a.durationSeconds ?? 0) < (b.durationSeconds ?? 0)
+            case .largestFirst:
+                return (a.fileSizeBytes ?? 0) > (b.fileSizeBytes ?? 0)
+            case .smallestFirst:
+                return (a.fileSizeBytes ?? 0) < (b.fileSizeBytes ?? 0)
+            }
+        }
+    }
+
     /// Format priority for stacked display (preferred format shown first).
     private static let formatPriority: [String] = ["wav", "aiff", "flac", "m4a", "mp3"]
 
@@ -49,7 +90,7 @@ struct CollectionDetailView: View {
         var groups: [String: [CollectionService.CollectionBounce]] = [:]
         var order: [String] = []
 
-        for bounce in bounces {
+        for bounce in sortedBounces {
             let baseName = (bounce.fileName as NSString).deletingPathExtension.lowercased()
             let duration = bounce.durationSeconds.map { Int($0) } ?? -1
             let key = "\(baseName)|\(duration)"
@@ -364,6 +405,12 @@ struct CollectionDetailView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+
+                    if totalSize > 0 {
+                        Text(ByteCountFormatter.string(fromByteCount: totalSize, countStyle: .file))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
 
@@ -578,6 +625,16 @@ struct CollectionDetailView: View {
                     .font(.headline)
                     .foregroundColor(.secondary)
                 Spacer()
+
+                Picker("Sort", selection: $bounceSortOrder) {
+                    ForEach(BounceSortOrder.allCases, id: \.self) { order in
+                        Text(order.rawValue).tag(order)
+                    }
+                }
+                .pickerStyle(.menu)
+                .controlSize(.small)
+                .frame(width: 150)
+
                 if isEditing {
                     Button {
                         showCollectionBuilder = true
@@ -626,9 +683,9 @@ struct CollectionDetailView: View {
                     }
                 }
             } else {
-                ForEach(bounces) { bounce in
+                ForEach(sortedBounces) { bounce in
                     bounceRow(bounce)
-                    if bounce.id != bounces.last?.id {
+                    if bounce.id != sortedBounces.last?.id {
                         Divider()
                     }
                 }
@@ -707,10 +764,18 @@ struct CollectionDetailView: View {
 
             Spacer()
 
-            if let duration = bounce.durationSeconds {
-                Text(formatDuration(duration))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .trailing, spacing: 2) {
+                if let duration = bounce.durationSeconds {
+                    Text(formatDuration(duration))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                if let dateStr = bounce.fileModifiedAt ?? bounce.createdAt,
+                   let date = parseBounceDate(dateStr) {
+                    Text(Self.bounceDateFormatter.string(from: date))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             if isEditing {
@@ -877,10 +942,18 @@ struct CollectionDetailView: View {
 
             Spacer()
 
-            if let duration = bounce.durationSeconds {
-                Text(formatDuration(duration))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .trailing, spacing: 2) {
+                if let duration = bounce.durationSeconds {
+                    Text(formatDuration(duration))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                if let dateStr = bounce.fileModifiedAt ?? bounce.createdAt,
+                   let date = parseBounceDate(dateStr) {
+                    Text(Self.bounceDateFormatter.string(from: date))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             if isEditing {
@@ -1123,6 +1196,17 @@ struct CollectionDetailView: View {
         case "flac": return Color(hex: "a8e6cf") ?? .green
         default:     return .secondary
         }
+    }
+
+    private static let bounceDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    private func parseBounceDate(_ dateStr: String) -> Date? {
+        FlexibleISO8601.parse(dateStr)
     }
 
     private func formatDuration(_ seconds: Double) -> String {

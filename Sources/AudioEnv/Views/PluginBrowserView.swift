@@ -10,14 +10,8 @@ struct PluginBrowserView: View {
     @State private var search       = ""
     @State private var formatFilter: PluginFormat? = nil
     @State private var showExportMenu = false
+    @State private var filtered: [AudioPlugin] = []
     @FocusState private var isSearchFocused: Bool
-
-    private var filtered: [AudioPlugin] {
-        scanner.plugins
-            .filter { formatFilter == nil || $0.format == formatFilter }
-            .filter { search.isEmpty || $0.name.lowercased().contains(search.lowercased()) }
-            .sorted { $0.name.lowercased() < $1.name.lowercased() }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,6 +73,18 @@ struct PluginBrowserView: View {
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             isSearchFocused = true
         }
+        .onChange(of: search) { _, _ in refilter() }
+        .onChange(of: formatFilter) { _, _ in refilter() }
+        .onChange(of: scanner.plugins) { _, _ in refilter() }
+        .onAppear { refilter() }
+    }
+
+    private func refilter() {
+        let q = search.lowercased()
+        filtered = scanner.plugins
+            .filter { formatFilter == nil || $0.format == formatFilter }
+            .filter { q.isEmpty || $0.name.lowercased().contains(q) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private func pluginEmptyState() -> some View {

@@ -421,6 +421,17 @@ class MenuBarManager: ObservableObject {
         content.body = body
         content.sound = .default
 
+        // Attach app icon so it appears in the notification
+        if let iconURL = Self.appIconURL() {
+            if let attachment = try? UNNotificationAttachment(
+                identifier: "appIcon",
+                url: iconURL,
+                options: [UNNotificationAttachmentOptionsTypeHintKey: "public.icns"]
+            ) {
+                content.attachments = [attachment]
+            }
+        }
+
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
@@ -432,5 +443,30 @@ class MenuBarManager: ObservableObject {
                 self.logger.warning("Failed to send notification: \(error)")
             }
         }
+    }
+
+    /// Locate the app icon, checking the app bundle first then the SPM resource bundle.
+    private static func appIconURL() -> URL? {
+        // App bundle (when running as .app)
+        if let url = Bundle.main.url(forResource: "audioenv", withExtension: "icns") {
+            return url
+        }
+        // SPM resource bundle (when running via swift run)
+        if let resourceURL = Bundle.main.resourceURL {
+            let nested = resourceURL.appendingPathComponent("AudioEnv_AudioEnv.bundle")
+            if let bundle = Bundle(path: nested.path),
+               let url = bundle.url(forResource: "audioenv", withExtension: "icns") {
+                return url
+            }
+        }
+        if let execURL = Bundle.main.executableURL {
+            let adjacent = execURL.deletingLastPathComponent()
+                .appendingPathComponent("AudioEnv_AudioEnv.bundle")
+            if let bundle = Bundle(path: adjacent.path),
+               let url = bundle.url(forResource: "audioenv", withExtension: "icns") {
+                return url
+            }
+        }
+        return nil
     }
 }

@@ -42,6 +42,9 @@ struct AudioEnvApp: App {
                 .environmentObject(patternService)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
                 .onAppear {
+                    // Set app icon programmatically so it works when running from Xcode / swift run
+                    Self.setAppIconIfNeeded()
+
                     // Configure menu bar manager with services
                     menuBar.configure(scanner: scanner, sync: sync, auth: auth, sessionMonitor: sessionMonitor)
 
@@ -186,6 +189,32 @@ struct AudioEnvApp: App {
     }
 
     // MARK: - Private Helpers
+
+    /// Set the application icon from the bundled .icns file.
+    /// This ensures the correct icon appears in the Dock and notifications
+    /// even when running via Xcode or `swift run` (no .app bundle wrapper).
+    private static func setAppIconIfNeeded() {
+        // Try app bundle first (when running as .app)
+        if let url = Bundle.main.url(forResource: "audioenv", withExtension: "icns"),
+           let icon = NSImage(contentsOf: url) {
+            NSApplication.shared.applicationIconImage = icon
+            return
+        }
+        // Try SPM resource bundle
+        let bundleName = "AudioEnv_AudioEnv.bundle"
+        let candidates: [URL?] = [
+            Bundle.main.resourceURL?.appendingPathComponent(bundleName),
+            Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent(bundleName),
+        ]
+        for case let candidateURL? in candidates {
+            if let bundle = Bundle(path: candidateURL.path),
+               let url = bundle.url(forResource: "audioenv", withExtension: "icns"),
+               let icon = NSImage(contentsOf: url) {
+                NSApplication.shared.applicationIconImage = icon
+                return
+            }
+        }
+    }
 
     @MainActor
     private static func loadS3ConfigForUser(_ userId: String, backup: BackupService) {

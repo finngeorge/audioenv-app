@@ -116,7 +116,10 @@ extension AudioSession {
         case .proTools:
             return projectFolderName() ?? name
         case .logic:
-            return projectFolderName() ?? name
+            if hasProjectFolderSentinel() {
+                return projectFolderName() ?? name
+            }
+            return name
         }
     }
 
@@ -130,9 +133,13 @@ extension AudioSession {
             }
             return "\(dir.lowercased())::\(projectDisplayName.lowercased())"
         case .logic:
-            // Logic bundles (.logicx) are the session file itself; group by parent directory
-            let dir = (path as NSString).deletingLastPathComponent
-            return "\(dir.lowercased())::\(projectDisplayName.lowercased())"
+            if hasProjectFolderSentinel() {
+                // Group by parent directory when sentinel exists
+                let dir = (path as NSString).deletingLastPathComponent
+                return "\(dir.lowercased())::\(projectDisplayName.lowercased())"
+            }
+            // Each standalone bundle is its own project
+            return "\(path.lowercased())::\(name.lowercased())"
         }
     }
 
@@ -155,6 +162,12 @@ extension AudioSession {
             }
         }
         return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func hasProjectFolderSentinel() -> Bool {
+        let dir = (path as NSString).deletingLastPathComponent
+        let sentinel = (dir as NSString).appendingPathComponent(".musicapps-project-folder")
+        return FileManager.default.fileExists(atPath: sentinel)
     }
 
     private func projectFolderName() -> String? {

@@ -32,6 +32,7 @@ class ScannerService: ObservableObject {
             UserDefaults.standard.set(autoRescanOnLaunch, forKey: Self.defaultsAutoRescanKey)
         }
     }
+    @Published var isParsingIndividual: Bool = false
     @Published var isCacheStale: Bool = false
     @Published var cacheStaleReason: String? = nil
 
@@ -369,11 +370,8 @@ class ScannerService: ObservableObject {
         }
         let session = sessions[index]
 
-        // Skip if already parsed
-        if session.project != nil {
-            completion?()
-            return
-        }
+        isParsingIndividual = true
+        statusMessage = "Parsing \(session.name)…"
 
         let currentPlugins = self.plugins
         Task {
@@ -384,11 +382,28 @@ class ScannerService: ObservableObject {
             if let currentIndex = self.sessions.firstIndex(where: { $0.path == path }) {
                 self.sessions[currentIndex] = parsed
             }
+            self.isParsingIndividual = false
+            self.objectWillChange.send()
+            self.persistCache()
             completion?()
         }
     }
 
     // MARK: – Private helpers
+
+    /// Save current state to the on-disk cache so individual parses persist across launches.
+    private func persistCache() {
+        let cache = ScanCacheStore.makeCache(
+            plugins: plugins,
+            sessions: sessions,
+            lastScanDate: lastScanDate,
+            skippedLargeSessions: skippedLargeSessions,
+            scanRoots: cachedScanRoots,
+            rootModTimes: cachedRootModTimes,
+            pluginDirModTimes: cachedPluginDirModTimes
+        )
+        cacheStore.save(cache)
+    }
 
     private func loadDefaults() {
         let defaults = UserDefaults.standard
@@ -593,7 +608,9 @@ class ScannerService: ObservableObject {
                     bundleID:           info.bundleID,
                     version:            info.version,
                     manufacturer:       info.manufacturer,
-                    auManufacturerCode: info.auManufacturerCode
+                    auManufacturerCode: info.auManufacturerCode,
+                    auSubtypeCode:      info.auSubtypeCode,
+                    auDescription:      info.auDescription
                 ))
             }
         }
@@ -611,28 +628,33 @@ class ScannerService: ObservableObject {
     }
 
     /// Best-effort read of a macOS bundle's Info.plist.
-    private nonisolated static func readBundleInfo(at path: String) -> (bundleID: String?, version: String?, manufacturer: String?, auManufacturerCode: String?) {
+    private nonisolated static func readBundleInfo(at path: String) -> (bundleID: String?, version: String?, manufacturer: String?, auManufacturerCode: String?, auSubtypeCode: String?, auDescription: String?) {
         let plistPath = (path as NSString).appendingPathComponent("Contents/Info.plist")
         guard let data = FileManager.default.contents(atPath: plistPath),
               let dict = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
-        else { return (nil, nil, nil, nil) }
+        else { return (nil, nil, nil, nil, nil, nil) }
 
         let rawManufacturer = dict["CFBundlePackageType"] as? String
         let manufacturer = (rawManufacturer?.uppercased() == "BNDL") ? nil : rawManufacturer
 
-        // Extract AU 4-char manufacturer code from AudioComponents array
-        var auCode: String? = nil
+        // Extract AU identity from AudioComponents array
+        var auMfr: String? = nil
+        var auSub: String? = nil
+        var auDesc: String? = nil
         if let components = dict["AudioComponents"] as? [[String: Any]],
-           let first = components.first,
-           let mfr = first["manufacturer"] as? String {
-            auCode = mfr
+           let first = components.first {
+            auMfr = first["manufacturer"] as? String
+            auSub = first["subtype"] as? String
+            auDesc = first["description"] as? String
         }
 
         return (
             bundleID:            dict["CFBundleIdentifier"]            as? String,
             version:             dict["CFBundleShortVersionString"]    as? String,
             manufacturer:        manufacturer,
-            auManufacturerCode:  auCode
+            auManufacturerCode:  auMfr,
+            auSubtypeCode:       auSub,
+            auDescription:       auDesc
         )
     }
 
@@ -765,7 +787,7 @@ class ScannerService: ObservableObject {
         case .ableton:
             if let p = AbletonParser.parse(path: session.path) { s.project = .ableton(p) }
         case .logic:
-            if let p = LogicParser.parse(path: session.path)   { s.project = .logic(p) }
+            if let p = LogicParser.parse(path: session.path, plugins: plugins) { s.project = .logic(p) }
         case .proTools:
             if let handle = FileHandle(forReadingAtPath: session.path) {
                 let data = (try? handle.read(upToCount: 1024 * 1024)) ?? Data()
@@ -783,6 +805,7 @@ class ScannerService: ObservableObject {
             switch session.format {
             case .logic:
                 let candidates = [
+                    (session.path as NSString).appendingPathComponent("Alternatives/000/ProjectData"),
                     (session.path as NSString).appendingPathComponent("ProjectData"),
                     (session.path as NSString).appendingPathComponent("Contents/ProjectData"),
                 ]

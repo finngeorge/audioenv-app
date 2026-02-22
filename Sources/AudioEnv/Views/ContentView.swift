@@ -40,6 +40,7 @@ struct ContentView: View {
     @State private var showHowToScan                  = false
     @State private var showRescanConfirmation         = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var projectCount: Int = 0
 
     var body: some View {
         if !auth.isAuthenticated {
@@ -60,7 +61,7 @@ struct ContentView: View {
                         .tag(AppSection.plugins)
 
                     Label("Projects", systemImage: "folder.fill")
-                        .badge(SessionProject.groupSessions(scanner.sessions).count)
+                        .badge(projectCount)
                         .tag(AppSection.projects)
 
                     Label("Collections", systemImage: "rectangle.stack")
@@ -118,6 +119,38 @@ struct ContentView: View {
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
                             }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+
+                if scanner.isScanning || scanner.isParsingIndividual {
+                    Section {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Image(systemName: scanner.isScanning ? "viewfinder.circle" : "doc.text.magnifyingglass")
+                                    .foregroundColor(.blue)
+                                Text(scanner.isScanning ? "Scanning..." : "Parsing...")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                Spacer()
+                                if scanner.isScanning {
+                                    Text("\(Int(scanner.scanProgress * 100))%")
+                                        .font(.caption)
+                                        .monospacedDigit()
+                                }
+                            }
+                            if scanner.isScanning {
+                                ProgressView(value: scanner.scanProgress)
+                                    .progressViewStyle(.linear)
+                            } else {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text(scanner.statusMessage)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
                         }
                         .padding(.vertical, 4)
                     }
@@ -283,6 +316,18 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .togglePlayPause)) { _ in
             audioPlayer.togglePlayPause()
         }
+        .onAppear {
+            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                // Space bar play/pause — skip if a text field has focus
+                if event.keyCode == 49,
+                   event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
+                   !(NSApp.keyWindow?.firstResponder is NSTextView) {
+                    audioPlayer.togglePlayPause()
+                    return nil
+                }
+                return event
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToProject)) { notification in
             guard let projectPath = notification.userInfo?["projectPath"] as? String else { return }
             section = .projects
@@ -297,7 +342,13 @@ struct ContentView: View {
 
         PlayerBarView()
         } // end VStack
-        .onAppear { resizeWindow(width: 1360, height: 780, minWidth: 1200, minHeight: 620) }
+        .onAppear {
+            resizeWindow(width: 1360, height: 780, minWidth: 1200, minHeight: 620)
+            projectCount = SessionProject.groupSessions(scanner.sessions).count
+        }
+        .onChange(of: scanner.sessions) { _, newSessions in
+            projectCount = SessionProject.groupSessions(newSessions).count
+        }
         } // end if authenticated
     }
 
@@ -458,7 +509,7 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
 
                     InfoRow(label: "Total Plugins", value: "\(scanner.plugins.count)")
-                    InfoRow(label: "Projects", value: "\(SessionProject.groupSessions(scanner.sessions).count)")
+                    InfoRow(label: "Projects", value: "\(projectCount)")
                     InfoRow(label: "Sessions", value: "\(scanner.sessions.count)")
 
                     if scanner.lastScanDate != nil {
@@ -534,7 +585,7 @@ struct ContentView: View {
 
                     InfoRow(label: "Plugins", value: "\(scanner.plugins.count)")
                     InfoRow(label: "Sessions", value: "\(scanner.sessions.count)")
-                    InfoRow(label: "Projects", value: "\(SessionProject.groupSessions(scanner.sessions).count)")
+                    InfoRow(label: "Projects", value: "\(projectCount)")
                 }
                 .padding()
                 .background(Color.secondary.opacity(0.05))

@@ -242,7 +242,7 @@ struct PluginDetailView: View {
         switch format {
         case .ableton: return .gray
         case .logic: return .blue
-        case .proTools: return .purple
+        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
         }
     }
 

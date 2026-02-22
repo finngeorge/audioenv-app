@@ -9,10 +9,16 @@ struct ProjectDetailView: View {
     @EnvironmentObject var scanner: ScannerService
     @EnvironmentObject var backup: BackupService
 
+    /// Look up live versions of sessions from the scanner so parsed data is reflected.
     private var sessionsToShow: [AudioSession] {
-        let base = project.sessions
+        let liveSessionsByPath = Dictionary(
+            scanner.sessions.map { ($0.path, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let base = project.sessions.map { liveSessionsByPath[$0.path] ?? $0 }
         if showBackups {
-            return base + project.backups
+            let liveBackups = project.backups.map { liveSessionsByPath[$0.path] ?? $0 }
+            return base + liveBackups
         }
         return base
     }
@@ -56,6 +62,7 @@ struct ProjectDetailView: View {
                 List(sessionsToShow, selection: $selectedSession) { session in
                     SessionRow(session: session)
                         .tag(session)
+                        .id("\(session.path):\(session.project != nil)")
                 }
                 .frame(minWidth: 220, idealWidth: 280)
 
@@ -74,6 +81,13 @@ struct ProjectDetailView: View {
                 .first
             DispatchQueue.main.async {
                 selectedSession = newest
+            }
+        }
+        .onChange(of: scanner.sessions) { _, newSessions in
+            // Refresh selectedSession with live data so parsed results appear
+            if let current = selectedSession,
+               let updated = newSessions.first(where: { $0.path == current.path }) {
+                selectedSession = updated
             }
         }
     }
@@ -176,7 +190,7 @@ struct ProjectDetailView: View {
     }
 
     private var unparsedCount: Int {
-        project.sessions.filter { $0.project == nil }.count
+        sessionsToShow.filter { !$0.isBackup && $0.project == nil }.count
     }
 
     private func parseUnparsedSessions() {
@@ -277,7 +291,7 @@ private struct SessionRow: View {
         switch session.format {
         case .ableton:  return .gray
         case .logic:    return .blue
-        case .proTools: return .purple
+        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
         }
     }
 

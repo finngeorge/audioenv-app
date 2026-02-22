@@ -15,24 +15,8 @@ struct BounceBrowserView: View {
     @State private var linkedFilter: Bool? = nil
     @State private var folderFilter: UUID? = nil
     @State private var showLinkFolderPrompt = false
-
-    private var filteredBounces: [Bounce] {
-        bounceService.bounces.filter { bounce in
-            if let ff = formatFilter, bounce.format != ff { return false }
-            if let folderId = folderFilter, bounce.bounceFolderId != folderId { return false }
-            if !search.isEmpty {
-                let q = search.lowercased()
-                if !bounce.fileName.lowercased().contains(q) { return false }
-            }
-            return true
-        }
-    }
-
-    private var availableFormats: [String] {
-        let formats = Set(bounceService.bounces.map { $0.format })
-        let order = ["wav", "mp3", "aiff", "flac", "m4a"]
-        return order.filter { formats.contains($0) }
-    }
+    @State private var filteredBounces: [Bounce] = []
+    @State private var availableFormats: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -192,6 +176,24 @@ struct BounceBrowserView: View {
         .sheet(isPresented: $showLinkFolderPrompt) {
             LinkBounceFolderSheet()
         }
+        .onChange(of: search) { _, _ in refilter() }
+        .onChange(of: formatFilter) { _, _ in refilter() }
+        .onChange(of: folderFilter) { _, _ in refilter() }
+        .onChange(of: bounceService.bounces) { _, _ in refilter() }
+        .onAppear { refilter() }
+    }
+
+    private func refilter() {
+        let q = search.lowercased()
+        filteredBounces = bounceService.bounces.filter { bounce in
+            if let ff = formatFilter, bounce.format != ff { return false }
+            if let folderId = folderFilter, bounce.bounceFolderId != folderId { return false }
+            if !q.isEmpty, !bounce.fileName.lowercased().contains(q) { return false }
+            return true
+        }
+        let formats = Set(bounceService.bounces.map { $0.format })
+        let order = ["wav", "mp3", "aiff", "flac", "m4a"]
+        availableFormats = order.filter { formats.contains($0) }
     }
 
     private func emptyFoldersState() -> some View {

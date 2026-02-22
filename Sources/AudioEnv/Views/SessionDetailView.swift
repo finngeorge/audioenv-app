@@ -11,19 +11,44 @@ struct SessionDetailView: View {
     @State private var showSampleCollection = false
     @State private var isParsing = false
 
+    /// Always read the latest version of this session from the scanner's array,
+    /// so parsed data appears immediately after `parseIndividualSession` completes.
+    private var liveSession: AudioSession {
+        scanner.sessions.first(where: { $0.path == session.path }) ?? session
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection()
                 Divider()
                 metadataSection()
+
+                // Logic session window thumbnail
+                if session.format == .logic,
+                   let thumb = DAWIconLoader.logicThumbnail(forBundle: session.path) {
+                    Divider()
+                    DisclosureGroup("Project Window Image") {
+                        Image(nsImage: thumb)
+                            .resizable()
+                            .scaledToFit()
+                            .cornerRadius(6)
+                    }
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                }
+
                 Divider()
 
-                switch session.project {
+                switch liveSession.project {
                 case .ableton(let p):
                     AbletonDetailView(project: p)
                 case .logic(let p):
-                    LogicDetailView(project: p)
+                    LogicDetailView(
+                        project: p,
+                        knownPluginMatches: liveSession.knownPluginMatches ?? [],
+                        installedPluginFormats: Self.buildPluginFormatLookup(from: scanner.plugins)
+                    )
                 case .proTools(let p):
                     ProToolsDetailView(project: p)
                 case .none:
@@ -104,7 +129,7 @@ struct SessionDetailView: View {
         switch format {
         case .ableton:  return .gray
         case .logic:    return .blue
-        case .proTools: return .purple
+        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
         }
     }
 
@@ -152,6 +177,23 @@ struct SessionDetailView: View {
             }
             .fixedSize(horizontal: true, vertical: false)
         }
+    }
+
+    /// Build a format lookup keyed by both the plugin's filename and its AU description,
+    /// so plugins displayed by their AU description (e.g. "UADx SSL G Bus") can still
+    /// resolve to a format badge.
+    private static func buildPluginFormatLookup(from plugins: [AudioPlugin]) -> [String: PluginFormat] {
+        var lookup: [String: PluginFormat] = [:]
+        for plugin in plugins {
+            lookup[plugin.name] = plugin.format
+            if let desc = plugin.auDescription {
+                // First plugin to claim a description wins
+                if lookup[desc] == nil {
+                    lookup[desc] = plugin.format
+                }
+            }
+        }
+        return lookup
     }
 
     private func showInFinder() {
@@ -492,6 +534,10 @@ struct ProToolsDetailView: View {
 
 struct LogicDetailView: View {
     let project: LogicProject
+    let knownPluginMatches: [PluginMatch]
+    let installedPluginFormats: [String: PluginFormat]
+
+    // MARK: – Computed display values
 
     private var sampleRateDisplay: String {
         guard let sr = project.sampleRate else { return "\u{2014}" }
@@ -521,6 +567,52 @@ struct LogicDetailView: View {
         return "\(num)/\(den)"
     }
 
+    /// Ordered track list: each entry has (channelStrip, userTrackName, plugins)
+    /// Sorted by channel type then number for logical ordering.
+    private var trackList: [(channel: String, name: String, plugins: [String])] {
+        // Gather all channel strips mentioned in either trackNames or trackPlugins
+        var allChannels = Set(project.trackNames.keys)
+        allChannels.formUnion(project.trackPlugins.keys)
+
+        return allChannels.sorted { a, b in
+            channelSortKey(a) < channelSortKey(b)
+        }.map { channel in
+            let name = project.trackNames[channel] ?? channel
+            let plugins = project.trackPlugins[channel] ?? []
+            return (channel, name, plugins)
+        }
+    }
+
+    /// All unique plugin names across all tracks + known matches, deduplicated.
+    /// Both sources now resolve names from the same AU identity index, so
+    /// exact case-insensitive dedup produces clean results without heuristics.
+    private var allIdentifiedPlugins: [(name: String, confidence: PluginMatchConfidence?)] {
+        var seen: Set<String> = []
+        var result: [(String, PluginMatchConfidence?)] = []
+
+        // Known plugin matches (highest confidence first)
+        for match in knownPluginMatches.sorted(by: { $0.confidence < $1.confidence }) {
+            let key = match.name.lowercased()
+            if !seen.contains(key) {
+                seen.insert(key)
+                result.append((match.name, match.confidence))
+            }
+        }
+
+        // Plugins identified from embedded plists (per-track)
+        for (_, plugins) in project.trackPlugins {
+            for plugin in plugins {
+                let key = plugin.lowercased()
+                if !seen.contains(key) {
+                    seen.insert(key)
+                    result.append((plugin, .auCodeMatch))
+                }
+            }
+        }
+
+        return result
+    }
+
     /// All instrument resource files flattened with type prefixes
     private var instrumentResources: [(type: String, name: String)] {
         var items: [(String, String)] = []
@@ -532,18 +624,30 @@ struct LogicDetailView: View {
         return items
     }
 
-    /// Summary line parts
+    /// Summary line
     private var summaryParts: [String] {
         var parts: [String] = []
         if let tc = project.trackCount, tc > 0 { parts.append("\(tc) tracks") }
-        if !project.pluginHints.isEmpty { parts.append("\(project.pluginHints.count) plugin(s)") }
+        if !allIdentifiedPlugins.isEmpty {
+            parts.append("\(allIdentifiedPlugins.count) plugin(s)")
+        } else if !project.pluginHints.isEmpty {
+            parts.append("\(project.pluginHints.count) plugin hint(s)")
+        }
         if !project.mediaFiles.isEmpty { parts.append("\(project.mediaFiles.count) audio files") }
         return parts
     }
 
+    private var hasARADisplay: String? {
+        guard let has = project.hasARAPlugins else { return nil }
+        return has ? "Yes" : "No"
+    }
+
+    // MARK: – Body
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // ── Quick-stat cards ────────────────────────────
+
+            // ── 1. Quick-stat cards ─────────────────────────
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     QuickStat(label: "Tempo", value: project.tempo.map { "\(Int($0)) BPM" } ?? "\u{2014}", icon: "metronome")
@@ -555,55 +659,96 @@ struct LogicDetailView: View {
                     if project.timeSignatureNumerator != nil {
                         QuickStat(label: "Time Sig", value: timeSigDisplay, icon: "clock")
                     }
+                    if project.hasARAPlugins == true {
+                        QuickStat(label: "ARA", value: "Yes", icon: "link")
+                    }
                 }
                 .fixedSize(horizontal: true, vertical: false)
             }
 
             // ── Summary line ────────────────────────────────
-            if !summaryParts.isEmpty {
+            if !summaryParts.isEmpty || project.logicVersion != nil {
                 HStack(spacing: 4) {
-                    Text(summaryParts.joined(separator: " \u{00B7} "))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    if !summaryParts.isEmpty {
+                        Text(summaryParts.joined(separator: " \u{00B7} "))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
                     if let version = project.logicVersion {
-                        Text("\u{00B7} \(version)")
+                        if !summaryParts.isEmpty {
+                            Text("\u{00B7}")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Text(version)
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
                 }
-            } else if let version = project.logicVersion {
-                Text(version)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
             }
 
-            // ── AU Plugin Hints ─────────────────────────────
-            if !project.pluginHints.isEmpty {
-                Text("AU Plugin Hints")
+            // ── 2. Identified plugins (all sources) ─────────
+            if !allIdentifiedPlugins.isEmpty {
+                Divider()
+                Text("Plugins Used in Project")
                     .font(.headline)
                     .fontWeight(.semibold)
+
                 LazyVGrid(columns: [GridItem(.flexible(minimum: 140)), GridItem(.flexible(minimum: 140))], spacing: 6) {
-                    ForEach(project.pluginHints, id: \.self) { hint in
+                    ForEach(0..<allIdentifiedPlugins.count, id: \.self) { i in
+                        let plugin = allIdentifiedPlugins[i]
+                        let matchedFormat = lookupPluginFormat(plugin.name)
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(Color.accentColor)
+                                .fill(matchedFormat != nil ? pluginFormatColor(matchedFormat!) : Color.secondary)
                                 .frame(width: 6, height: 6)
-                            Text(hint)
-                                .font(.caption)
+                            Text(plugin.name)
+                                .font(.subheadline)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
+                            if let fmt = matchedFormat {
+                                Text(fmt.rawValue)
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(pluginFormatColor(fmt).opacity(0.2))
+                                    .foregroundColor(pluginFormatColor(fmt))
+                                    .cornerRadius(3)
+                            }
                         }
                     }
                 }
             }
 
-            // ── Alternatives ────────────────────────────────
-            if !project.alternatives.isEmpty {
-                Text("Alternatives")
+            // ── 3. Tracks with plugins ──────────────────────
+            if !trackList.isEmpty {
+                Divider()
+                Text("Tracks")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+
+                VStack(spacing: 0) {
+                    ForEach(0..<trackList.count, id: \.self) { i in
+                        LogicTrackRow(
+                            channel: trackList[i].channel,
+                            name: trackList[i].name,
+                            plugins: trackList[i].plugins
+                        )
+                        if i < trackList.count - 1 { Divider() }
+                    }
+                }
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(8)
+            }
+
+            // ── 4. Alternatives ─────────────────────────────
+            if project.alternatives.count > 1 {
+                Divider()
+                Text("Alternatives (\(project.alternatives.count))")
                     .font(.headline)
                     .fontWeight(.semibold)
                 VStack(alignment: .leading, spacing: 4) {
@@ -619,7 +764,7 @@ struct LogicDetailView: View {
                 }
             }
 
-            // ── Instrument Resources ────────────────────────
+            // ── 5. Instrument Resources ─────────────────────
             if !instrumentResources.isEmpty {
                 Divider()
                 DisclosureGroup("Instrument Resources (\(instrumentResources.count))") {
@@ -648,70 +793,7 @@ struct LogicDetailView: View {
                 .fontWeight(.semibold)
             }
 
-            // ── Empty state ─────────────────────────────────
-            if project.trackCount == nil && project.metadata.isEmpty && project.mediaFiles.isEmpty && project.midiFiles.isEmpty && project.pluginHints.isEmpty {
-                Text("Logic Pro uses a proprietary binary format. Full track and plugin analysis requires opening the session in Logic Pro.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-
-            // ── Media files ─────────────────────────────────
-            if !project.mediaFiles.isEmpty {
-                Divider()
-                Text("Media Files (\(project.mediaFiles.count))")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                VStack(spacing: 0) {
-                    ForEach(0..<project.mediaFiles.count, id: \.self) { i in
-                        HStack(spacing: 8) {
-                            Image(systemName: "speaker.wave.2")
-                                .foregroundColor(.accentColor)
-                                .frame(width: 16)
-                            Text((project.mediaFiles[i] as NSString).lastPathComponent)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer()
-                        }
-                        .padding(.vertical, 5)
-                        .padding(.horizontal, 10)
-                        Divider()
-                    }
-                }
-                .background(Color.secondary.opacity(0.08))
-                .cornerRadius(8)
-            }
-
-            // ── MIDI files ──────────────────────────────────
-            if !project.midiFiles.isEmpty {
-                Divider()
-                Text("MIDI Files (\(project.midiFiles.count))")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                VStack(spacing: 0) {
-                    ForEach(0..<project.midiFiles.count, id: \.self) { i in
-                        HStack(spacing: 8) {
-                            Image(systemName: "piano")
-                                .foregroundColor(.purple)
-                                .frame(width: 16)
-                            Text((project.midiFiles[i] as NSString).lastPathComponent)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer()
-                        }
-                        .padding(.vertical, 5)
-                        .padding(.horizontal, 10)
-                        Divider()
-                    }
-                }
-                .background(Color.secondary.opacity(0.08))
-                .cornerRadius(8)
-            }
-
-            // ── Bounced files ───────────────────────────────
+            // ── 6. Bounced files ────────────────────────────
             if !project.bouncedFiles.isEmpty {
                 Divider()
                 Text("Bounced Files (\(project.bouncedFiles.count))")
@@ -742,7 +824,85 @@ struct LogicDetailView: View {
                     .buttonStyle(.bordered)
             }
 
-            // ── Unused audio files ──────────────────────────
+            // ── 7. Media files (collapsed if many) ──────────
+            if !project.mediaFiles.isEmpty {
+                Divider()
+                DisclosureGroup("Media Files (\(project.mediaFiles.count))") {
+                    VStack(spacing: 0) {
+                        ForEach(0..<project.mediaFiles.count, id: \.self) { i in
+                            HStack(spacing: 8) {
+                                Image(systemName: "speaker.wave.2")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 16)
+                                Text((project.mediaFiles[i] as NSString).lastPathComponent)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                            }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            if i < project.mediaFiles.count - 1 { Divider() }
+                        }
+                    }
+                    .background(Color.secondary.opacity(0.08))
+                    .cornerRadius(8)
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+            }
+
+            // ── 8. MIDI files ───────────────────────────────
+            if !project.midiFiles.isEmpty {
+                Divider()
+                DisclosureGroup("MIDI Files (\(project.midiFiles.count))") {
+                    VStack(spacing: 0) {
+                        ForEach(0..<project.midiFiles.count, id: \.self) { i in
+                            HStack(spacing: 8) {
+                                Image(systemName: "pianokeys")
+                                    .foregroundColor(.purple)
+                                    .frame(width: 16)
+                                Text((project.midiFiles[i] as NSString).lastPathComponent)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                            }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            if i < project.midiFiles.count - 1 { Divider() }
+                        }
+                    }
+                    .background(Color.secondary.opacity(0.08))
+                    .cornerRadius(8)
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+            }
+
+            // ── 9. AU Plugin Hints (raw codes, collapsed) ───
+            if !project.pluginHints.isEmpty {
+                Divider()
+                DisclosureGroup("AU Plugin Hints (\(project.pluginHints.count))") {
+                    LazyVGrid(columns: [GridItem(.flexible(minimum: 140)), GridItem(.flexible(minimum: 140))], spacing: 6) {
+                        ForEach(project.pluginHints, id: \.self) { hint in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Color.secondary)
+                                    .frame(width: 6, height: 6)
+                                Text(hint)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                        }
+                    }
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+            }
+
+            // ── 10. Unused audio files ──────────────────────
             if let unused = project.unusedAudioFiles, !unused.isEmpty {
                 Divider()
                 DisclosureGroup {
@@ -776,7 +936,7 @@ struct LogicDetailView: View {
                 .fontWeight(.semibold)
             }
 
-            // ── All Metadata (collapsed) ────────────────────
+            // ── 11. Raw metadata (collapsed) ────────────────
             if !filteredMetadata.isEmpty {
                 Divider()
                 DisclosureGroup("All Metadata (\(filteredMetadata.count))") {
@@ -795,10 +955,61 @@ struct LogicDetailView: View {
                 .font(.headline)
                 .fontWeight(.semibold)
             }
+
+            // ── Empty state ─────────────────────────────────
+            if project.trackCount == nil && trackList.isEmpty && project.metadata.isEmpty
+                && project.mediaFiles.isEmpty && project.midiFiles.isEmpty
+                && project.pluginHints.isEmpty && allIdentifiedPlugins.isEmpty {
+                Text("Logic Pro uses a proprietary binary format. Full track and plugin analysis requires opening the session in Logic Pro.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 
-    /// Metadata keys already displayed elsewhere — filter them out of the raw table
+    // MARK: – Helpers
+
+    private func pluginConfidenceColor(_ confidence: PluginMatchConfidence?) -> Color {
+        switch confidence {
+        case .auCodeMatch, .bundleIdMatch: return .green
+        case .nameMatch: return .blue
+        case .none: return .secondary
+        }
+    }
+
+    /// Look up the format of a plugin by its display name.
+    private func lookupPluginFormat(_ name: String) -> PluginFormat? {
+        installedPluginFormats[name]
+    }
+
+    private func pluginFormatColor(_ format: PluginFormat) -> Color {
+        switch format {
+        case .audioUnit: return Color(red: 0.98, green: 0.85, blue: 0.93)
+        case .vst:       return Color(red: 0.60, green: 0.80, blue: 0.95)
+        case .vst3:      return Color(red: 0.62, green: 0.86, blue: 0.74)
+        case .aax:       return Color(red: 0.99, green: 0.95, blue: 0.85)
+        }
+    }
+
+    /// Sort key for channel strip ordering: Audio < Inst < Aux < Bus < Output
+    private func channelSortKey(_ channel: String) -> (Int, Int) {
+        let parts = channel.split(separator: " ", maxSplits: 1)
+        let prefix = String(parts.first ?? "")
+        let num = parts.count > 1 ? (Int(parts[1].split(separator: "-").first ?? "") ?? 999) : 999
+
+        let order: Int
+        switch prefix {
+        case "Audio": order = 0
+        case "Inst":  order = 1
+        case "Aux":   order = 2
+        case "Bus":   order = 3
+        case "Output": order = 4
+        default: order = 5
+        }
+        return (order, num)
+    }
+
+    /// Metadata keys already displayed elsewhere
     private static let displayedKeys: Set<String> = [
         "BeatsPerMinute", "SampleRate", "NumberOfTracks",
         "SongKey", "SongGenderKey", "SongSignatureNumerator", "SongSignatureDenominator",
@@ -811,6 +1022,70 @@ struct LogicDetailView: View {
         project.metadata
             .filter { !Self.displayedKeys.contains($0.key) }
             .sorted { $0.key < $1.key }
+    }
+}
+
+// MARK: – Logic track row
+
+/// A single track row for the Logic track list, showing channel strip, user name, and plugins.
+private struct LogicTrackRow: View {
+    let channel: String
+    let name: String
+    let plugins: [String]
+
+    private var isRenamed: Bool { name != channel }
+
+    private var trackIcon: String {
+        if channel.hasPrefix("Audio") { return "speaker.wave.2" }
+        if channel.hasPrefix("Inst")  { return "pianokeys" }
+        if channel.hasPrefix("Aux")   { return "arrow.turn.left.up" }
+        if channel.hasPrefix("Bus")   { return "arrow.triangle.branch" }
+        if channel.hasPrefix("Output") { return "dial.high" }
+        return "waveform"
+    }
+
+    private var trackColor: Color {
+        if channel.hasPrefix("Audio") { return .blue }
+        if channel.hasPrefix("Inst")  { return .purple }
+        if channel.hasPrefix("Aux")   { return .green }
+        if channel.hasPrefix("Bus")   { return .orange }
+        if channel.hasPrefix("Output") { return .red }
+        return .secondary
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: trackIcon)
+                .foregroundColor(trackColor)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if isRenamed {
+                        Text(channel)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                if !plugins.isEmpty {
+                    Text(plugins.joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
     }
 }
 

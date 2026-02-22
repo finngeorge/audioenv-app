@@ -53,7 +53,6 @@ struct AudioEnvCommands: Commands {
             Button("Play / Pause") {
                 NotificationCenter.default.post(name: .togglePlayPause, object: nil)
             }
-            .keyboardShortcut(.space, modifiers: [])
         }
     }
 }
