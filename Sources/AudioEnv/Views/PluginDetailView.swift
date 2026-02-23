@@ -60,7 +60,7 @@ struct PluginDetailView: View {
             } else {
                 Image(systemName: "puzzlepiece.extension")
                     .font(.system(size: 36))
-                    .foregroundColor(colorForFormat(plugin.format))
+                    .foregroundColor(ColorTokens.shared.pluginFormatColor(plugin.format))
             }
         }
     }
@@ -156,7 +156,7 @@ struct PluginDetailView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(colorForFormat(plugin.format))
+                        .background(ColorTokens.shared.pluginFormatColor(plugin.format))
                         .cornerRadius(8)
                 }
             }
@@ -171,7 +171,7 @@ struct PluginDetailView: View {
                         HStack(spacing: 8) {
                             // Format indicator
                             Circle()
-                                .fill(sessionFormatColor(session.format))
+                                .fill(ColorTokens.shared.sessionFormatColor(session.format))
                                 .frame(width: 6, height: 6)
 
                             VStack(alignment: .leading, spacing: 2) {
@@ -238,13 +238,6 @@ struct PluginDetailView: View {
         }.sorted { $0.modifiedDate > $1.modifiedDate } // Most recent first
     }
 
-    private func sessionFormatColor(_ format: SessionFormat) -> Color {
-        switch format {
-        case .ableton: return .gray
-        case .logic: return .blue
-        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
-        }
-    }
 
     private func backupSection() -> some View {
         let backups = backup.backupsContaining(plugin: plugin)
@@ -377,12 +370,4 @@ struct PluginDetailView: View {
         NSPasteboard.general.setString(id, forType: .string)
     }
 
-    private func colorForFormat(_ f: PluginFormat) -> Color {
-        switch f {
-        case .audioUnit: return Color(red: 0.98, green: 0.85, blue: 0.93)  // #f9d9ee
-        case .vst:       return Color(red: 0.60, green: 0.80, blue: 0.95)  // #9accf3
-        case .vst3:      return Color(red: 0.62, green: 0.86, blue: 0.74)  // #9edbbd
-        case .aax:       return Color(red: 0.99, green: 0.95, blue: 0.85)  // #fdf3d8
-        }
-    }
 }

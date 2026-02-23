@@ -208,7 +208,7 @@ struct BackupDetailView: View {
     private func pluginRow(plugin: PluginBackupItem) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(formatColor(plugin.format))
+                .fill(ColorTokens.shared.pluginFormatColorByName(plugin.format))
                 .frame(width: 8, height: 8)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -249,20 +249,6 @@ struct BackupDetailView: View {
         .cornerRadius(6)
     }
 
-    private func formatColor(_ format: String) -> Color {
-        switch format.uppercased() {
-        case "AU", "AUDIOUNIT":
-            return Color(red: 0.98, green: 0.85, blue: 0.93)  // #f9d9ee
-        case "VST":
-            return Color(red: 0.60, green: 0.80, blue: 0.95)  // #9accf3
-        case "VST3":
-            return Color(red: 0.62, green: 0.86, blue: 0.74)  // #9edbbd
-        case "AAX":
-            return Color(red: 0.99, green: 0.95, blue: 0.85)  // #fdf3d8
-        default:
-            return .gray
-        }
-    }
 
     // MARK: - Consolidation Banner
 

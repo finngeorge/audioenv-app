@@ -112,7 +112,7 @@ struct SessionDetailView: View {
             } else {
                 Image(systemName: formatSymbol(for: session.format))
                     .font(.system(size: 40))
-                    .foregroundColor(formatColor(for: session.format))
+                    .foregroundColor(ColorTokens.shared.sessionFormatColor(session.format))
             }
         }
     }
@@ -125,13 +125,6 @@ struct SessionDetailView: View {
         }
     }
 
-    private func formatColor(for format: SessionFormat) -> Color {
-        switch format {
-        case .ableton:  return .gray
-        case .logic:    return .blue
-        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
-        }
-    }
 
     // MARK: – File metadata
 
@@ -897,7 +890,7 @@ struct LogicDetailView: View {
                         let matchedFormat = lookupPluginFormat(plugin.name)
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(matchedFormat != nil ? pluginFormatColor(matchedFormat!) : Color.secondary)
+                                .fill(matchedFormat != nil ? ColorTokens.shared.pluginFormatColor(matchedFormat!) : Color.secondary)
                                 .frame(width: 6, height: 6)
                             Text(plugin.name)
                                 .font(.subheadline)
@@ -909,8 +902,8 @@ struct LogicDetailView: View {
                                     .fontWeight(.medium)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 1)
-                                    .background(pluginFormatColor(fmt).opacity(0.2))
-                                    .foregroundColor(pluginFormatColor(fmt))
+                                    .background(ColorTokens.shared.pluginFormatColor(fmt).opacity(0.2))
+                                    .foregroundColor(ColorTokens.shared.pluginFormatColor(fmt))
                                     .cornerRadius(3)
                             }
                         }
@@ -1176,14 +1169,6 @@ struct LogicDetailView: View {
         installedPluginFormats[name]
     }
 
-    private func pluginFormatColor(_ format: PluginFormat) -> Color {
-        switch format {
-        case .audioUnit: return Color(red: 0.98, green: 0.85, blue: 0.93)
-        case .vst:       return Color(red: 0.60, green: 0.80, blue: 0.95)
-        case .vst3:      return Color(red: 0.62, green: 0.86, blue: 0.74)
-        case .aax:       return Color(red: 0.99, green: 0.95, blue: 0.85)
-        }
-    }
 
     /// Sort key for channel strip ordering: Audio < Inst < Aux < Bus < Output
     private func channelSortKey(_ channel: String) -> (Int, Int) {

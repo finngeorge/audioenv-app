@@ -259,11 +259,7 @@ private struct ProjectRow: View {
     }
 
     private var fmtColor: Color {
-        switch project.format {
-        case .ableton:  return .gray
-        case .logic:    return .blue
-        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
-        }
+        ColorTokens.shared.sessionFormatColor(project.format)
     }
 
     private var formatSymbol: String {

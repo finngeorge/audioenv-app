@@ -551,7 +551,7 @@ struct CollectionDetailView: View {
         HStack(spacing: 10) {
             Image(systemName: formatIcon(project.sessionFormat))
                 .font(.title3)
-                .foregroundColor(formatColor(project.sessionFormat))
+                .foregroundColor(ColorTokens.shared.sessionFormatColorByName(project.sessionFormat))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -566,8 +566,8 @@ struct CollectionDetailView: View {
                             .font(.caption2)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(formatColor(fmt).opacity(0.15))
-                            .foregroundColor(formatColor(fmt))
+                            .background(ColorTokens.shared.sessionFormatColorByName(fmt).opacity(0.15))
+                            .foregroundColor(ColorTokens.shared.sessionFormatColorByName(fmt))
                             .cornerRadius(3)
                     }
                     if let tracks = project.trackCount, tracks > 0 {
@@ -718,12 +718,12 @@ struct CollectionDetailView: View {
             } else if !isEditing {
                 Image(systemName: "waveform")
                     .font(.title3)
-                    .foregroundColor(bounceFormatColor(bounce.format))
+                    .foregroundColor(ColorTokens.shared.bounceFormatColor(bounce.format ?? ""))
                     .frame(width: 24)
             } else {
                 Image(systemName: "waveform")
                     .font(.title3)
-                    .foregroundColor(bounceFormatColor(bounce.format))
+                    .foregroundColor(ColorTokens.shared.bounceFormatColor(bounce.format ?? ""))
                     .frame(width: 24)
             }
 
@@ -740,8 +740,8 @@ struct CollectionDetailView: View {
                             .font(.caption2)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(bounceFormatColor(fmt).opacity(0.15))
-                            .foregroundColor(bounceFormatColor(fmt))
+                            .background(ColorTokens.shared.bounceFormatColor(fmt ?? "").opacity(0.15))
+                            .foregroundColor(ColorTokens.shared.bounceFormatColor(fmt ?? ""))
                             .cornerRadius(3)
                     }
                     if let sr = bounce.sampleRate {
@@ -896,7 +896,7 @@ struct CollectionDetailView: View {
             } else {
                 Image(systemName: "waveform")
                     .font(.title3)
-                    .foregroundColor(bounceFormatColor(bounce.format))
+                    .foregroundColor(ColorTokens.shared.bounceFormatColor(bounce.format ?? ""))
                     .frame(width: 24)
             }
 
@@ -913,8 +913,8 @@ struct CollectionDetailView: View {
                             .font(.caption2)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(bounceFormatColor(fmt).opacity(0.15))
-                            .foregroundColor(bounceFormatColor(fmt))
+                            .background(ColorTokens.shared.bounceFormatColor(fmt ?? "").opacity(0.15))
+                            .foregroundColor(ColorTokens.shared.bounceFormatColor(fmt ?? ""))
                             .cornerRadius(3)
                     }
                     if let sr = bounce.sampleRate {
@@ -1179,24 +1179,6 @@ struct CollectionDetailView: View {
         }
     }
 
-    private func formatColor(_ format: String?) -> Color {
-        switch format?.lowercased() {
-        case "ableton live": return .teal
-        case "logic pro":    return .blue
-        case "pro tools":    return .purple
-        default:             return .secondary
-        }
-    }
-
-    private func bounceFormatColor(_ format: String?) -> Color {
-        switch format?.lowercased() {
-        case "wav":  return Color(hex: "a8d8ea") ?? .blue
-        case "mp3":  return Color(hex: "f0c987") ?? .orange
-        case "aiff": return Color(hex: "c9b3e6") ?? .purple
-        case "flac": return Color(hex: "a8e6cf") ?? .green
-        default:     return .secondary
-        }
-    }
 
     private static let bounceDateFormatter: DateFormatter = {
         let f = DateFormatter()

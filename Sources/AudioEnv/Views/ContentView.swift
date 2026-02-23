@@ -8,6 +8,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case projects    = "Projects"
     case collections = "Collections"
     case bounces     = "Bounces"
+    case patterns    = "Patterns"
     case commands    = "Commands"
     case scan        = "Scan"
     case backup      = "Backup"
@@ -35,6 +36,7 @@ struct ContentView: View {
     @State private var selectedCollection: AudioCollection?     = nil
     @State private var selectedBounce:     Bounce?         = nil
     @State private var selectedCommand:  Command?        = nil
+    @State private var selectedPattern:  BouncePattern?  = nil
     @State private var projectFormatFilter: SessionFormat? = nil
     @State private var showPaths                      = false
     @State private var showHowToScan                  = false
@@ -45,7 +47,17 @@ struct ContentView: View {
     var body: some View {
         if !auth.isAuthenticated {
             LoginGateView()
-                .onAppear { resizeWindow(width: 500, height: 600) }
+                .background(WindowAccessor { window in
+                    window.maxSize = NSSize(width: 500, height: 600)
+                    window.minSize = NSSize(width: 500, height: 600)
+                    let oldFrame = window.frame
+                    let newOrigin = NSPoint(
+                        x: oldFrame.midX - 250,
+                        y: oldFrame.midY - 300
+                    )
+                    let newFrame = NSRect(origin: newOrigin, size: NSSize(width: 500, height: 600))
+                    window.setFrame(newFrame, display: true, animate: true)
+                })
         } else {
         VStack(spacing: 0) {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -69,6 +81,9 @@ struct ContentView: View {
 
                     Label("Bounces", systemImage: "waveform")
                         .tag(AppSection.bounces)
+
+                    Label("Patterns", systemImage: "text.viewfinder")
+                        .tag(AppSection.patterns)
 
                     Label("Commands", systemImage: "terminal")
                         .tag(AppSection.commands)
@@ -179,6 +194,8 @@ struct ContentView: View {
                     CollectionBrowserView(selectedCollection: $selectedCollection)
                 case .bounces:
                     BounceBrowserView(selectedBounce: $selectedBounce)
+                case .patterns:
+                    PatternBrowserView(selectedPattern: $selectedPattern)
                 case .commands:
                     CommandBrowserView(selectedCommand: $selectedCommand)
                 case .scan:
@@ -233,6 +250,12 @@ struct ContentView: View {
             case .bounces:
                 if let bounce = selectedBounce {
                     BounceDetailPanel(bounce: bounce)
+                } else {
+                    emptyDetail()
+                }
+            case .patterns:
+                if let pattern = selectedPattern {
+                    PatternDetailPanel(pattern: pattern)
                 } else {
                     emptyDetail()
                 }
@@ -342,8 +365,18 @@ struct ContentView: View {
 
         PlayerBarView()
         } // end VStack
+        .background(WindowAccessor { window in
+            window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            window.minSize = NSSize(width: 1200, height: 620)
+            let oldFrame = window.frame
+            let newOrigin = NSPoint(
+                x: oldFrame.midX - 680,
+                y: oldFrame.midY - 390
+            )
+            let newFrame = NSRect(origin: newOrigin, size: NSSize(width: 1360, height: 780))
+            window.setFrame(newFrame, display: true, animate: true)
+        })
         .onAppear {
-            resizeWindow(width: 1360, height: 780, minWidth: 1200, minHeight: 620)
             projectCount = SessionProject.groupSessions(scanner.sessions).count
         }
         .onChange(of: scanner.sessions) { _, newSessions in
@@ -428,6 +461,22 @@ struct ContentView: View {
                         .font(.title2)
                         .foregroundColor(.secondary)
                     Text("Choose a bounce to view its audio details and linked projects.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            case .patterns:
+                VStack(spacing: 14) {
+                    Image(systemName: "text.viewfinder")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("Select a Pattern")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    Text("Patterns extract metadata like BPM, key, and version from bounce filenames.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -532,7 +581,7 @@ struct ContentView: View {
                             if count > 0 {
                                 HStack {
                                     Circle()
-                                        .fill(pluginFormatColor(format))
+                                        .fill(ColorTokens.shared.pluginFormatColor(format))
                                         .frame(width: 8, height: 8)
                                     Text(format.rawValue)
                                         .foregroundColor(.secondary)
@@ -623,14 +672,6 @@ struct ContentView: View {
         }
     }
 
-    private func pluginFormatColor(_ format: PluginFormat) -> Color {
-        switch format {
-        case .audioUnit: return Color(red: 0.98, green: 0.85, blue: 0.93)  // #f9d9ee
-        case .vst:       return Color(red: 0.60, green: 0.80, blue: 0.95)  // #9accf3
-        case .vst3:      return Color(red: 0.62, green: 0.86, blue: 0.74)  // #9edbbd
-        case .aax:       return Color(red: 0.99, green: 0.95, blue: 0.85)  // #fdf3d8
-        }
-    }
 
     private func lastScannedText() -> String {
         guard let date = scanner.lastScanDate else { return "Never" }
@@ -821,4 +862,25 @@ struct LoginGateView: View {
             auth.errorMessage = error.localizedDescription
         }
     }
+}
+
+// MARK: - Window Accessor
+
+/// NSViewRepresentable that reliably captures the hosting NSWindow.
+/// Unlike NSApplication.shared.mainWindow (which can be nil during onAppear),
+/// this walks the view hierarchy to find the window once it's available.
+private struct WindowAccessor: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                onWindow(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }

@@ -25,8 +25,8 @@ struct PlayerBarView: View {
                                 .font(.system(size: 9, weight: .semibold))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
-                                .background(formatColor(bounce.format).opacity(0.15))
-                                .foregroundColor(formatColor(bounce.format))
+                                .background(ColorTokens.shared.bounceFormatColor(bounce.format).opacity(0.15))
+                                .foregroundColor(ColorTokens.shared.bounceFormatColor(bounce.format))
                                 .cornerRadius(3)
 
                             if let sr = bounce.formattedSampleRate {
@@ -96,7 +96,7 @@ struct PlayerBarView: View {
                                         .fill(Color.secondary.opacity(0.15))
                                         .cornerRadius(1.5)
                                     Rectangle()
-                                        .fill(formatColor(bounce.format))
+                                        .fill(ColorTokens.shared.bounceFormatColor(bounce.format))
                                         .frame(width: progressWidth(totalWidth: geometry.size.width))
                                         .cornerRadius(1.5)
                                 }
@@ -150,13 +150,4 @@ struct PlayerBarView: View {
         return String(format: "%d:%02d", mins, secs)
     }
 
-    private func formatColor(_ format: String) -> Color {
-        switch format.lowercased() {
-        case "wav":  return Color(red: 0.66, green: 0.85, blue: 0.92)
-        case "mp3":  return Color(red: 0.94, green: 0.79, blue: 0.53)
-        case "aiff": return Color(red: 0.79, green: 0.70, blue: 0.90)
-        case "flac": return Color(red: 0.66, green: 0.90, blue: 0.81)
-        default:     return .secondary
-        }
-    }
 }

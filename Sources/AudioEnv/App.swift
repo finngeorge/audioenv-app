@@ -17,6 +17,7 @@ struct AudioEnvApp: App {
     @StateObject private var audioPlayer = AudioPlayerService()
     @StateObject private var commandService = CommandService()
     @StateObject private var patternService = PatternService()
+    @StateObject private var colorTokens = ColorTokens.shared
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -40,10 +41,15 @@ struct AudioEnvApp: App {
                 .environmentObject(audioPlayer.timeObserver)
                 .environmentObject(commandService)
                 .environmentObject(patternService)
+                .environmentObject(colorTokens)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
                 .onAppear {
                     // Set app icon programmatically so it works when running from Xcode / swift run
                     Self.setAppIconIfNeeded()
+
+                    // Fetch remote color scheme
+                    let colorBaseURL = UserDefaults.standard.string(forKey: "apiBaseURL") ?? "https://api.audioenv.com"
+                    ColorTokens.shared.fetch(baseURL: colorBaseURL)
 
                     // Configure menu bar manager with services
                     menuBar.configure(scanner: scanner, sync: sync, auth: auth, sessionMonitor: sessionMonitor)

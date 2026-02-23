@@ -243,11 +243,6 @@ private struct PluginRow: View {
     }
 
     private var fmtColor: Color {
-        switch plugin.format {
-        case .audioUnit: return Color(red: 0.98, green: 0.85, blue: 0.93)  // #f9d9ee
-        case .vst:       return Color(red: 0.60, green: 0.80, blue: 0.95)  // #9accf3
-        case .vst3:      return Color(red: 0.62, green: 0.86, blue: 0.74)  // #9edbbd
-        case .aax:       return Color(red: 0.99, green: 0.95, blue: 0.85)  // #fdf3d8
-        }
+        ColorTokens.shared.pluginFormatColor(plugin.format)
     }
 }

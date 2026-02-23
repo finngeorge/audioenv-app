@@ -1,6 +1,14 @@
 import SwiftUI
 import AppKit
 
+/// Sort options for the bounce list.
+enum BounceSortOption: String, CaseIterable {
+    case name = "Name"
+    case dateModified = "Date Modified"
+    case bpm = "BPM"
+    case duration = "Duration"
+}
+
 /// Content column view for the Bounces sidebar entry.
 /// Shows linked folders, bounce list with filters, and scan controls.
 struct BounceBrowserView: View {
@@ -17,6 +25,23 @@ struct BounceBrowserView: View {
     @State private var showLinkFolderPrompt = false
     @State private var filteredBounces: [Bounce] = []
     @State private var availableFormats: [String] = []
+
+    // Sort state
+    @State private var sortOption: BounceSortOption = .dateModified
+    @State private var sortAscending = false
+
+    // Metadata filter state
+    @State private var stageFilter: String? = nil
+    @State private var keyFilter: String? = nil
+    @State private var bpmMin: String = ""
+    @State private var bpmMax: String = ""
+    @State private var versionFilter: Int? = nil
+    @State private var showMetadataFilters = false
+
+    // Dynamic filter options derived from current bounces
+    @State private var availableKeys: [String] = []
+    @State private var availableVersions: [Int] = []
+    @State private var availableStages: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,6 +63,28 @@ struct BounceBrowserView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+
+                // Sort picker
+                Picker("Sort", selection: $sortOption) {
+                    ForEach(BounceSortOption.allCases, id: \.self) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(width: 120)
+
+                // Sort direction toggle
+                Button {
+                    sortAscending.toggle()
+                } label: {
+                    Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(sortAscending ? "Ascending" : "Descending")
 
                 // Link folder button
                 Button {
@@ -80,6 +127,99 @@ struct BounceBrowserView: View {
                 .padding(.top, 4)
             }
 
+            // Metadata filters toggle
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showMetadataFilters.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "line.3.horizontal.decrease")
+                    Text("Filters")
+                        .font(.caption)
+                    Image(systemName: showMetadataFilters ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                    if hasActiveMetadataFilters {
+                        Circle()
+                            .fill(Color.blue)
+                            .frame(width: 6, height: 6)
+                    }
+                }
+                .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal)
+            .padding(.top, 4)
+
+            if showMetadataFilters {
+                VStack(spacing: 6) {
+                    // Stage filter chips
+                    if !availableStages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                stageChip(label: "All Stages", stage: nil)
+                                ForEach(availableStages, id: \.self) { stage in
+                                    stageChip(label: stage, stage: stage)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .frame(height: 26)
+                    }
+
+                    HStack(spacing: 12) {
+                        // Key filter
+                        if !availableKeys.isEmpty {
+                            Picker("Key", selection: $keyFilter) {
+                                Text("All Keys").tag(nil as String?)
+                                ForEach(availableKeys, id: \.self) { key in
+                                    Text(key).tag(key as String?)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .controlSize(.small)
+                            .frame(maxWidth: 100)
+                        }
+
+                        // BPM range
+                        HStack(spacing: 4) {
+                            Text("BPM")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextField("Min", text: $bpmMin)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 50)
+                                .controlSize(.small)
+                            Text("–")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextField("Max", text: $bpmMax)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 50)
+                                .controlSize(.small)
+                        }
+
+                        // Version filter
+                        if !availableVersions.isEmpty {
+                            Picker("Version", selection: $versionFilter) {
+                                Text("All Versions").tag(nil as Int?)
+                                ForEach(availableVersions, id: \.self) { ver in
+                                    Text("v\(ver)").tag(ver as Int?)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .controlSize(.small)
+                            .frame(maxWidth: 120)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.vertical, 4)
+                .background(Color.secondary.opacity(0.03))
+            }
+
             Divider().padding(.top, 4)
 
             // Bounce list
@@ -111,40 +251,34 @@ struct BounceBrowserView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    ForEach(filteredBounces) { bounce in
-                        HStack {
-                            if bounce.isLocallyAvailable {
-                                Button {
-                                    if audioPlayer.currentBounce?.id == bounce.id {
-                                        audioPlayer.togglePlayPause()
-                                    } else {
-                                        audioPlayer.play(bounce: bounce)
-                                    }
-                                } label: {
-                                    Image(systemName: audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying
-                                          ? "pause.circle.fill" : "play.circle")
-                                        .font(.title3)
-                                        .foregroundColor(.accentColor)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            BounceRow(bounce: bounce)
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            if bounce.isLocallyAvailable {
+                List(filteredBounces, selection: $selectedBounce) { bounce in
+                    HStack {
+                        if bounce.isLocallyAvailable {
+                            Button {
                                 if audioPlayer.currentBounce?.id == bounce.id {
                                     audioPlayer.togglePlayPause()
                                 } else {
                                     audioPlayer.play(bounce: bounce)
                                 }
+                            } label: {
+                                Image(systemName: audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying
+                                      ? "pause.circle.fill" : "play.circle")
+                                    .font(.title3)
+                                    .foregroundColor(.accentColor)
                             }
+                            .buttonStyle(.plain)
                         }
-                        .onTapGesture(count: 1) {
-                            selectedBounce = bounce
+                        BounceRow(bounce: bounce)
+                    }
+                    .contentShape(Rectangle())
+                    .tag(bounce)
+                    .onTapGesture(count: 2) {
+                        guard bounce.isLocallyAvailable else { return }
+                        if audioPlayer.currentBounce?.id == bounce.id {
+                            audioPlayer.togglePlayPause()
+                        } else {
+                            audioPlayer.play(bounce: bounce)
                         }
-                        .listRowBackground(selectedBounce == bounce ? Color.accentColor.opacity(0.15) : Color.clear)
                     }
                 }
                 .listStyle(.inset)
@@ -179,21 +313,68 @@ struct BounceBrowserView: View {
         .onChange(of: search) { _, _ in refilter() }
         .onChange(of: formatFilter) { _, _ in refilter() }
         .onChange(of: folderFilter) { _, _ in refilter() }
+        .onChange(of: sortOption) { _, _ in refilter() }
+        .onChange(of: sortAscending) { _, _ in refilter() }
+        .onChange(of: stageFilter) { _, _ in refilter() }
+        .onChange(of: keyFilter) { _, _ in refilter() }
+        .onChange(of: bpmMin) { _, _ in refilter() }
+        .onChange(of: bpmMax) { _, _ in refilter() }
+        .onChange(of: versionFilter) { _, _ in refilter() }
         .onChange(of: bounceService.bounces) { _, _ in refilter() }
         .onAppear { refilter() }
     }
 
+    private var hasActiveMetadataFilters: Bool {
+        stageFilter != nil || keyFilter != nil || versionFilter != nil || !bpmMin.isEmpty || !bpmMax.isEmpty
+    }
+
     private func refilter() {
         let q = search.lowercased()
-        filteredBounces = bounceService.bounces.filter { bounce in
+        let parsedBpmMin = Int(bpmMin)
+        let parsedBpmMax = Int(bpmMax)
+
+        var results = bounceService.bounces.filter { bounce in
             if let ff = formatFilter, bounce.format != ff { return false }
             if let folderId = folderFilter, bounce.bounceFolderId != folderId { return false }
             if !q.isEmpty, !bounce.fileName.lowercased().contains(q) { return false }
+            if let sf = stageFilter, bounce.stage != sf { return false }
+            if let kf = keyFilter, bounce.musicalKey != kf { return false }
+            if let vf = versionFilter, bounce.version != vf { return false }
+            if let minBpm = parsedBpmMin {
+                guard let bounceBpm = bounce.bpm, bounceBpm >= minBpm else { return false }
+            }
+            if let maxBpm = parsedBpmMax {
+                guard let bounceBpm = bounce.bpm, bounceBpm <= maxBpm else { return false }
+            }
             return true
         }
-        let formats = Set(bounceService.bounces.map { $0.format })
+
+        // Sort
+        results.sort { a, b in
+            let cmp: Bool
+            switch sortOption {
+            case .name:
+                cmp = a.fileName.localizedCaseInsensitiveCompare(b.fileName) == .orderedAscending
+            case .dateModified:
+                cmp = a.fileModifiedAt < b.fileModifiedAt
+            case .bpm:
+                cmp = (a.bpm ?? 0) < (b.bpm ?? 0)
+            case .duration:
+                cmp = (a.durationSeconds ?? 0) < (b.durationSeconds ?? 0)
+            }
+            return sortAscending ? cmp : !cmp
+        }
+
+        filteredBounces = results
+
+        // Derive dynamic filter options from all bounces
+        let allBounces = bounceService.bounces
+        let formats = Set(allBounces.map { $0.format })
         let order = ["wav", "mp3", "aiff", "flac", "m4a"]
         availableFormats = order.filter { formats.contains($0) }
+        availableKeys = Set(allBounces.compactMap { $0.musicalKey }).sorted()
+        availableVersions = Set(allBounces.compactMap { $0.version }).sorted()
+        availableStages = Set(allBounces.compactMap { $0.stage }).sorted()
     }
 
     private func emptyFoldersState() -> some View {
@@ -231,6 +412,21 @@ struct BounceBrowserView: View {
         }
         .buttonStyle(.plain)
     }
+
+    private func stageChip(label: String, stage: String?) -> some View {
+        Button {
+            stageFilter = stage
+        } label: {
+            Text(label)
+                .font(.caption)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(stageFilter == stage ? ColorTokens.shared.badgeStage : Color.secondary.opacity(0.1))
+                .foregroundColor(stageFilter == stage ? .white : .primary)
+                .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 // MARK: - Bounce Row
@@ -258,8 +454,8 @@ private struct BounceRow: View {
                 Text(bounce.format.uppercased())
                     .font(.caption)
                     .padding(.init(top: 2, leading: 6, bottom: 2, trailing: 6))
-                    .background(formatColor(bounce.format).opacity(0.15))
-                    .foregroundColor(formatColor(bounce.format))
+                    .background(ColorTokens.shared.bounceFormatColor(bounce.format).opacity(0.15))
+                    .foregroundColor(ColorTokens.shared.bounceFormatColor(bounce.format))
                     .cornerRadius(4)
             }
 
@@ -296,21 +492,35 @@ private struct BounceRow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+
+                if let bpm = bounce.bpm {
+                    metadataBadge("\(bpm) bpm", ColorTokens.shared.badgeBPM)
+                }
+                if let key = bounce.musicalKey {
+                    metadataBadge(key, ColorTokens.shared.badgeKey)
+                }
+                if let stage = bounce.stage {
+                    metadataBadge(stage, ColorTokens.shared.badgeStage)
+                }
+                if let version = bounce.version {
+                    metadataBadge("v\(version)", ColorTokens.shared.badgeVersion)
+                }
             }
         }
         .padding(.vertical, 2)
     }
 
-    private func formatColor(_ format: String) -> Color {
-        switch format.lowercased() {
-        case "wav":  return Color(red: 0.66, green: 0.85, blue: 0.92) // #a8d8ea
-        case "mp3":  return Color(red: 0.94, green: 0.79, blue: 0.53) // #f0c987
-        case "aiff": return Color(red: 0.79, green: 0.70, blue: 0.90) // #c9b3e6
-        case "flac": return Color(red: 0.66, green: 0.90, blue: 0.81) // #a8e6cf
-        case "m4a":  return Color(red: 0.91, green: 0.77, blue: 0.60) // #e8c49a
-        default:     return .secondary
-        }
+    private func metadataBadge(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.caption2)
+            .fontWeight(.medium)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.12))
+            .foregroundColor(color)
+            .cornerRadius(3)
     }
+
 }
 
 // MARK: - Link Bounce Folder Sheet

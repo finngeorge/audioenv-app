@@ -226,7 +226,7 @@ struct SummaryView: View {
                 onNavigateToProjects(.logic)
             })
             StatCard(title: "Pro Tools",      count: cachedFormatCounts[.proTools] ?? 0,
-                     icon: "circle.fill", color: Color(red: 0.427, green: 0.141, blue: 0.890), action: {
+                     icon: "circle.fill", color: .purple, action: {
                 onNavigateToProjects(.proTools)
             })
         }
@@ -244,7 +244,7 @@ struct SummaryView: View {
                 let n = cachedPluginFormatCounts[f] ?? 0
                 if n > 0 {
                     HStack {
-                        Circle().fill(colorFor(f)).frame(width: 10, height: 10)
+                        Circle().fill(ColorTokens.shared.pluginFormatColor(f)).frame(width: 10, height: 10)
                         Text(f.rawValue)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
@@ -270,7 +270,7 @@ struct SummaryView: View {
             ForEach(SessionFormat.allCases) { format in
                 let n = cachedFormatCounts[format] ?? 0
                 HStack {
-                    Circle().fill(colorFor(format)).frame(width: 10, height: 10)
+                    Circle().fill(ColorTokens.shared.sessionFormatColor(format)).frame(width: 10, height: 10)
                     Text(format.rawValue)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
@@ -308,22 +308,6 @@ struct SummaryView: View {
         }
     }
 
-    private func colorFor(_ f: PluginFormat) -> Color {
-        switch f {
-        case .audioUnit: return Color(red: 0.98, green: 0.85, blue: 0.93)  // #f9d9ee
-        case .vst:       return Color(red: 0.60, green: 0.80, blue: 0.95)  // #9accf3
-        case .vst3:      return Color(red: 0.62, green: 0.86, blue: 0.74)  // #9edbbd
-        case .aax:       return Color(red: 0.99, green: 0.95, blue: 0.85)  // #fdf3d8
-        }
-    }
-
-    private func colorFor(_ f: SessionFormat) -> Color {
-        switch f {
-        case .ableton:  return .gray
-        case .logic:    return .blue
-        case .proTools: return Color(red: 0.427, green: 0.141, blue: 0.890) // #6d24e3
-        }
-    }
 }
 
 // MARK: – Stat card component
