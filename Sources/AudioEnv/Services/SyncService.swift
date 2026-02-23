@@ -157,6 +157,20 @@ class SyncService: ObservableObject {
                     dict["sample_count"] = ableton.samplePaths.count
                     dict["tempo"] = ableton.tempo
                     dict["used_plugins"] = ableton.usedPlugins
+                    dict["tracks"] = ableton.tracks.enumerated().map { (index, track) -> [String: Any] in
+                        var t: [String: Any] = [
+                            "track_index": index,
+                            "track_name": track.name,
+                            "track_type": track.type.rawValue,
+                            "plugins": track.plugins,
+                            "is_muted": track.isMuted,
+                            "is_solo": track.isSolo,
+                        ]
+                        if let color = track.color {
+                            t["color"] = String(color)
+                        }
+                        return t
+                    }
                 case .logic(let logic):
                     dict["sample_count"] = logic.mediaFiles.count
                     if let tempo = logic.tempo {
@@ -179,12 +193,33 @@ class SyncService: ObservableObject {
                         dict["used_plugins"] = logic.pluginHints
                         dict["plugin_count"] = logic.pluginHints.count
                     }
+                    if !logic.trackNames.isEmpty {
+                        dict["tracks"] = logic.trackNames.sorted(by: { $0.key < $1.key }).enumerated().map { (index, entry) -> [String: Any] in
+                            var t: [String: Any] = [
+                                "track_index": index,
+                                "track_name": entry.value,
+                            ]
+                            if let plugins = logic.trackPlugins[entry.key], !plugins.isEmpty {
+                                t["plugins"] = plugins
+                            }
+                            return t
+                        }
+                    }
                 case .proTools(let proTools):
                     dict["sample_count"] = proTools.audioFiles.count
                     dict["track_count"] = proTools.trackCount
                     if !proTools.pluginCatalog.isEmpty {
                         dict["used_plugins"] = proTools.pluginCatalog.map(\.name)
                         dict["plugin_count"] = proTools.pluginCatalog.count
+                    }
+                    dict["tracks"] = proTools.tracks.map { track -> [String: Any] in
+                        [
+                            "track_index": track.index,
+                            "track_name": track.name,
+                            "track_type": track.trackType,
+                            "is_stereo": track.isStereo,
+                            "plugins": track.plugins.map(\.name),
+                        ]
                     }
                 }
             }
