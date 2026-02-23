@@ -268,6 +268,13 @@ private struct SessionRow: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
+                if case .proTools(let p) = session.project {
+                    Text("\(p.trackCount) trk · \(p.pluginCatalog.count) plg · \(p.sampleRate.map { "\($0) Hz" } ?? "")")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
         }
         .padding(.vertical, 2)

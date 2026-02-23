@@ -701,6 +701,15 @@ class CommandService: ObservableObject {
                     return matchNumeric(Double(sr), op: op, value: value)
                 }
                 return false
+            case .bpm:
+                if let bpm = bounce.bpm { return matchNumeric(Double(bpm), op: op, value: value) }
+                return false
+            case .key:
+                if let key = bounce.musicalKey { return matchString(key, op: op, value: value) }
+                return false
+            case .status:
+                if let stage = bounce.stage { return matchString(stage, op: op, value: value) }
+                return false
             default:
                 return true
             }

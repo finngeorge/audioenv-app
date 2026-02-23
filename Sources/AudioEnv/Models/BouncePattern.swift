@@ -130,11 +130,87 @@ struct BouncePattern: Codable, Equatable, Identifiable {
         case id, name, segments
         case exampleFileName = "example_file_name"
         case createdAt = "created_at"
+        case patternString = "pattern_string"
+        case segmentsJson = "segments_json"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        exampleFileName = try container.decodeIfPresent(String.self, forKey: .exampleFileName)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+
+        // Try native format first: segments array
+        if let segs = try? container.decode([PatternSegment].self, forKey: .segments) {
+            segments = segs
+        }
+        // API response format: segments_json contains array of segment dicts
+        else if let segData = try? container.decode([[String: String]].self, forKey: .segmentsJson) {
+            segments = segData.compactMap { dict -> PatternSegment? in
+                guard let typeStr = dict["type"],
+                      let segType = PatternSegmentType(rawValue: typeStr) else { return nil }
+                return PatternSegment(
+                    type: segType,
+                    literalValue: dict["literal_value"],
+                    customRegex: dict["custom_regex"]
+                )
+            }
+        }
+        // Last resort: parse pattern_string
+        else if let ps = try? container.decode(String.self, forKey: .patternString) {
+            segments = BouncePattern.parsePatternStringStatic(ps)
+        } else {
+            segments = []
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(segments, forKey: .segments)
+        try container.encodeIfPresent(exampleFileName, forKey: .exampleFileName)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
     }
 
     /// The full pattern string, e.g. `{title}_{bpm}bpm_v{version}_{stage}`.
     var patternString: String {
         segments.map(\.patternToken).joined()
+    }
+
+    /// Static helper for decoding pattern strings without a PatternService instance.
+    static func parsePatternStringStatic(_ patternString: String) -> [PatternSegment] {
+        var segments: [PatternSegment] = []
+        var remaining = patternString[...]
+
+        while !remaining.isEmpty {
+            if remaining.hasPrefix("{") {
+                if let closeBrace = remaining.dropFirst().firstIndex(of: "}") {
+                    let typeStr = String(remaining[remaining.index(after: remaining.startIndex)..<closeBrace])
+                    if let segType = PatternSegmentType(rawValue: typeStr) {
+                        segments.append(PatternSegment(type: segType))
+                    } else {
+                        segments.append(PatternSegment(type: .literal, literalValue: "{\(typeStr)}"))
+                    }
+                    remaining = remaining[remaining.index(after: closeBrace)...]
+                } else {
+                    segments.append(PatternSegment(type: .literal, literalValue: String(remaining)))
+                    break
+                }
+            } else {
+                if let nextBrace = remaining.firstIndex(of: "{") {
+                    segments.append(PatternSegment(type: .literal, literalValue: String(remaining[..<nextBrace])))
+                    remaining = remaining[nextBrace...]
+                } else {
+                    segments.append(PatternSegment(type: .literal, literalValue: String(remaining)))
+                    break
+                }
+            }
+        }
+
+        return segments
     }
 }
 

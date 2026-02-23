@@ -181,9 +181,10 @@ class SyncService: ObservableObject {
                     }
                 case .proTools(let proTools):
                     dict["sample_count"] = proTools.audioFiles.count
-                    if !proTools.pluginNames.isEmpty {
-                        dict["used_plugins"] = proTools.pluginNames
-                        dict["plugin_count"] = proTools.pluginNames.count
+                    dict["track_count"] = proTools.trackCount
+                    if !proTools.pluginCatalog.isEmpty {
+                        dict["used_plugins"] = proTools.pluginCatalog.map(\.name)
+                        dict["plugin_count"] = proTools.pluginCatalog.count
                     }
                 }
             }

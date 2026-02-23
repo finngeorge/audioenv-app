@@ -839,7 +839,8 @@ class SessionMonitorService: ObservableObject {
             guard let project = ProToolsParser.parse(path: path) else { return nil }
             return SessionSnapshot(
                 fileSize: fileSize,
-                pluginCount: project.pluginNames.count
+                pluginCount: project.pluginCatalog.count,
+                trackCount: project.trackCount
             )
         }
     }

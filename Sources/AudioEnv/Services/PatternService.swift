@@ -169,8 +169,9 @@ class PatternService: ObservableObject {
         )
     }
 
-    /// Split a filename into segments on common delimiters.
-    func splitFileName(_ fileName: String) -> [String] {
+    /// Split a filename into segments and the delimiters between them.
+    /// `delimiters[i]` is the delimiter string between `segments[i]` and `segments[i+1]`.
+    func splitFileNameWithDelimiters(_ fileName: String) -> (segments: [String], delimiters: [String]) {
         // Strip extension
         let baseName: String
         if let dotIndex = fileName.lastIndex(of: ".") {
@@ -182,11 +183,12 @@ class PatternService: ObservableObject {
         // Split on underscores, hyphens, and spaces
         let pattern = "[_\\-\\s]+"
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return [baseName]
+            return ([baseName], [])
         }
 
         let range = NSRange(baseName.startIndex..<baseName.endIndex, in: baseName)
         var segments: [String] = []
+        var delimiters: [String] = []
         var lastEnd = baseName.startIndex
 
         regex.enumerateMatches(in: baseName, range: range) { match, _, _ in
@@ -195,6 +197,7 @@ class PatternService: ObservableObject {
             let segment = String(baseName[lastEnd..<matchRange.lowerBound])
             if !segment.isEmpty {
                 segments.append(segment)
+                delimiters.append(String(baseName[matchRange]))
             }
             lastEnd = matchRange.upperBound
         }
@@ -205,7 +208,17 @@ class PatternService: ObservableObject {
             segments.append(remaining)
         }
 
-        return segments
+        // delimiters should have one fewer element than segments
+        if delimiters.count >= segments.count && !delimiters.isEmpty {
+            delimiters.removeLast()
+        }
+
+        return (segments, delimiters)
+    }
+
+    /// Split a filename into segments on common delimiters (backward-compatible).
+    func splitFileName(_ fileName: String) -> [String] {
+        splitFileNameWithDelimiters(fileName).segments
     }
 
     // MARK: - API Persistence
@@ -215,7 +228,7 @@ class PatternService: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let url = URL(string: "\(baseURL)/api/patterns")!
+            let url = URL(string: "\(baseURL)/api/patterns/")!
             var request = URLRequest(url: url)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
@@ -226,39 +239,73 @@ class PatternService: ObservableObject {
             }
 
             let decoder = FlexibleISO8601.makeAPIDecoder()
-            patterns = try decoder.decode([BouncePattern].self, from: data)
+            // Try paginated response first, fall back to plain array
+            if let paginated = try? decoder.decode(PaginatedResponse<BouncePattern>.self, from: data) {
+                patterns = paginated.items
+            } else {
+                patterns = try decoder.decode([BouncePattern].self, from: data)
+            }
         } catch {
             lastError = error.localizedDescription
             logger.error("fetchPatterns failed: \(error)")
         }
     }
 
-    func savePattern(_ pattern: BouncePattern, token: String) async {
-        do {
-            let url = URL(string: "\(baseURL)/api/patterns")!
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    func savePattern(_ pattern: BouncePattern, token: String) async throws {
+        let url = URL(string: "\(baseURL)/api/patterns/")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-            let encoder = JSONEncoder()
-            encoder.keyEncodingStrategy = .convertToSnakeCase
-            request.httpBody = try encoder.encode(pattern)
+        // Build API-compatible payload: pattern_string + segments_json
+        let segmentDicts: [[String: String]] = pattern.segments.map { seg in
+            var dict: [String: String] = ["type": seg.type.rawValue]
+            if let lit = seg.literalValue { dict["literal_value"] = lit }
+            if let cr = seg.customRegex { dict["custom_regex"] = cr }
+            return dict
+        }
 
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse,
-                  http.statusCode == 200 || http.statusCode == 201 else {
-                lastError = "Failed to save pattern"
-                return
+        var payload: [String: Any] = [
+            "name": pattern.name,
+            "pattern_string": pattern.patternString,
+            "segments_json": segmentDicts,
+        ]
+        if let example = pattern.exampleFileName {
+            payload["example_file_name"] = example
+        }
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw PatternSaveError.serverError("Invalid response")
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw PatternSaveError.unauthorized
+        }
+        guard http.statusCode == 200 || http.statusCode == 201 else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            let msg = "Failed to save pattern (HTTP \(http.statusCode)): \(body)"
+            lastError = msg
+            throw PatternSaveError.serverError(msg)
+        }
+
+        let decoder = FlexibleISO8601.makeAPIDecoder()
+        let saved = try decoder.decode(BouncePattern.self, from: data)
+        patterns.insert(saved, at: 0)
+        logger.info("Saved pattern: \(saved.name)")
+    }
+
+    enum PatternSaveError: LocalizedError {
+        case serverError(String)
+        case unauthorized
+
+        var errorDescription: String? {
+            switch self {
+            case .serverError(let msg): return msg
+            case .unauthorized: return "Not authenticated"
             }
-
-            let decoder = FlexibleISO8601.makeAPIDecoder()
-            let saved = try decoder.decode(BouncePattern.self, from: data)
-            patterns.insert(saved, at: 0)
-            logger.info("Saved pattern: \(saved.name)")
-        } catch {
-            lastError = error.localizedDescription
-            logger.error("savePattern failed: \(error)")
         }
     }
 

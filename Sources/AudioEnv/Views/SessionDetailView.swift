@@ -374,53 +374,170 @@ struct AbletonDetailView: View {
 struct ProToolsDetailView: View {
     let project: ProToolsProject
 
+    private var sampleRateDisplay: String {
+        guard let sr = project.sampleRate else { return "\u{2014}" }
+        switch sr {
+        case 44100: return "44.1 kHz"
+        case 48000: return "48 kHz"
+        case 88200: return "88.2 kHz"
+        case 96000: return "96 kHz"
+        case 176400: return "176.4 kHz"
+        case 192000: return "192 kHz"
+        default: return sr >= 1000 ? "\(Double(sr) / 1000.0) kHz" : "\(sr) Hz"
+        }
+    }
+
+    private var summaryLine: String {
+        var parts: [String] = []
+        if project.audioTrackCount > 0 { parts.append("\(project.audioTrackCount) audio") }
+        if project.auxTrackCount > 0 { parts.append("\(project.auxTrackCount) aux") }
+        if project.masterTrackCount > 0 { parts.append("\(project.masterTrackCount) master") }
+        if !project.audioClips.isEmpty { parts.append("\(project.audioClips.count) clips") }
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Quick-stat cards
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    QuickStat(label: "Sample Rate", value: project.sampleRate.map { "\($0) Hz" } ?? "\u{2014}", icon: "waveform")
-                    QuickStat(label: "Audio Files", value: "\(project.audioFiles.count)", icon: "speaker.wave.2")
-                    QuickStat(label: "Plugins", value: project.pluginNames.isEmpty ? "\u{2014}" : "\(project.pluginNames.count)", icon: "puzzlepiece")
-                    QuickStat(label: "Size", value: ByteCountFormatter.string(fromByteCount: Int64(project.byteLength), countStyle: .file), icon: "doc")
+                    QuickStat(label: "Sample Rate", value: sampleRateDisplay, icon: "waveform")
+                    if let bd = project.bitDepth {
+                        QuickStat(label: "Bit Depth", value: "\(bd)-bit", icon: "square.stack.3d.up")
+                    }
+                    QuickStat(label: "Tracks", value: "\(project.trackCount)", icon: "slider.horizontal.3")
+                    QuickStat(label: "Plugins", value: project.pluginCatalog.isEmpty ? "\u{2014}" : "\(project.pluginCatalog.count)", icon: "puzzlepiece")
                 }
                 .fixedSize(horizontal: true, vertical: false)
             }
 
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                GridRow {
-                    Text("Signature")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Text(project.signatureHex.isEmpty ? "Unknown" : project.signatureHex)
-                        .font(.caption)
-                }
+            // Summary line
+            if !summaryLine.isEmpty {
+                Text(summaryLine)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
 
-            // Plugin names
-            if !project.pluginNames.isEmpty {
-                Divider()
-                Text("Plugin Hints")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                LazyVGrid(columns: [GridItem(.flexible(minimum: 140)), GridItem(.flexible(minimum: 140))], spacing: 6) {
-                    ForEach(project.pluginNames, id: \.self) { name in
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color.purple)
-                                .frame(width: 6, height: 6)
-                            Text(name)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
+            // Version/path info
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                if !project.headerVersion.isEmpty {
+                    GridRow {
+                        Text("Version")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Text(project.headerVersion)
+                            .font(.caption)
+                    }
+                }
+                if !project.sessionPath.isEmpty {
+                    GridRow {
+                        Text("Session Path")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Text(project.sessionPath)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                if let prevFile = project.prevSessionFilename {
+                    GridRow {
+                        Text("Saved As From")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(prevFile)
+                                .font(.caption)
+                            if let prevPath = project.prevSessionPath {
+                                Text(prevPath)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
                         }
                     }
                 }
             }
 
+            // Track list
+            if !project.tracks.isEmpty {
+                Divider()
+                Text("Tracks (\(project.trackCount))")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+
+                VStack(spacing: 0) {
+                    ForEach(0..<project.tracks.count, id: \.self) { i in
+                        PTTrackRow(track: project.tracks[i])
+                        if i < project.tracks.count - 1 { Divider() }
+                    }
+                }
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(8)
+            }
+
+            // Plugin catalog
+            if !project.pluginCatalog.isEmpty {
+                Divider()
+                Text("Plugin Catalog (\(project.pluginCatalog.count))")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+
+                LazyVGrid(columns: [GridItem(.flexible(minimum: 160)), GridItem(.flexible(minimum: 160))], spacing: 6) {
+                    ForEach(0..<project.pluginCatalog.count, id: \.self) { i in
+                        let plugin = project.pluginCatalog[i]
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(plugin.isInstalled ? Color.green : Color.red)
+                                .frame(width: 6, height: 6)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(plugin.name)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                if !plugin.manufacturer.isEmpty {
+                                    Text(plugin.manufacturer)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Audio clips (collapsed)
+            if !project.audioClips.isEmpty {
+                Divider()
+                DisclosureGroup("Audio Clips (\(project.audioClips.count))") {
+                    VStack(spacing: 0) {
+                        ForEach(0..<project.audioClips.count, id: \.self) { i in
+                            HStack(spacing: 8) {
+                                Text(project.audioClips[i].name)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 10)
+                            if i < project.audioClips.count - 1 { Divider() }
+                        }
+                    }
+                    .background(Color.secondary.opacity(0.08))
+                    .cornerRadius(8)
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+            }
+
+            // File sections
             if !project.audioFiles.isEmpty {
                 Divider()
-                Text("Audio Files")
+                Text("Audio Files (\(project.audioFiles.count))")
                     .font(.headline)
                     .fontWeight(.semibold)
                 VStack(spacing: 0) {
@@ -450,7 +567,7 @@ struct ProToolsDetailView: View {
 
             if !project.bouncedFiles.isEmpty {
                 Divider()
-                Text("Bounced Files")
+                Text("Bounced Files (\(project.bouncedFiles.count))")
                     .font(.headline)
                     .fontWeight(.semibold)
                 VStack(spacing: 0) {
@@ -480,7 +597,7 @@ struct ProToolsDetailView: View {
 
             if !project.videoFiles.isEmpty {
                 Divider()
-                Text("Video Files")
+                Text("Video Files (\(project.videoFiles.count))")
                     .font(.headline)
                     .fontWeight(.semibold)
                 VStack(spacing: 0) {
@@ -510,7 +627,7 @@ struct ProToolsDetailView: View {
 
             if !project.renderedFiles.isEmpty {
                 Divider()
-                Text("Rendered Files")
+                Text("Rendered Files (\(project.renderedFiles.count))")
                     .font(.headline)
                     .fontWeight(.semibold)
                 VStack(spacing: 0) {
@@ -538,6 +655,70 @@ struct ProToolsDetailView: View {
                 .buttonStyle(.bordered)
             }
         }
+    }
+}
+
+// MARK: - Pro Tools track row
+
+private struct PTTrackRow: View {
+    let track: PTTrack
+
+    private var trackIcon: String {
+        switch track.trackType {
+        case "audio":   return "speaker.wave.2"
+        case "aux", "bus": return "arrow.turn.left.up"
+        case "master":  return "dial.high"
+        case "click":   return "metronome"
+        case "folder":  return "folder"
+        default:        return "waveform"
+        }
+    }
+
+    private var trackColor: Color {
+        switch track.trackType {
+        case "audio":   return .blue
+        case "aux", "bus": return .green
+        case "master":  return .red
+        case "click":   return .orange
+        case "folder":  return .secondary
+        default:        return .secondary
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: trackIcon)
+                .foregroundColor(trackColor)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(track.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(track.isStereo ? "Stereo" : "Mono")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.15))
+                        .cornerRadius(3)
+                }
+                if !track.plugins.isEmpty {
+                    Text(track.plugins.map(\.name).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
     }
 }
 

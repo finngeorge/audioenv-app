@@ -46,6 +46,10 @@ struct Bounce: Identifiable, Hashable, Codable {
     let bitrate: Int?
     let createdAt: Date
     let fileModifiedAt: Date
+    var bpm: Int?
+    var musicalKey: String?
+    var stage: String?
+    var version: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -61,6 +65,10 @@ struct Bounce: Identifiable, Hashable, Codable {
         case bitrate
         case createdAt = "created_at"
         case fileModifiedAt = "file_modified_at"
+        case bpm
+        case musicalKey = "musical_key"
+        case stage
+        case version
     }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -151,4 +159,8 @@ struct LocalBounceInfo {
     let bitDepth: Int?
     let bitrate: Int?
     let fileModifiedAt: Date
+    let bpm: Int?
+    let musicalKey: String?
+    let stage: String?
+    let version: Int?
 }

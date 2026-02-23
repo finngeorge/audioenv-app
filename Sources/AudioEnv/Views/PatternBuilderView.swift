@@ -11,8 +11,11 @@ struct PatternBuilderView: View {
     @State private var patternName = "New Pattern"
     @State private var segments: [(text: String, type: PatternSegmentType)] = []
     @State private var patternString = ""
+    @State private var delimiters: [String] = []
     @State private var testResults: [(Bounce, ExtractedBounceMetadata)] = []
     @State private var isTestingPattern = false
+    @State private var saveError: String?
+    @State private var showSaveError = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -106,6 +109,11 @@ struct PatternBuilderView: View {
             .background(Color.secondary.opacity(0.05))
         }
         .frame(width: 700, height: 600)
+        .alert("Save Failed", isPresented: $showSaveError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "Unknown error")
+        }
     }
 
     // MARK: - Segment Chips
@@ -156,7 +164,7 @@ struct PatternBuilderView: View {
 
                     // Show delimiter between segments
                     if index < segments.count - 1 {
-                        Text("_")
+                        Text(index < delimiters.count ? delimiters[index] : "_")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -178,14 +186,6 @@ struct PatternBuilderView: View {
             TextField("Pattern", text: $patternString)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
-                .onChange(of: patternString) { _, newValue in
-                    // Bidirectional sync: update segments from pattern string
-                    let parsed = patternService.parsePatternString(newValue)
-                    // Only update if user is editing the text field directly
-                    if parsed.count != segments.count {
-                        // Pattern changed structure, don't auto-sync chips
-                    }
-                }
 
             Text("Edit directly or use the chips above. Format: {title}_{bpm}bpm_v{version}_{stage}")
                 .font(.caption)
@@ -281,8 +281,9 @@ struct PatternBuilderView: View {
     // MARK: - Actions
 
     private func splitIntoSegments(_ fileName: String) {
-        let parts = patternService.splitFileName(fileName)
-        segments = parts.map { (text: $0, type: PatternSegmentType.literal) }
+        let result = patternService.splitFileNameWithDelimiters(fileName)
+        segments = result.segments.map { (text: $0, type: PatternSegmentType.literal) }
+        delimiters = result.delimiters
         updatePatternString()
     }
 
@@ -298,13 +299,18 @@ struct PatternBuilderView: View {
     }
 
     private func updatePatternString() {
-        let tokens = segments.map { segment -> String in
+        var result = ""
+        for (index, segment) in segments.enumerated() {
             if segment.type == .literal {
-                return segment.text
+                result += segment.text
+            } else {
+                result += "{\(segment.type.rawValue)}"
             }
-            return "{\(segment.type.rawValue)}"
+            if index < segments.count - 1 {
+                result += index < delimiters.count ? delimiters[index] : "_"
+            }
         }
-        patternString = tokens.joined(separator: "_")
+        patternString = result
     }
 
     private func testPattern() {
@@ -317,33 +323,40 @@ struct PatternBuilderView: View {
     }
 
     private func savePattern() {
-        let patternSegments = segments.map { segment -> PatternSegment in
-            if segment.type == .literal {
-                return PatternSegment(type: .literal, literalValue: segment.text)
-            }
-            return PatternSegment(type: segment.type)
-        }
-
-        // Add delimiter segments between
-        var fullSegments: [PatternSegment] = []
-        for (index, seg) in patternSegments.enumerated() {
-            fullSegments.append(seg)
-            if index < patternSegments.count - 1 {
-                fullSegments.append(PatternSegment(type: .literal, literalValue: "_"))
-            }
-        }
-
-        let pattern = BouncePattern(
+        let taggedRanges = segments.map { ($0.text, $0.type) }
+        var pattern = patternService.buildPatternFromTaggedRanges(
+            fileName: exampleFileName,
+            taggedRanges: taggedRanges
+        )
+        pattern = BouncePattern(
             name: patternName,
-            segments: fullSegments,
+            segments: pattern.segments,
             exampleFileName: exampleFileName
         )
 
         Task {
-            if let token = auth.authToken {
-                await patternService.savePattern(pattern, token: token)
+            do {
+                let token = try await auth.validToken()
+                try await patternService.savePattern(pattern, token: token)
+                dismiss()
+            } catch PatternService.PatternSaveError.unauthorized {
+                // Token was stale — refresh and retry once
+                if await auth.handleUnauthorized(), let freshToken = auth.authToken {
+                    do {
+                        try await patternService.savePattern(pattern, token: freshToken)
+                        dismiss()
+                    } catch {
+                        saveError = error.localizedDescription
+                        showSaveError = true
+                    }
+                } else {
+                    saveError = "Session expired. Please log in again."
+                    showSaveError = true
+                }
+            } catch {
+                saveError = error.localizedDescription
+                showSaveError = true
             }
         }
-        dismiss()
     }
 }
