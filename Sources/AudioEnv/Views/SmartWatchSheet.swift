@@ -106,7 +106,7 @@ struct SmartWatchSheet: View {
         .frame(width: 540, height: 560)
         .task {
             // Ensure bounce and project data is loaded for accurate preview counts
-            if let token = auth.authToken {
+            if let token = try? await auth.validToken() {
                 if bounceService.bounces.isEmpty {
                     await bounceService.fetchBounces(token: token)
                 }

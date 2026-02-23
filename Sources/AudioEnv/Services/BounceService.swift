@@ -108,7 +108,11 @@ class BounceService: ObservableObject {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                logger.error("fetchFolders returned \(status)")
+                return
+            }
 
             let decoder = FlexibleISO8601.makeAPIDecoder()
             bounceFolders = Self.decodeItems(data: data, decoder: decoder) ?? []
@@ -136,7 +140,11 @@ class BounceService: ObservableObject {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                logger.error("fetchBounces returned \(status)")
+                return
+            }
 
             let decoder = FlexibleISO8601.makeAPIDecoder()
             bounces = Self.decodeItems(data: data, decoder: decoder) ?? []
@@ -212,6 +220,8 @@ class BounceService: ObservableObject {
             // Extract audio metadata
             let (duration, sampleRate, bitDepth, bitrate) = await Self.extractAudioMetadata(path: filePath)
 
+            let meta = Self.extractFilenameMetadata(fileName)
+
             results.append(LocalBounceInfo(
                 fileName: fileName,
                 filePath: filePath,
@@ -221,7 +231,11 @@ class BounceService: ObservableObject {
                 sampleRate: sampleRate,
                 bitDepth: bitDepth,
                 bitrate: bitrate,
-                fileModifiedAt: modDate
+                fileModifiedAt: modDate,
+                bpm: meta.bpm,
+                musicalKey: meta.key,
+                stage: meta.stage,
+                version: meta.version
             ))
         }
 
@@ -283,6 +297,10 @@ class BounceService: ObservableObject {
                 "bit_depth": b.bitDepth,
                 "bitrate": b.bitrate,
                 "file_modified_at": dateFormatter.string(from: b.fileModifiedAt),
+                "bpm": b.bpm,
+                "musical_key": b.musicalKey,
+                "stage": b.stage,
+                "version": b.version,
             ]
         }
 
@@ -518,6 +536,48 @@ class BounceService: ObservableObject {
             return paginated.items
         }
         return try? decoder.decode([T].self, from: data)
+    }
+
+    // MARK: - Filename Metadata Extraction
+
+    /// Extract bpm, musical key, stage, and version from a bounce filename.
+    nonisolated static func extractFilenameMetadata(_ fileName: String) -> (bpm: Int?, key: String?, stage: String?, version: Int?) {
+        let name = (fileName as NSString).deletingPathExtension
+
+        // BPM: [120], 120bpm, _120_
+        var bpm: Int?
+        if let match = name.range(of: #"\[(\d{2,3})\]"#, options: .regularExpression) {
+            let digits = name[match].dropFirst().dropLast()
+            if let val = Int(digits), (60...300).contains(val) { bpm = val }
+        } else if let match = name.range(of: #"(?:^|[_\s-])(\d{2,3})[bB][pP][mM]"#, options: .regularExpression) {
+            let segment = String(name[match]).trimmingCharacters(in: CharacterSet(charactersIn: "_- "))
+            let digits = segment.replacingOccurrences(of: #"[bB][pP][mM]$"#, with: "", options: .regularExpression)
+            if let val = Int(digits), (60...300).contains(val) { bpm = val }
+        }
+
+        // Musical key: C#m, Fmaj, Bbm, Ab, etc.
+        var key: String?
+        if let match = name.range(of: #"(?:^|[_\s-])([A-G][b#]?(?:min|maj|m(?!a)|M)?)(?:[_\s.-]|$)"#, options: .regularExpression) {
+            let segment = String(name[match]).trimmingCharacters(in: CharacterSet(charactersIn: "_- ."))
+            if !segment.isEmpty { key = segment }
+        }
+
+        // Stage: rough, mix, master, stem, demo, final
+        var stage: String?
+        if let match = name.range(of: #"(?:^|[_\s-])(rough|mix|master|stem|demo|final)(?:[_\s.-]|$)"#, options: [.regularExpression, .caseInsensitive]) {
+            let segment = String(name[match]).trimmingCharacters(in: CharacterSet(charactersIn: "_- ."))
+            stage = segment.lowercased()
+        }
+
+        // Version: v1, v2, V3, _v12
+        var version: Int?
+        if let match = name.range(of: #"(?:^|[_\s-])[vV](\d{1,3})(?:[_\s.-]|$)"#, options: .regularExpression) {
+            let segment = String(name[match]).trimmingCharacters(in: CharacterSet(charactersIn: "_- ."))
+            let digits = segment.replacingOccurrences(of: #"^[vV]"#, with: "", options: .regularExpression)
+            version = Int(digits)
+        }
+
+        return (bpm, key, stage, version)
     }
 
     // MARK: - Name Matching (Local Pre-filter)

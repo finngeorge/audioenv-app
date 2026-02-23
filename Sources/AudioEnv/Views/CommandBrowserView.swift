@@ -42,7 +42,7 @@ struct CommandBrowserView: View {
         }
         .navigationTitle("Commands")
         .task {
-            if let token = auth.authToken {
+            if let token = try? await auth.validToken() {
                 async let recipes: () = commandService.fetchRecipes(token: token)
                 // Ensure bounces are loaded so bounce queries return results
                 // even if the user hasn't visited the Bounces tab yet.

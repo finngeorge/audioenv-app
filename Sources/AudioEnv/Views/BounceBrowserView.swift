@@ -166,7 +166,7 @@ struct BounceBrowserView: View {
             }
         }
         .task {
-            if let token = auth.authToken {
+            if let token = try? await auth.validToken() {
                 await bounceService.fetchFolders(token: token)
                 await bounceService.fetchBounces(token: token)
                 await bounceService.scanAllAutoFolders(token: token)

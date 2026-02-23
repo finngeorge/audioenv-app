@@ -134,7 +134,7 @@ struct CollectionBrowserView: View {
             }
         }
         .task {
-            if let token = auth.authToken {
+            if let token = try? await auth.validToken() {
                 await collectionService.fetchCollections(token: token)
             }
         }
