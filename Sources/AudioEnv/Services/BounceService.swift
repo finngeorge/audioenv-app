@@ -538,6 +538,54 @@ class BounceService: ObservableObject {
         return try? decoder.decode([T].self, from: data)
     }
 
+    // MARK: - Metadata Update
+
+    /// Update metadata fields on a bounce via PATCH.
+    func updateBounceMetadata(
+        bounceId: UUID,
+        bpm: Int?,
+        musicalKey: String?,
+        stage: String?,
+        version: Int?,
+        token: String
+    ) async -> Bool {
+        do {
+            let url = URL(string: "\(baseURL)/api/bounces/\(bounceId)")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "PATCH"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            var payload: [String: Any?] = [:]
+            payload["bpm"] = bpm
+            payload["musical_key"] = musicalKey
+            payload["stage"] = stage
+            payload["version"] = version
+
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload as [String: Any])
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                logger.warning("updateBounceMetadata returned \(status)")
+                return false
+            }
+
+            // Update local state
+            let decoder = FlexibleISO8601.makeAPIDecoder()
+            if let updated = try? decoder.decode(Bounce.self, from: data),
+               let idx = bounces.firstIndex(where: { $0.id == bounceId }) {
+                bounces[idx] = updated
+            }
+
+            logger.info("Updated metadata for bounce \(bounceId)")
+            return true
+        } catch {
+            logger.error("updateBounceMetadata failed: \(error)")
+            return false
+        }
+    }
+
     // MARK: - Filename Metadata Extraction
 
     /// Extract bpm, musical key, stage, and version from a bounce filename.
@@ -580,11 +628,62 @@ class BounceService: ObservableObject {
         return (bpm, key, stage, version)
     }
 
+    // MARK: - Local Folder Matching
+
+    /// Match bounces to projects by checking if a bounce file lives inside a known project folder.
+    /// Call after scanning bounces to generate high-confidence local suggestions before API sync.
+    func matchBouncesByFolder(sessions: [AudioSession]) {
+        var folderSuggestions: [BounceSuggestion] = []
+        let existingSuggestionPairs = Set(suggestions.map { "\($0.bounceId)::\($0.scannedSessionId)" })
+
+        for bounce in bounces {
+            for session in sessions where !session.isBackup {
+                // Compute project folder path (same logic as SyncService)
+                var folderPath = (session.path as NSString).deletingLastPathComponent
+                if folderPath.lowercased().hasSuffix("/backups") || folderPath.lowercased().hasSuffix("/backup") {
+                    folderPath = (folderPath as NSString).deletingLastPathComponent
+                }
+
+                let prefix = folderPath.hasSuffix("/") ? folderPath : folderPath + "/"
+                if bounce.filePath.hasPrefix(prefix) {
+                    let pairKey = "\(bounce.id)::\(session.id)"
+                    guard !existingSuggestionPairs.contains(pairKey) else { continue }
+
+                    folderSuggestions.append(BounceSuggestion(
+                        bounceId: bounce.id.uuidString,
+                        bounceFileName: bounce.fileName,
+                        scannedSessionId: session.id,
+                        projectName: session.projectDisplayName,
+                        confidence: 0.95
+                    ))
+                }
+            }
+        }
+
+        if !folderSuggestions.isEmpty {
+            suggestions.insert(contentsOf: folderSuggestions, at: 0)
+            logger.info("Found \(folderSuggestions.count) folder-based bounce suggestions")
+        }
+    }
+
     // MARK: - Name Matching (Local Pre-filter)
 
-    /// Check if a bounce filename likely matches a project name.
+    /// Check if a bounce filename likely matches a project name, or if the bounce
+    /// lives inside the project's folder path.
     /// Used for local pre-filtering before sending to API for confirmation.
-    nonisolated static func bounceMatchesProject(bounceFileName: String, projectName: String) -> Bool {
+    nonisolated static func bounceMatchesProject(bounceFileName: String, projectName: String, bounceFilePath: String? = nil, sessionPath: String? = nil) -> Bool {
+        // Folder-based matching: check if bounce lives inside the session's project folder
+        if let bouncePath = bounceFilePath, let sessPath = sessionPath {
+            var folderPath = (sessPath as NSString).deletingLastPathComponent
+            if folderPath.lowercased().hasSuffix("/backups") || folderPath.lowercased().hasSuffix("/backup") {
+                folderPath = (folderPath as NSString).deletingLastPathComponent
+            }
+            let prefix = folderPath.hasSuffix("/") ? folderPath : folderPath + "/"
+            if bouncePath.hasPrefix(prefix) {
+                return true
+            }
+        }
+
         // Strip file extension from bounce
         let bounceName = (bounceFileName as NSString).deletingPathExtension.lowercased()
 

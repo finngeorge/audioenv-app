@@ -139,6 +139,12 @@ class SyncService: ObservableObject {
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         let sessionPayloads = sessions.compactMap { session -> [String: Any]? in
+            // Compute folder_path: parent directory, stripping /Backups suffix
+            var folderPath = (session.path as NSString).deletingLastPathComponent
+            if folderPath.lowercased().hasSuffix("/backups") || folderPath.lowercased().hasSuffix("/backup") {
+                folderPath = (folderPath as NSString).deletingLastPathComponent
+            }
+
             var dict: [String: Any] = [
                 "session_name": session.name,
                 "session_format": session.format.rawValue,
@@ -146,6 +152,7 @@ class SyncService: ObservableObject {
                 "modified_date": dateFormatter.string(from: session.modifiedDate),
                 "is_backup": session.isBackup,
                 "project_name": session.projectDisplayName,
+                "folder_path": folderPath,
             ]
 
             // Extract metadata from ParsedProject
