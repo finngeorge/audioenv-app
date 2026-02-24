@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Pattern segment types
 
 /// Types of segments that can appear in a bounce filename pattern.
-enum PatternSegmentType: String, CaseIterable, Codable, Identifiable, Equatable {
+enum PatternSegmentType: String, CaseIterable, Codable, Identifiable, Equatable, Hashable {
     case title
     case artist
     case bpm
@@ -63,7 +63,7 @@ enum PatternSegmentType: String, CaseIterable, Codable, Identifiable, Equatable 
 // MARK: - Pattern segment
 
 /// A single segment within a bounce filename pattern.
-struct PatternSegment: Codable, Equatable, Identifiable {
+struct PatternSegment: Codable, Equatable, Hashable, Identifiable {
     let id: UUID
     var type: PatternSegmentType
     var literalValue: String?
@@ -105,25 +105,28 @@ struct PatternSegment: Codable, Equatable, Identifiable {
 // MARK: - Bounce pattern
 
 /// A named pattern for parsing bounce filenames into structured metadata.
-struct BouncePattern: Codable, Equatable, Identifiable {
+struct BouncePattern: Codable, Equatable, Hashable, Identifiable {
     let id: UUID
     var name: String
     var segments: [PatternSegment]
     var exampleFileName: String?
     var createdAt: Date?
+    var isBuiltIn: Bool = false
 
     init(
         id: UUID = UUID(),
         name: String,
         segments: [PatternSegment],
         exampleFileName: String? = nil,
-        createdAt: Date? = nil
+        createdAt: Date? = nil,
+        isBuiltIn: Bool = false
     ) {
         self.id = id
         self.name = name
         self.segments = segments
         self.exampleFileName = exampleFileName
         self.createdAt = createdAt
+        self.isBuiltIn = isBuiltIn
     }
 
     enum CodingKeys: String, CodingKey {
@@ -164,7 +167,11 @@ struct BouncePattern: Codable, Equatable, Identifiable {
         } else {
             segments = []
         }
+
+        isBuiltIn = false
     }
+
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)

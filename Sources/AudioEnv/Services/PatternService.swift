@@ -20,6 +20,68 @@ class PatternService: ObservableObject {
         return "https://api.audioenv.com"
     }()
 
+    // MARK: - Built-in Patterns
+
+    /// Default patterns that always appear for all users.
+    static let builtInPatterns: [BouncePattern] = [
+        BouncePattern(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            name: "BPM (brackets)",
+            segments: [
+                PatternSegment(type: .title),
+                PatternSegment(type: .literal, literalValue: " ["),
+                PatternSegment(type: .bpm),
+                PatternSegment(type: .literal, literalValue: "] "),
+                PatternSegment(type: .stage),
+            ],
+            exampleFileName: "BA SongName [120] mix.wav",
+            isBuiltIn: true
+        ),
+        BouncePattern(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            name: "BPM suffix + version + stage",
+            segments: [
+                PatternSegment(type: .title),
+                PatternSegment(type: .literal, literalValue: "_"),
+                PatternSegment(type: .bpm),
+                PatternSegment(type: .literal, literalValue: "bpm_v"),
+                PatternSegment(type: .version),
+                PatternSegment(type: .literal, literalValue: "_"),
+                PatternSegment(type: .stage),
+            ],
+            exampleFileName: "TrackName_120bpm_v2_rough.wav",
+            isBuiltIn: true
+        ),
+        BouncePattern(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+            name: "Key + BPM + stage",
+            segments: [
+                PatternSegment(type: .title),
+                PatternSegment(type: .literal, literalValue: "_"),
+                PatternSegment(type: .key),
+                PatternSegment(type: .literal, literalValue: "_"),
+                PatternSegment(type: .bpm),
+                PatternSegment(type: .literal, literalValue: "bpm_"),
+                PatternSegment(type: .stage),
+            ],
+            exampleFileName: "MySong_Cm_128bpm_master.wav",
+            isBuiltIn: true
+        ),
+        BouncePattern(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+            name: "Version + stage",
+            segments: [
+                PatternSegment(type: .title),
+                PatternSegment(type: .literal, literalValue: "_v"),
+                PatternSegment(type: .version),
+                PatternSegment(type: .literal, literalValue: "_"),
+                PatternSegment(type: .stage),
+            ],
+            exampleFileName: "Song Name_v3_final.wav",
+            isBuiltIn: true
+        ),
+    ]
+
     // MARK: - Pattern Parsing
 
     /// Parse a pattern string like `{title}_{bpm}bpm_v{version}_{stage}` into segments.
@@ -239,15 +301,24 @@ class PatternService: ObservableObject {
             }
 
             let decoder = FlexibleISO8601.makeAPIDecoder()
+            var userPatterns: [BouncePattern]
             // Try paginated response first, fall back to plain array
             if let paginated = try? decoder.decode(PaginatedResponse<BouncePattern>.self, from: data) {
-                patterns = paginated.items
+                userPatterns = paginated.items
             } else {
-                patterns = try decoder.decode([BouncePattern].self, from: data)
+                userPatterns = try decoder.decode([BouncePattern].self, from: data)
             }
+            // Merge built-in patterns (first) with user patterns
+            let userIds = Set(userPatterns.map(\.id))
+            let builtIns = Self.builtInPatterns.filter { !userIds.contains($0.id) }
+            patterns = builtIns + userPatterns
         } catch {
             lastError = error.localizedDescription
             logger.error("fetchPatterns failed: \(error)")
+            // Still show built-in patterns if fetch fails
+            if patterns.isEmpty {
+                patterns = Self.builtInPatterns
+            }
         }
     }
 

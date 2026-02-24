@@ -155,7 +155,7 @@ enum ProToolsParser {
         func readU16() -> UInt16 {
             guard pos + 2 <= length else { return 0 }
             let val = data.withUnsafeBytes { raw -> UInt16 in
-                raw.load(fromByteOffset: pos, as: UInt16.self)
+                raw.loadUnaligned(fromByteOffset: pos, as: UInt16.self)
             }
             pos += 2
             return UInt16(littleEndian: val)
@@ -164,7 +164,7 @@ enum ProToolsParser {
         func readU32() -> UInt32 {
             guard pos + 4 <= length else { return 0 }
             let val = data.withUnsafeBytes { raw -> UInt32 in
-                raw.load(fromByteOffset: pos, as: UInt32.self)
+                raw.loadUnaligned(fromByteOffset: pos, as: UInt32.self)
             }
             pos += 4
             return UInt32(littleEndian: val)
@@ -223,9 +223,9 @@ enum ProToolsParser {
             guard ptr[offset] == 0x5A else { return nil }
             guard ptr[offset + 2] == 0x00 else { return nil }
             let tagType = ptr[offset + 1]
-            let length = Int(UInt32(littleEndian: raw.load(fromByteOffset: offset + 3, as: UInt32.self)))
+            let length = Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset + 3, as: UInt32.self)))
             guard length >= 2, offset + 7 + length <= data.count else { return nil }
-            let subtag = UInt16(littleEndian: raw.load(fromByteOffset: offset + 7, as: UInt16.self))
+            let subtag = UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: offset + 7, as: UInt16.self))
             return Tag5A(tagType: tagType, subtag: subtag, payloadStart: offset + 9, containerEnd: offset + 7 + length, tagOffset: offset)
         }
     }
@@ -321,9 +321,9 @@ enum ProToolsParser {
             let ptr = raw.bindMemory(to: UInt8.self)
             for absOff in scanStart..<max(scanStart, scanEnd - 8) {
                 guard absOff + 8 <= reader.data.count else { break }
-                let count = Int(UInt32(littleEndian: raw.load(fromByteOffset: absOff, as: UInt32.self)))
+                let count = Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: absOff, as: UInt32.self)))
                 guard 3 <= count && count <= 20 else { continue }
-                let nextLen = Int(UInt32(littleEndian: raw.load(fromByteOffset: absOff + 4, as: UInt32.self)))
+                let nextLen = Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: absOff + 4, as: UInt32.self)))
                 guard 1 <= nextLen && nextLen <= 64 && absOff + 8 + nextLen <= reader.data.count else { continue }
                 let allPrintable = (0..<nextLen).allSatisfy { ptr[absOff + 8 + $0] >= 32 && ptr[absOff + 8 + $0] <= 126 }
                 guard allPrintable else { continue }
@@ -381,7 +381,7 @@ enum ProToolsParser {
             for delta in 0..<20 {
                 let off = afterUidOffset + delta
                 guard off + 4 < data.count else { break }
-                let slen = Int(UInt32(littleEndian: raw.load(fromByteOffset: off, as: UInt32.self)))
+                let slen = Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: off, as: UInt32.self)))
                 guard 1 <= slen && slen <= 512 && off + 4 + slen <= data.count else { continue }
                 let allPrintable = (0..<slen).allSatisfy { ptr[off + 4 + $0] >= 32 && ptr[off + 4 + $0] <= 126 }
                 guard allPrintable else { continue }
@@ -553,7 +553,7 @@ enum ProToolsParser {
 
         return data.withUnsafeBytes { raw -> (String?, Data?) in
             let ptr = raw.bindMemory(to: UInt8.self)
-            let nameLen = Int(UInt32(littleEndian: raw.load(fromByteOffset: payloadStart, as: UInt32.self)))
+            let nameLen = Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: payloadStart, as: UInt32.self)))
             guard nameLen >= 1, nameLen <= 512, payloadStart + 4 + nameLen <= containerEnd else { return (nil, nil) }
 
             let allPrintable = (0..<nameLen).allSatisfy { ptr[payloadStart + 4 + $0] >= 32 && ptr[payloadStart + 4 + $0] <= 126 }
@@ -663,7 +663,7 @@ enum ProToolsParser {
                     let ptr = raw.bindMemory(to: UInt8.self)
                     var pos = child.payloadStart
                     while pos < child.containerEnd - 4 {
-                        let slen = Int(UInt32(littleEndian: raw.load(fromByteOffset: pos, as: UInt32.self)))
+                        let slen = Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: pos, as: UInt32.self)))
                         if 2 <= slen && slen <= 256 && pos + 4 + slen <= child.containerEnd {
                             let allPrintable = (0..<slen).allSatisfy { ptr[pos + 4 + $0] >= 32 && ptr[pos + 4 + $0] <= 126 }
                             if allPrintable {
@@ -817,7 +817,7 @@ enum ProToolsParser {
             let len = region.count
             var pos = 0
             while pos < len - 4 {
-                let slen = Int(UInt32(littleEndian: raw.load(fromByteOffset: pos, as: UInt32.self)))
+                let slen = Int(UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: pos, as: UInt32.self)))
                 if 3 <= slen && slen <= 80 && pos + 4 + slen <= len {
                     let allPrintable = (0..<slen).allSatisfy { ptr[pos + 4 + $0] >= 32 && ptr[pos + 4 + $0] <= 126 }
                     if allPrintable {
@@ -958,10 +958,10 @@ enum ProToolsParser {
             guard offset + 24 <= data.count else { continue }
 
             let sr = data.withUnsafeBytes { raw -> UInt32 in
-                UInt32(littleEndian: raw.load(fromByteOffset: offset + 12, as: UInt32.self))
+                UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset + 12, as: UInt32.self))
             }
             let bits = data.withUnsafeBytes { raw -> UInt16 in
-                UInt16(littleEndian: raw.load(fromByteOffset: offset + 22, as: UInt16.self))
+                UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: offset + 22, as: UInt16.self))
             }
             if sr >= 8000 && sr <= 384000 {
                 return (Int(sr), Int(bits))

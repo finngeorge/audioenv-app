@@ -34,6 +34,50 @@ struct PatternBuilderView: View {
 
             ScrollView {
                 VStack(spacing: 20) {
+                    // Suggested patterns
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Quick Start")
+                            .font(.headline)
+
+                        Text("Common patterns you can apply immediately, or use as a starting point.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        ForEach(Self.suggestedPatterns, id: \.name) { suggestion in
+                            Button {
+                                applySuggestion(suggestion)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(suggestion.name)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                        Text(suggestion.example)
+                                            .font(.system(.caption, design: .monospaced))
+                                            .foregroundColor(.secondary)
+                                        Text(suggestion.description)
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.right.circle")
+                                        .foregroundColor(.accentColor)
+                                }
+                                .padding(10)
+                                .background(Color.accentColor.opacity(0.05))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.accentColor.opacity(0.15), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding()
+                    .background(Color.secondary.opacity(0.05))
+                    .cornerRadius(12)
+
                     // Pattern name
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Pattern Name")
@@ -276,6 +320,74 @@ struct PatternBuilderView: View {
         .padding(.vertical, 2)
         .background((Color(hex: colorHex) ?? .gray).opacity(0.1))
         .cornerRadius(4)
+    }
+
+    // MARK: - Suggested Patterns
+
+    private struct SuggestedPattern {
+        let name: String
+        let example: String
+        let description: String
+        let fileName: String
+        let segmentTypes: [(String, PatternSegmentType)]
+    }
+
+    private static let suggestedPatterns: [SuggestedPattern] = [
+        SuggestedPattern(
+            name: "BPM in brackets",
+            example: "BA SongName [120] mix.wav",
+            description: "Extracts BPM from [120], plus stage (mix, master, rough, etc.)",
+            fileName: "BA SongName [120] mix.wav",
+            segmentTypes: [
+                ("BA SongName", .title),
+                ("[120]", .bpm),
+                ("mix", .stage),
+            ]
+        ),
+        SuggestedPattern(
+            name: "BPM suffix with version",
+            example: "TrackName_120bpm_v2_rough.wav",
+            description: "Extracts BPM from 120bpm/120BPM, version from v2, stage from rough/mix/master",
+            fileName: "TrackName_120bpm_v2_rough.wav",
+            segmentTypes: [
+                ("TrackName", .title),
+                ("120bpm", .bpm),
+                ("v2", .version),
+                ("rough", .stage),
+            ]
+        ),
+        SuggestedPattern(
+            name: "Key and BPM",
+            example: "MySong_Cm_128bpm_master.wav",
+            description: "Extracts musical key (Cm, F#m, Bbmaj), BPM, and stage",
+            fileName: "MySong_Cm_128bpm_master.wav",
+            segmentTypes: [
+                ("MySong", .title),
+                ("Cm", .key),
+                ("128bpm", .bpm),
+                ("master", .stage),
+            ]
+        ),
+        SuggestedPattern(
+            name: "Simple version tracking",
+            example: "Song Name_v3_final.wav",
+            description: "Extracts version number and stage from common naming conventions",
+            fileName: "Song Name_v3_final.wav",
+            segmentTypes: [
+                ("Song Name", .title),
+                ("v3", .version),
+                ("final", .stage),
+            ]
+        ),
+    ]
+
+    private func applySuggestion(_ suggestion: SuggestedPattern) {
+        patternName = suggestion.name
+        exampleFileName = suggestion.fileName
+        segments = suggestion.segmentTypes.map { (text: $0.0, type: $0.1) }
+        delimiters = Array(repeating: "_", count: max(0, segments.count - 1))
+        updatePatternString()
+        testPattern()
     }
 
     // MARK: - Actions

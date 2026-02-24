@@ -3,6 +3,40 @@ import AppKit
 import AVFAudio
 import os
 
+/// Process-lifetime cache of TCC directory access results.
+/// Thread-safe via NSLock; used from nonisolated static methods.
+final class TCCAccessCache: @unchecked Sendable {
+    static let shared = TCCAccessCache()
+    private let lock = NSLock()
+    private var checked: Set<String> = []
+    private var granted: Set<String> = []
+
+    var grantedDirs: Set<String> {
+        lock.lock()
+        defer { lock.unlock() }
+        return granted
+    }
+
+    func isChecked(_ dir: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return checked.contains(dir)
+    }
+
+    func isGranted(_ dir: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return granted.contains(dir)
+    }
+
+    func markChecked(_ dir: String, accessible: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        checked.insert(dir)
+        if accessible { granted.insert(dir) }
+    }
+}
+
 /// Central observable that drives the entire scan → parse pipeline.
 /// All @Published mutations happen on the main actor.
 @MainActor
@@ -83,7 +117,7 @@ class ScannerService: ObservableObject {
 
     // MARK: – Default session search roots
 
-    private nonisolated static var defaultSessionRoots: [String] {
+    nonisolated static var defaultSessionRoots: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return [
             "\(home)/Documents",
@@ -91,6 +125,62 @@ class ScannerService: ObservableObject {
             "\(home)/Music",
             "\(home)/Downloads",
         ]
+    }
+
+    // MARK: – TCC access tracking
+
+    private static let defaultsGrantedDirsKey = "AudioEnv.grantedDefaultDirectories"
+
+    /// Returns only the default session roots that are currently accessible.
+    /// Probes each TCC-protected directory at most once per process lifetime.
+    /// Inaccessible directories are silently skipped to avoid repeated TCC prompts.
+    private nonisolated static func accessibleSessionRoots() -> [String] {
+        let defaults = defaultSessionRoots
+        let cache = TCCAccessCache.shared
+        var accessible: [String] = []
+        let previouslyGranted = Set(UserDefaults.standard.stringArray(forKey: defaultsGrantedDirsKey) ?? [])
+
+        for dir in defaults {
+            // Already checked this process — use cached result
+            if cache.isChecked(dir) {
+                if cache.isGranted(dir) { accessible.append(dir) }
+                continue
+            }
+
+            // Not yet checked: if previously granted or not TCC-protected, probe it
+            if previouslyGranted.contains(dir) || !isTCCProtected(dir) {
+                let readable = FileManager.default.isReadableFile(atPath: dir)
+                cache.markChecked(dir, accessible: readable)
+                if readable { accessible.append(dir) }
+            }
+            // If not previously granted AND TCC-protected, skip entirely —
+            // user must explicitly add via "Grant Access" flow
+        }
+
+        return accessible
+    }
+
+    /// The three TCC-protected user directories on macOS Catalina+.
+    /// ~/Music is NOT TCC-protected.
+    private nonisolated static func isTCCProtected(_ path: String) -> Bool {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let protectedSuffixes = ["/Documents", "/Desktop", "/Downloads"]
+        return protectedSuffixes.contains(where: { path == home + $0 })
+    }
+
+    /// Explicitly probe all default TCC directories, triggering system permission dialogs.
+    /// Call this from a user-initiated action (button press), not automatically.
+    @discardableResult
+    nonisolated static func requestDefaultDirectoryAccess() -> [String] {
+        let cache = TCCAccessCache.shared
+        var granted: [String] = []
+        for dir in defaultSessionRoots {
+            let readable = FileManager.default.isReadableFile(atPath: dir)
+            cache.markChecked(dir, accessible: readable)
+            if readable { granted.append(dir) }
+        }
+        UserDefaults.standard.set(granted, forKey: defaultsGrantedDirsKey)
+        return granted
     }
 
     // MARK: – Extension sets
@@ -196,7 +286,7 @@ class ScannerService: ObservableObject {
             }
 
             // ── 2. Discover session files ──
-            let roots         = Self.defaultSessionRoots + customPaths
+            let roots         = Self.accessibleSessionRoots() + customPaths
             let foundSessions = Self.discoverSessions(roots: roots)
 
             // ── 3. Determine which sessions to parse ──
@@ -338,6 +428,9 @@ class ScannerService: ObservableObject {
             )
             let store = await MainActor.run { self.cacheStore }
             store.save(cache)
+
+            // Persist TCC-granted directories so they're probed on next launch
+            UserDefaults.standard.set(Array(TCCAccessCache.shared.grantedDirs), forKey: Self.defaultsGrantedDirsKey)
 
             await MainActor.run {
                 self.cachedScanRoots = scanRoots
@@ -536,7 +629,7 @@ class ScannerService: ObservableObject {
     }
 
     private nonisolated static func scanRootsForStaleness(customPaths: [String]) -> [String] {
-        let roots = defaultSessionRoots + systemPluginDirs + userPluginDirs + customPaths
+        let roots = accessibleSessionRoots() + systemPluginDirs + userPluginDirs + customPaths
         return Array(Set(roots)).sorted()
     }
 

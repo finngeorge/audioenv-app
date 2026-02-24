@@ -8,6 +8,7 @@ struct PathManagerView: View {
 
     @State   private var newPath = ""
     @State   private var showScanPrompt = false
+    @State   private var showGrantSuccess = false
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -24,6 +25,44 @@ struct PathManagerView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
                 .padding(.bottom, 8)
+
+            // ── Grant Access to TCC-protected dirs ────────────
+            let missingDirs = ScannerService.defaultSessionRoots.filter {
+                !TCCAccessCache.shared.isGranted($0)
+            }
+            if !missingDirs.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.shield")
+                        .foregroundColor(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Grant Access to Documents, Desktop & Downloads")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Text("macOS requires permission to scan these folders.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button("Grant Access") {
+                        ScannerService.requestDefaultDirectoryAccess()
+                        showGrantSuccess = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+            } else if showGrantSuccess {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Access granted — rescan to include all folders.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 4)
+            }
 
             Divider()
 
