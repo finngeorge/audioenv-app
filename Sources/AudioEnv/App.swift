@@ -17,6 +17,7 @@ struct AudioEnvApp: App {
     @StateObject private var audioPlayer = AudioPlayerService()
     @StateObject private var commandService = CommandService()
     @StateObject private var patternService = PatternService()
+    @StateObject private var remoteCommand = RemoteCommandService()
     @StateObject private var colorTokens = ColorTokens.shared
 
     @Environment(\.scenePhase) private var scenePhase
@@ -41,6 +42,7 @@ struct AudioEnvApp: App {
                 .environmentObject(audioPlayer.timeObserver)
                 .environmentObject(commandService)
                 .environmentObject(patternService)
+                .environmentObject(remoteCommand)
                 .environmentObject(colorTokens)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
                 .onAppear {
@@ -59,6 +61,18 @@ struct AudioEnvApp: App {
 
                     // Configure WebSocket service
                     webSocket.configure(scanner: scanner, sync: sync, auth: auth, menuBar: menuBar)
+
+                    // Configure remote command service
+                    remoteCommand.configure(
+                        scanner: scanner,
+                        backup: backup,
+                        sync: sync,
+                        bounce: bounceService,
+                        auth: auth,
+                        webSocket: webSocket
+                    )
+                    webSocket.remoteCommandService = remoteCommand
+
                     if auth.isAuthenticated, let token = auth.authToken {
                         webSocket.connect(token: token)
                     }

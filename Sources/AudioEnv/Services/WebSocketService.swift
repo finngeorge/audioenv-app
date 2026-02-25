@@ -29,6 +29,7 @@ class WebSocketService: ObservableObject {
     private weak var sync: SyncService?
     private weak var auth: AuthenticationService?
     private weak var menuBar: MenuBarManager?
+    var remoteCommandService: RemoteCommandService?
 
     /// Unique device ID to filter out own events.
     private let deviceUUID: String = {
@@ -143,6 +144,24 @@ class WebSocketService: ObservableObject {
             return
         }
 
+        // Check for remote_command messages before SyncEvent decoding
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let typeStr = json["type"] as? String, typeStr == "remote_command" {
+            if let commandId = json["command_id"] as? String,
+               let commandType = json["command_type"] as? String {
+                let payload = json["payload"] as? [String: Any] ?? [:]
+                let message = RemoteCommandMessage(
+                    commandId: commandId,
+                    commandType: commandType,
+                    payload: payload
+                )
+                Task { @MainActor in
+                    await remoteCommandService?.execute(message)
+                }
+            }
+            return
+        }
+
         guard let event = try? JSONDecoder().decode(SyncEvent.self, from: data) else {
             logger.warning("Failed to decode WebSocket event")
             return
@@ -241,6 +260,26 @@ class WebSocketService: ObservableObject {
             }
 
             self.connect(token: token)
+        }
+    }
+
+    // MARK: - Command Status
+
+    func sendCommandStatus(commandId: String, status: String, result: [String: Any]?, errorMessage: String?) {
+        var message: [String: Any] = [
+            "type": "command_status",
+            "command_id": commandId,
+            "status": status,
+        ]
+        if let result = result { message["result"] = result }
+        if let errorMessage = errorMessage { message["error_message"] = errorMessage }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: message) else { return }
+        guard let string = String(data: data, encoding: .utf8) else { return }
+        webSocketTask?.send(.string(string)) { [weak self] error in
+            if let error = error {
+                self?.logger.error("Failed to send command status: \(error)")
+            }
         }
     }
 
