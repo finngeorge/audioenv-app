@@ -294,7 +294,7 @@ private struct SessionRow: View {
             .fixedSize(horizontal: true, vertical: false)
     }
 
-    private var fmtColor: Color {
+    @MainActor private var fmtColor: Color {
         ColorTokens.shared.sessionFormatColor(session.format)
     }
 

@@ -242,7 +242,7 @@ private struct PluginRow: View {
         }
     }
 
-    private var fmtColor: Color {
+    @MainActor private var fmtColor: Color {
         ColorTokens.shared.pluginFormatColor(plugin.format)
     }
 }
