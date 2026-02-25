@@ -740,8 +740,8 @@ struct CollectionDetailView: View {
                             .font(.caption2)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(ColorTokens.shared.bounceFormatColor(fmt ?? "").opacity(0.15))
-                            .foregroundColor(ColorTokens.shared.bounceFormatColor(fmt ?? ""))
+                            .background(ColorTokens.shared.bounceFormatColor(fmt).opacity(0.15))
+                            .foregroundColor(ColorTokens.shared.bounceFormatColor(fmt))
                             .cornerRadius(3)
                     }
                     if let sr = bounce.sampleRate {
@@ -913,8 +913,8 @@ struct CollectionDetailView: View {
                             .font(.caption2)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(ColorTokens.shared.bounceFormatColor(fmt ?? "").opacity(0.15))
-                            .foregroundColor(ColorTokens.shared.bounceFormatColor(fmt ?? ""))
+                            .background(ColorTokens.shared.bounceFormatColor(fmt).opacity(0.15))
+                            .foregroundColor(ColorTokens.shared.bounceFormatColor(fmt))
                             .cornerRadius(3)
                     }
                     if let sr = bounce.sampleRate {
