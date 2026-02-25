@@ -98,7 +98,103 @@ final class AbletonParserTests: XCTestCase {
     </Ableton>
     """
 
-    // MARK: - Tests
+    /// Rich fixture with multiple plugin formats, sample rate, key, and time signature.
+    private let richFixtureXML = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Ableton MinorVersion="12.0.1">
+        <LiveSet>
+            <MasterTrack>
+                <SampleRate>
+                    <Value Value="96000" />
+                </SampleRate>
+            </MasterTrack>
+            <Transport>
+                <Tempo>
+                    <Manual Value="128" />
+                </Tempo>
+            </Transport>
+            <GlobalQuantisation>
+                <RemoteableTimeSignature>
+                    <Numerator Value="3" />
+                    <Denominator Value="4" />
+                </RemoteableTimeSignature>
+            </GlobalQuantisation>
+            <ScaleInformation>
+                <Root Value="5" />
+                <Name Value="Minor" />
+            </ScaleInformation>
+            <Tracks>
+                <MidiTrack Id="1">
+                    <Name>
+                        <EffectiveName Value="Synth" />
+                    </Name>
+                    <DeviceChain>
+                        <DeviceChain>
+                            <Devices>
+                                <PluginDevice Id="10">
+                                    <On>
+                                        <Value Value="true" />
+                                    </On>
+                                    <PluginDesc>
+                                        <Vst3PluginInfo>
+                                            <Name Value="Serum" />
+                                        </Vst3PluginInfo>
+                                    </PluginDesc>
+                                    <UserName Value="Init Preset" />
+                                </PluginDevice>
+                                <Compressor Id="11">
+                                    <On>
+                                        <Value Value="true" />
+                                    </On>
+                                </Compressor>
+                                <PluginDevice Id="12">
+                                    <On>
+                                        <Value Value="false" />
+                                    </On>
+                                    <PluginDesc>
+                                        <AuPluginInfo>
+                                            <Name Value="FabFilter Pro-Q 3" />
+                                            <Manufacturer Value="FbFl" />
+                                            <SubType Value="PrQ3" />
+                                        </AuPluginInfo>
+                                    </PluginDesc>
+                                </PluginDevice>
+                            </Devices>
+                        </DeviceChain>
+                    </DeviceChain>
+                </MidiTrack>
+                <AudioTrack Id="2">
+                    <Name>
+                        <EffectiveName Value="Bass" />
+                    </Name>
+                    <DeviceChain>
+                        <DeviceChain>
+                            <Devices>
+                                <PluginDevice Id="20">
+                                    <On>
+                                        <Value Value="true" />
+                                    </On>
+                                    <PluginDesc>
+                                        <VstPluginInfo>
+                                            <PlugName Value="Decapitator" />
+                                        </VstPluginInfo>
+                                    </PluginDesc>
+                                </PluginDevice>
+                                <Eq8 Id="21">
+                                    <On>
+                                        <Value Value="true" />
+                                    </On>
+                                </Eq8>
+                            </Devices>
+                        </DeviceChain>
+                    </DeviceChain>
+                </AudioTrack>
+            </Tracks>
+        </LiveSet>
+    </Ableton>
+    """
+
+    // MARK: - Basic Tests
 
     func testParsesTempo() throws {
         try withAbletonFixture(xml: minimalAbletonXML) { path in
@@ -192,6 +288,233 @@ final class AbletonParserTests: XCTestCase {
             XCTAssertEqual(project?.tempo, 120.0)
             XCTAssertEqual(project?.tracks.isEmpty, true)
             XCTAssertEqual(project?.usedPlugins.isEmpty, true)
+        }
+    }
+
+    // MARK: - Plugin Format Identification Tests
+
+    func testVST3PluginFormat() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+
+            let synthTrack = project?.tracks.first { $0.name == "Synth" }
+            XCTAssertNotNil(synthTrack)
+
+            let serumInfo = synthTrack?.pluginInfos?.first { $0.name == "Serum" }
+            XCTAssertNotNil(serumInfo)
+            XCTAssertEqual(serumInfo?.format, "VST3")
+        }
+    }
+
+    func testAUPluginFormat() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+
+            let synthTrack = project?.tracks.first { $0.name == "Synth" }
+            let proQInfo = synthTrack?.pluginInfos?.first { $0.name == "FabFilter Pro-Q 3" }
+            XCTAssertNotNil(proQInfo)
+            XCTAssertEqual(proQInfo?.format, "AU")
+        }
+    }
+
+    func testVST2PluginFormat() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+
+            let bassTrack = project?.tracks.first { $0.name == "Bass" }
+            let decapInfo = bassTrack?.pluginInfos?.first { $0.name == "Decapitator" }
+            XCTAssertNotNil(decapInfo)
+            XCTAssertEqual(decapInfo?.format, "VST2")
+        }
+    }
+
+    // MARK: - Preset Name Tests
+
+    func testPresetNameExtraction() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            let synthTrack = project?.tracks.first { $0.name == "Synth" }
+            let serumInfo = synthTrack?.pluginInfos?.first { $0.name == "Serum" }
+            XCTAssertEqual(serumInfo?.presetName, "Init Preset")
+        }
+    }
+
+    // MARK: - AU Manufacturer/SubType Tests
+
+    func testAUManufacturerExtraction() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            let synthTrack = project?.tracks.first { $0.name == "Synth" }
+            let proQInfo = synthTrack?.pluginInfos?.first { $0.name == "FabFilter Pro-Q 3" }
+            XCTAssertEqual(proQInfo?.manufacturer, "FbFl")
+            XCTAssertEqual(proQInfo?.auSubtype, "PrQ3")
+        }
+    }
+
+    // MARK: - Sample Rate Tests
+
+    func testSampleRateExtraction() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+            XCTAssertEqual(project?.sampleRate, 96000)
+        }
+    }
+
+    func testSampleRateNilWhenMissing() throws {
+        try withAbletonFixture(xml: minimalAbletonXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+            XCTAssertNil(project?.sampleRate)
+        }
+    }
+
+    func testSampleRateBoundsCheck() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Ableton MinorVersion="12.0">
+            <LiveSet>
+                <MasterTrack>
+                    <SampleRate>
+                        <Value Value="500000" />
+                    </SampleRate>
+                </MasterTrack>
+                <Transport><Tempo><Manual Value="120" /></Tempo></Transport>
+                <Tracks/>
+            </LiveSet>
+        </Ableton>
+        """
+
+        try withAbletonFixture(xml: xml) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNil(project?.sampleRate) // 500000 is out of bounds
+        }
+    }
+
+    // MARK: - Backward Compatibility Tests
+
+    func testBackwardCompat_PluginsMatchPluginInfoNames() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+
+            for track in project!.tracks {
+                if let infos = track.pluginInfos {
+                    let infoNames = Set(infos.map(\.name))
+                    let pluginNames = Set(track.plugins)
+                    XCTAssertEqual(pluginNames, infoNames,
+                        "track.plugins should match track.pluginInfos.map(\\.name) for track '\(track.name)'")
+                }
+            }
+        }
+    }
+
+    // MARK: - Device Chain Tests
+
+    func testDeviceChainOrdering() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+
+            // Check that every track with plugins has a device chain
+            for track in project!.tracks {
+                if let chain = track.deviceChain {
+                    // Verify indices are sequential
+                    for (i, device) in chain.enumerated() {
+                        XCTAssertEqual(device.index, i, "Device index mismatch on track '\(track.name)'")
+                    }
+                }
+            }
+
+            // Bass track has 2 devices: Decapitator (PluginDevice) + Eq8 (native)
+            let bassTrack = project?.tracks.first { $0.name == "Bass" }
+            let bassChain = bassTrack?.deviceChain
+            XCTAssertNotNil(bassChain)
+            XCTAssertEqual(bassChain?.count, 2)
+            XCTAssertEqual(bassChain?[0].name, "Decapitator")
+            XCTAssertEqual(bassChain?[1].name, "Eq8")
+        }
+    }
+
+    func testDeviceChainNativeVsThirdParty() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            let bassTrack = project?.tracks.first { $0.name == "Bass" }
+            let chain = bassTrack?.deviceChain
+
+            // Decapitator = thirdParty
+            if case .thirdParty(let info) = chain?[0].deviceType {
+                XCTAssertEqual(info.name, "Decapitator")
+                XCTAssertEqual(info.format, "VST2")
+            } else {
+                XCTFail("Expected Decapitator to be thirdParty")
+            }
+
+            // Eq8 = native
+            if case .native = chain?[1].deviceType {
+                // pass
+            } else {
+                XCTFail("Expected Eq8 to be native")
+            }
+        }
+    }
+
+    func testDeviceChainEnabledState() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            let bassTrack = project?.tracks.first { $0.name == "Bass" }
+            let chain = bassTrack?.deviceChain
+
+            XCTAssertEqual(chain?[0].isEnabled, true)  // Decapitator: true
+            XCTAssertEqual(chain?[1].isEnabled, true)  // Eq8: true
+        }
+    }
+
+    func testDeviceChainContainsAllTracksDevices() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            let synthTrack = project?.tracks.first { $0.name == "Synth" }
+            let chain = synthTrack?.deviceChain
+            XCTAssertNotNil(chain)
+
+            // Synth track should have Serum + Compressor + FabFilter Pro-Q 3
+            let names = chain?.map(\.name) ?? []
+            XCTAssertTrue(names.contains("Serum"), "Missing Serum in chain: \(names)")
+            XCTAssertTrue(names.contains("Compressor"), "Missing Compressor in chain: \(names)")
+        }
+    }
+
+    // MARK: - Key/Scale/Time Signature in Rich Fixture
+
+    func testRichFixtureKeyAndScale() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertEqual(project?.keyRoot, "F")  // MIDI note 5 = F
+            XCTAssertEqual(project?.keyScale, "min")
+        }
+    }
+
+    func testRichFixtureTimeSignature() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertEqual(project?.timeSignature, "3/4")
+        }
+    }
+
+    // MARK: - Aggregated Plugins Test
+
+    func testUsedPluginsAggregatesAllTracks() throws {
+        try withAbletonFixture(xml: richFixtureXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+
+            let plugins = project!.usedPlugins
+            XCTAssertTrue(plugins.contains("Serum"))
+            XCTAssertTrue(plugins.contains("FabFilter Pro-Q 3"))
+            XCTAssertTrue(plugins.contains("Decapitator"))
         }
     }
 }

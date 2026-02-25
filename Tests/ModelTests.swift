@@ -83,7 +83,7 @@ final class AudioSessionCodableTests: XCTestCase {
             version: "11.3.2", tempo: 128.0, tracks: [],
             usedPlugins: ["Serum", "Pro-Q 3"], samplePaths: [],
             projectSampleFiles: [], bouncedFiles: [], projectRootPath: "/tmp",
-            timeSignature: nil, keyRoot: nil, keyScale: nil
+            timeSignature: nil, keyRoot: nil, keyScale: nil, sampleRate: nil
         )
         let session = AudioSession(
             name: "Test", path: "/tmp/test.als", format: .ableton,
@@ -196,7 +196,7 @@ final class ScanCacheCodableTests: XCTestCase {
         let data = try encoder.encode(cache)
         let decoded = try decoder.decode(ScanCache.self, from: data)
 
-        XCTAssertEqual(decoded.version, 5)
+        XCTAssertEqual(decoded.version, 6)
         XCTAssertEqual(decoded.plugins.count, 1)
         XCTAssertEqual(decoded.sessions.count, 1)
         XCTAssertEqual(decoded.skippedLargeSessions, 2)

@@ -937,7 +937,10 @@ class ScannerService: ObservableObject {
 
         switch session.format {
         case .ableton:
-            if let p = AbletonParser.parse(path: session.path) { s.project = .ableton(p) }
+            if var p = AbletonParser.parse(path: session.path) {
+                AbletonParser.matchInstalledPlugins(project: &p, installedPlugins: plugins)
+                s.project = .ableton(p)
+            }
         case .logic:
             if let p = LogicParser.parse(path: session.path, plugins: plugins) { s.project = .logic(p) }
         case .proTools:

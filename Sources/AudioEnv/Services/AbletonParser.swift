@@ -5,7 +5,7 @@ import Foundation
 /// .als files are **gzip-compressed XML**.  The parser:
 ///   1. Decompresses via the system `/usr/bin/gunzip`.
 ///   2. Loads the XML into an `XMLDocument` (libxml2-backed, macOS only).
-///   3. Walks well-known XPath patterns to extract tracks, tempo, and plugin names.
+///   3. Walks well-known XPath patterns to extract tracks, tempo, plugin info, and device chains.
 ///
 /// Plugin-name patterns differ slightly across Live 10 / 11 / 12;
 /// we query every known pattern and deduplicate.
@@ -24,7 +24,16 @@ enum AbletonParser {
         let version = root?.attribute(forName: "MinorVersion")?.stringValue ?? "unknown"
         let tempo      = extractTempo(doc)
         let tracks     = extractTracks(doc)
-        let allPlugins  = Array(Set(tracks.flatMap { $0.plugins })).sorted()
+
+        // Aggregate plugin names from both pluginInfos and legacy plugins list
+        var allPluginNames = Set(tracks.flatMap { $0.plugins })
+        for track in tracks {
+            if let infos = track.pluginInfos {
+                allPluginNames.formUnion(infos.map(\.name))
+            }
+        }
+        let allPlugins = Array(allPluginNames).sorted()
+
         let samplePaths = Array(Set(tracks.flatMap { $0.clips }.compactMap { $0.samplePath })).sorted()
 
         let projectRoot = projectRoot(for: path)
@@ -33,6 +42,7 @@ enum AbletonParser {
 
         let timeSig = extractTimeSignature(doc)
         let keyInfo = extractKey(doc)
+        let sampleRate = extractSampleRate(doc)
 
         return AbletonProject(
             version:     version,
@@ -45,7 +55,60 @@ enum AbletonParser {
             projectRootPath: projectRoot.path,
             timeSignature: timeSig.map { "\($0.numerator)/\($0.denominator)" },
             keyRoot: keyInfo?.root,
-            keyScale: keyInfo?.scale
+            keyScale: keyInfo?.scale,
+            sampleRate: sampleRate
+        )
+    }
+
+    /// Post-parse pass: match plugin info against installed plugins inventory.
+    static func matchInstalledPlugins(project: inout AbletonProject, installedPlugins: [AudioPlugin]) {
+        // Build AU index: "manufacturer:subtype" → plugin
+        var auIndex: [String: AudioPlugin] = [:]
+        // Build name index for VST/VST3 matching
+        var nameIndex: [String: AudioPlugin] = [:]
+        for plugin in installedPlugins {
+            if plugin.format == .audioUnit,
+               let mfr = plugin.auManufacturerCode,
+               let sub = plugin.auSubtypeCode {
+                let key = "\(mfr):\(sub)"
+                if auIndex[key] == nil { auIndex[key] = plugin }
+            }
+            nameIndex[plugin.name.lowercased()] = plugin
+        }
+
+        var updatedTracks: [AbletonTrack] = []
+        for track in project.tracks {
+            guard var infos = track.pluginInfos else {
+                updatedTracks.append(track)
+                continue
+            }
+            for i in infos.indices {
+                var info = infos[i]
+                switch info.format {
+                case "AU":
+                    if let mfr = info.manufacturer, let sub = info.auSubtype {
+                        let key = "\(mfr):\(sub)"
+                        if auIndex[key] != nil { info.isInstalled = true }
+                    }
+                case "VST2", "VST3":
+                    if nameIndex[info.name.lowercased()] != nil { info.isInstalled = true }
+                default:
+                    if nameIndex[info.name.lowercased()] != nil { info.isInstalled = true }
+                }
+                infos[i] = info
+            }
+            updatedTracks.append(AbletonTrack(
+                name: track.name, type: track.type, plugins: track.plugins,
+                pluginInfos: infos, deviceChain: track.deviceChain,
+                clips: track.clips, isMuted: track.isMuted, isSolo: track.isSolo, color: track.color
+            ))
+        }
+        project = AbletonProject(
+            version: project.version, tempo: project.tempo, tracks: updatedTracks,
+            usedPlugins: project.usedPlugins, samplePaths: project.samplePaths,
+            projectSampleFiles: project.projectSampleFiles, bouncedFiles: project.bouncedFiles,
+            projectRootPath: project.projectRootPath, timeSignature: project.timeSignature,
+            keyRoot: project.keyRoot, keyScale: project.keyScale, sampleRate: project.sampleRate
         )
     }
 
@@ -153,6 +216,34 @@ enum AbletonParser {
         return (root, scaleName)
     }
 
+    // MARK: – Sample rate extraction
+
+    /// Extract sample rate from the document.
+    /// Queries several known locations across Live versions with sanity bounds (8000–384000).
+    static func extractSampleRate(_ doc: XMLDocument) -> Int? {
+        let xpaths = [
+            "//MasterTrack//SampleRate/Value",
+            "//SampleRate/Value",
+            "//SampleRate",
+        ]
+
+        for xpath in xpaths {
+            guard let nodes = try? doc.nodes(forXPath: xpath) else { continue }
+            for node in nodes {
+                let valueStr: String?
+                if let el = node as? XMLElement {
+                    valueStr = el.attribute(forName: "Value")?.stringValue ?? el.stringValue
+                } else {
+                    valueStr = node.stringValue
+                }
+                if let str = valueStr, let value = Int(str), value >= 8000, value <= 384000 {
+                    return value
+                }
+            }
+        }
+        return nil
+    }
+
     // MARK: – Tracks
 
     private static func extractTracks(_ doc: XMLDocument) -> [AbletonTrack] {
@@ -182,12 +273,14 @@ enum AbletonParser {
         let name    = extractTrackName(el) ?? "Unnamed"
         let isMuted = extractBoolValue(el, names: ["IsMuted", "Muted"])
         let color   = extractIntValue(el, names: ["ColorIndex", "Color"])
-        let plugins = extractPluginNames(el)
+        let pluginInfos = extractPlugins(el)
+        let plugins = pluginInfos.map(\.name)
+        let deviceChain = extractDeviceChain(el)
         let clips   = extractClips(el)
 
         return AbletonTrack(
-            name: name, type: type, plugins: plugins, clips: clips,
-            isMuted: isMuted, isSolo: false, color: color
+            name: name, type: type, plugins: plugins, pluginInfos: pluginInfos,
+            deviceChain: deviceChain, clips: clips, isMuted: isMuted, isSolo: false, color: color
         )
     }
 
@@ -252,40 +345,89 @@ enum AbletonParser {
         return nil
     }
 
-    // MARK: – Plugin-name extraction
+    // MARK: – Structured plugin extraction
 
-    /// Collects plugin names from a track element.
+    /// Collects structured plugin info from a track element.
     ///
-    /// Known XML patterns (across Live versions):
-    ///   • `.//PluginDesc/Name`           – native instruments & effects (Live 10+)
-    ///   • `.//Plug/Name`                 – some third-party / older layouts
-    ///   • `.//InstrumentPluginName`      – legacy instrument reference
-    ///   • `.//VstPluginInfo/PlugName`    – VST2
-    ///   • `.//Vst3PluginInfo/PlugName`   – VST3
-    ///   • `.//AuPluginInfo/PlugName`     – AU
+    /// Groups XPaths by format to tag each plugin with its type:
+    ///   • `Vst3PluginInfo` → "VST3"
+    ///   • `VstPluginInfo`  → "VST2"
+    ///   • `AuPluginInfo`   → "AU"
+    ///   • Others           → "unknown"
     ///
-    /// Results are deduplicated per-track.
-    private static func extractPluginNames(_ el: XMLElement) -> [String] {
-        var names: [String] = []
+    /// For each PluginDevice, also reads:
+    ///   - UserName/@Value as preset name
+    ///   - AU Manufacturer/@Value and SubType/@Value
+    ///
+    /// Results are deduplicated per-track by name.
+    private static func extractPlugins(_ el: XMLElement) -> [AbletonPluginInfo] {
+        var seen = Set<String>()
+        var infos: [AbletonPluginInfo] = []
 
-        let xpaths = [
-            ".//Vst3PluginInfo/Name",     // Live 12 VST3
-            ".//VstPluginInfo/Name",      // Live 12 VST2
-            ".//AuPluginInfo/Name",       // Live 12 AU
-            ".//PluginDesc/Name",         // Live 10/11
-            ".//Plug/Name",              // older layouts
-            ".//InstrumentPluginName",   // legacy
-            ".//VstPluginInfo/PlugName", // Live 10/11 VST2
-            ".//Vst3PluginInfo/PlugName", // Live 10/11 VST3
-            ".//AuPluginInfo/PlugName",  // Live 10/11 AU
+        // Format-grouped queries: (xpath, format)
+        let formatQueries: [(xpath: String, format: String)] = [
+            (".//Vst3PluginInfo/Name",      "VST3"),
+            (".//Vst3PluginInfo/PlugName",  "VST3"),
+            (".//VstPluginInfo/Name",       "VST2"),
+            (".//VstPluginInfo/PlugName",   "VST2"),
+            (".//AuPluginInfo/Name",        "AU"),
+            (".//AuPluginInfo/PlugName",    "AU"),
+            (".//PluginDesc/Name",          "unknown"),
+            (".//Plug/Name",               "unknown"),
+            (".//InstrumentPluginName",    "unknown"),
         ]
 
-        for xpath in xpaths {
+        for (xpath, format) in formatQueries {
             guard let nodes = try? el.nodes(forXPath: xpath) else { continue }
-            names += nodes.compactMap { pluginName(from: $0) }
+            for node in nodes {
+                guard let name = pluginName(from: node), !name.isEmpty, !seen.contains(name) else { continue }
+                seen.insert(name)
+
+                // Walk up to PluginDevice ancestor for preset name
+                var presetName: String? = nil
+                var manufacturer: String? = nil
+                var auSubtype: String? = nil
+                var resolvedFormat = format
+
+                let pluginDevice = findAncestor(of: node, named: "PluginDevice")
+
+                if let pd = pluginDevice as? XMLElement {
+                    // Preset: PluginDevice > UserName > @Value
+                    if let userNameNodes = try? pd.nodes(forXPath: ".//UserName/@Value"),
+                       let userNameVal = userNameNodes.first?.stringValue,
+                       !userNameVal.isEmpty, userNameVal != name {
+                        presetName = userNameVal
+                    }
+                }
+
+                // For AU plugins, read Manufacturer and SubType from sibling elements
+                if resolvedFormat == "AU" || resolvedFormat == "unknown" {
+                    let auInfoParent = findAncestor(of: node, named: "AuPluginInfo")
+                    if let auEl = auInfoParent as? XMLElement {
+                        resolvedFormat = "AU"
+                        if let mfrNodes = try? auEl.nodes(forXPath: "Manufacturer/@Value"),
+                           let mfrVal = mfrNodes.first?.stringValue, !mfrVal.isEmpty {
+                            manufacturer = mfrVal
+                        }
+                        if let subNodes = try? auEl.nodes(forXPath: "SubType/@Value"),
+                           let subVal = subNodes.first?.stringValue, !subVal.isEmpty {
+                            auSubtype = subVal
+                        }
+                    }
+                }
+
+                infos.append(AbletonPluginInfo(
+                    name: name,
+                    format: resolvedFormat,
+                    presetName: presetName,
+                    manufacturer: manufacturer,
+                    auSubtype: auSubtype,
+                    isInstalled: false
+                ))
+            }
         }
 
-        return Array(Set(names.filter { !$0.isEmpty }))
+        return infos
     }
 
     private static func pluginName(from node: XMLNode) -> String? {
@@ -294,6 +436,84 @@ enum AbletonParser {
             if let value = el.attribute(forName: "ValueString")?.stringValue { return value }
         }
         return node.stringValue
+    }
+
+    /// Walk up the XML tree to find an ancestor element with the given name.
+    private static func findAncestor(of node: XMLNode, named name: String) -> XMLNode? {
+        var current = node.parent
+        while let parent = current {
+            if let el = parent as? XMLElement, el.name == name { return el }
+            current = parent.parent
+        }
+        return nil
+    }
+
+    // MARK: – Device chain extraction
+
+    /// Extracts the ordered device chain from a track element.
+    /// Iterates `DeviceChain/DeviceChain/Devices/*` children in order.
+    /// PluginDevice → thirdParty with full plugin info, everything else → native.
+    private static func extractDeviceChain(_ el: XMLElement) -> [AbletonDeviceInfo]? {
+        // Try both DeviceChain/DeviceChain/Devices and DeviceChain/Devices patterns
+        let xpaths = [
+            ".//DeviceChain/DeviceChain/Devices",
+            ".//DeviceChain/Devices",
+        ]
+
+        var devicesElement: XMLElement?
+        for xpath in xpaths {
+            if let nodes = try? el.nodes(forXPath: xpath),
+               let first = nodes.first as? XMLElement {
+                devicesElement = first
+                break
+            }
+        }
+
+        guard let devicesEl = devicesElement else { return nil }
+        guard let children = devicesEl.children, !children.isEmpty else { return nil }
+
+        var devices: [AbletonDeviceInfo] = []
+        for (index, child) in children.enumerated() {
+            guard let deviceEl = child as? XMLElement, let deviceName = deviceEl.name else { continue }
+
+            // Read enabled/bypass state from On/Value
+            let isEnabled: Bool
+            if let onNodes = try? deviceEl.nodes(forXPath: "On/@Value"),
+               let onVal = onNodes.first?.stringValue {
+                isEnabled = onVal.lowercased() == "true" || onVal == "1"
+            } else {
+                isEnabled = true
+            }
+
+            let deviceType: AbletonDeviceType
+            if deviceName == "PluginDevice" {
+                let pluginInfos = extractPlugins(deviceEl)
+                if let info = pluginInfos.first {
+                    deviceType = .thirdParty(info)
+                } else {
+                    deviceType = .native
+                }
+            } else {
+                deviceType = .native
+            }
+
+            let displayName: String
+            switch deviceType {
+            case .thirdParty(let info):
+                displayName = info.name
+            case .native:
+                displayName = deviceName
+            }
+
+            devices.append(AbletonDeviceInfo(
+                name: displayName,
+                deviceType: deviceType,
+                index: index,
+                isEnabled: isEnabled
+            ))
+        }
+
+        return devices.isEmpty ? nil : devices
     }
 
     // MARK: – Clip extraction

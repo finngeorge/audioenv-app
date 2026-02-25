@@ -163,16 +163,51 @@ class SyncService: ObservableObject {
                     dict["plugin_count"] = ableton.usedPlugins.count
                     dict["sample_count"] = ableton.samplePaths.count
                     dict["tempo"] = ableton.tempo
-                    dict["used_plugins"] = ableton.usedPlugins
+                    // Send enriched plugin objects when available, fall back to string array
+                    let hasPluginInfos = ableton.tracks.contains { $0.pluginInfos != nil && !($0.pluginInfos!.isEmpty) }
+                    if hasPluginInfos {
+                        let allInfos = ableton.tracks.flatMap { $0.pluginInfos ?? [] }
+                        let uniqueInfos = Array(Set(allInfos))
+                        dict["used_plugins"] = uniqueInfos.map { info -> [String: Any] in
+                            var obj: [String: Any] = ["name": info.name, "format": info.format]
+                            if let preset = info.presetName { obj["preset_name"] = preset }
+                            if let mfr = info.manufacturer { obj["manufacturer"] = mfr }
+                            if info.isInstalled { obj["is_installed"] = true }
+                            return obj
+                        }
+                    } else {
+                        dict["used_plugins"] = ableton.usedPlugins
+                    }
+                    // Sync key/scale/time signature (already parsed, previously not sent)
+                    if let key = ableton.keyRoot {
+                        dict["key_signature"] = key
+                    }
+                    if let scale = ableton.keyScale {
+                        dict["key_scale"] = scale
+                    }
+                    if let timeSig = ableton.timeSignature {
+                        dict["time_signature"] = timeSig
+                    }
                     dict["tracks"] = ableton.tracks.enumerated().map { (index, track) -> [String: Any] in
                         var t: [String: Any] = [
                             "track_index": index,
                             "track_name": track.name,
                             "track_type": track.type.rawValue,
-                            "plugins": track.plugins,
                             "is_muted": track.isMuted,
                             "is_solo": track.isSolo,
                         ]
+                        // Send enriched plugin objects per-track when available
+                        if let infos = track.pluginInfos, !infos.isEmpty {
+                            t["plugins"] = infos.map { info -> [String: Any] in
+                                var obj: [String: Any] = ["name": info.name, "format": info.format]
+                                if let preset = info.presetName { obj["preset_name"] = preset }
+                                if let mfr = info.manufacturer { obj["manufacturer"] = mfr }
+                                if info.isInstalled { obj["is_installed"] = true }
+                                return obj
+                            }
+                        } else {
+                            t["plugins"] = track.plugins
+                        }
                         if let color = track.color {
                             t["color"] = String(color)
                         }
@@ -216,7 +251,14 @@ class SyncService: ObservableObject {
                     dict["sample_count"] = proTools.audioFiles.count
                     dict["track_count"] = proTools.trackCount
                     if !proTools.pluginCatalog.isEmpty {
-                        dict["used_plugins"] = proTools.pluginCatalog.map(\.name)
+                        // Send enriched plugin objects for Pro Tools (data already in PTPluginInsert)
+                        dict["used_plugins"] = proTools.pluginCatalog.map { insert -> [String: Any] in
+                            var obj: [String: Any] = ["name": insert.name, "format": "AAX"]
+                            if !insert.presetName.isEmpty { obj["preset_name"] = insert.presetName }
+                            if !insert.manufacturer.isEmpty { obj["manufacturer"] = insert.manufacturer }
+                            if insert.isInstalled { obj["is_installed"] = true }
+                            return obj
+                        }
                         dict["plugin_count"] = proTools.pluginCatalog.count
                     }
                     dict["tracks"] = proTools.tracks.map { track -> [String: Any] in
@@ -225,7 +267,13 @@ class SyncService: ObservableObject {
                             "track_name": track.name,
                             "track_type": track.trackType,
                             "is_stereo": track.isStereo,
-                            "plugins": track.plugins.map(\.name),
+                            "plugins": track.plugins.map { insert -> [String: Any] in
+                                var obj: [String: Any] = ["name": insert.name, "format": "AAX"]
+                                if !insert.presetName.isEmpty { obj["preset_name"] = insert.presetName }
+                                if !insert.manufacturer.isEmpty { obj["manufacturer"] = insert.manufacturer }
+                                if insert.isInstalled { obj["is_installed"] = true }
+                                return obj
+                            },
                         ]
                     }
                 }
