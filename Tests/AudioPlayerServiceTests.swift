@@ -62,8 +62,8 @@ final class AudioPlayerServiceTests: XCTestCase {
         let service = AudioPlayerService()
         XCTAssertNil(service.currentBounce)
         XCTAssertFalse(service.isPlaying)
-        XCTAssertEqual(service.currentTime, 0)
-        XCTAssertEqual(service.duration, 0)
+        XCTAssertEqual(service.timeObserver.currentTime, 0)
+        XCTAssertEqual(service.timeObserver.duration, 0)
         XCTAssertEqual(service.volume, 1.0)
         XCTAssertTrue(service.queue.isEmpty)
     }

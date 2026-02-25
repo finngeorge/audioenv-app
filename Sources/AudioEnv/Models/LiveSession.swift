@@ -72,13 +72,13 @@ struct LiveSession: Identifiable, Codable {
     var newBounces: [String]
     var snapshots: [SessionSnapshot]
 
-    init(projectPath: String, projectName: String, format: SessionFormat, dawPID: Int32) {
+    init(projectPath: String, projectName: String, format: SessionFormat, dawPID: Int32, openedAt: Date? = nil) {
         self.id = UUID()
         self.projectPath = projectPath
         self.projectName = projectName
         self.format = format
         self.dawPID = dawPID
-        self.openedAt = Date()
+        self.openedAt = openedAt ?? Date()
         self.closedAt = nil
         self.saveCount = 0
         self.lastSaveAt = nil
@@ -103,6 +103,49 @@ struct LiveSession: Identifiable, Codable {
     }
 
     var isOpen: Bool { closedAt == nil }
+}
+
+/// Diff between two consecutive session snapshots.
+struct SnapshotDiff: Codable {
+    let addedPlugins: [String]
+    let removedPlugins: [String]
+    let addedTracks: Int
+    let removedTracks: Int
+    let tempoChanged: Bool
+    let oldTempo: Double?
+    let newTempo: Double?
+
+    /// Compute the diff between two snapshots.
+    static func diff(from prev: SessionSnapshot, to curr: SessionSnapshot) -> SnapshotDiff {
+        let prevPlugins = Set(prev.pluginNames ?? [])
+        let currPlugins = Set(curr.pluginNames ?? [])
+
+        let prevTracks = prev.trackCount ?? 0
+        let currTracks = curr.trackCount ?? 0
+        let trackDelta = currTracks - prevTracks
+
+        let tempoChanged = prev.tempo != curr.tempo
+
+        return SnapshotDiff(
+            addedPlugins: Array(currPlugins.subtracting(prevPlugins)).sorted(),
+            removedPlugins: Array(prevPlugins.subtracting(currPlugins)).sorted(),
+            addedTracks: max(0, trackDelta),
+            removedTracks: max(0, -trackDelta),
+            tempoChanged: tempoChanged,
+            oldTempo: tempoChanged ? prev.tempo : nil,
+            newTempo: tempoChanged ? curr.tempo : nil
+        )
+    }
+}
+
+extension LiveSession {
+    /// Diff the two most recent snapshots.
+    var latestDiff: SnapshotDiff? {
+        guard snapshots.count >= 2 else { return nil }
+        let prev = snapshots[snapshots.count - 2]
+        let curr = snapshots[snapshots.count - 1]
+        return SnapshotDiff.diff(from: prev, to: curr)
+    }
 }
 
 /// Info about a running DAW process.

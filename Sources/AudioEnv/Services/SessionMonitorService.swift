@@ -310,8 +310,8 @@ class SessionMonitorService: ObservableObject {
         // Ableton only has one project open at a time — use the most recent
         // "Loading document" entry from Log.txt as the current project.
         if daw.format == .ableton, let logPath = findAbletonLogPath() {
-            let logPaths = parseAbletonLogForOpenSets(logPath: logPath)
-            if let currentPath = logPaths.first,  // most recent (parsed in reverse)
+            let logEntries = parseAbletonLogForOpenSets(logPath: logPath)
+            if let (currentPath, openedAt) = logEntries.first,  // most recent (parsed in reverse)
                !activeSessions.contains(where: { $0.projectPath == currentPath }),
                FileManager.default.fileExists(atPath: currentPath) {
                 let name = Self.projectName(from: currentPath)
@@ -319,7 +319,8 @@ class SessionMonitorService: ObservableObject {
                     projectPath: currentPath,
                     projectName: name,
                     format: daw.format,
-                    dawPID: daw.pid
+                    dawPID: daw.pid,
+                    openedAt: openedAt
                 )
                 activeSessions.append(session)
                 logger.info("Session opened (from log): \(name)")
@@ -351,7 +352,7 @@ class SessionMonitorService: ObservableObject {
         // 2. For Ableton, parse Log.txt to find the currently open project
         if daw.format == .ableton {
             if let logPath = findAbletonLogPath() {
-                paths.append(contentsOf: parseAbletonLogForOpenSets(logPath: logPath))
+                paths.append(contentsOf: parseAbletonLogForOpenSets(logPath: logPath).map(\.0))
             }
         }
 
@@ -407,14 +408,24 @@ class SessionMonitorService: ObservableObject {
     }
 
     /// Parse Ableton's Log.txt for "Loading document" lines to find open project(s).
-    private nonisolated func parseAbletonLogForOpenSets(logPath: String) -> [String] {
+    /// Returns `[(path, timestamp)]` tuples with the ISO 8601 timestamp from each log line.
+    /// Exposed as `nonisolated` and `static`-compatible logic for testability.
+    private nonisolated func parseAbletonLogForOpenSets(logPath: String) -> [(String, Date)] {
         guard let data = FileManager.default.contents(atPath: logPath),
               let log = String(data: data, encoding: .utf8) else { return [] }
+        return Self.parseAbletonLogLines(log)
+    }
 
-        // Read from the end — we only care about the most recent session
-        // Look for lines like: info: Loading document "/Users/.../project.als"
-        var results: [String] = []
+    /// Pure parsing logic, factored out for testability.
+    /// Log lines look like: `2024-03-15T14:32:07.123456 info: Loading document "/Users/.../project.als"`
+    nonisolated static func parseAbletonLogLines(_ log: String) -> [(String, Date)] {
+        var results: [(String, Date)] = []
+        var seen = Set<String>()
         let lines = log.components(separatedBy: "\n").reversed()
+
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
 
         for line in lines {
             // Stop at the last "Started: Live" marker — that's the current session boundary
@@ -433,16 +444,41 @@ class SessionMonitorService: ObservableObject {
                        !path.contains("/Core Library/") &&
                        !path.contains("/Defaults/") &&
                        filename != "untitled.als" &&
-                       !filename.hasPrefix("untitled ") {
-                        results.append(path)
+                       !filename.hasPrefix("untitled ") &&
+                       !seen.contains(path) {
+                        seen.insert(path)
+                        // Parse timestamp from the start of the line
+                        let timestamp = Self.parseLogTimestamp(line, formatter: fmt) ?? Date()
+                        results.append((path, timestamp))
                     }
                 }
             }
         }
 
-        // The last "Loading document" line (first found in reverse) is the currently open set
-        // Return unique paths, most recent first
-        return Array(NSOrderedSet(array: results)) as? [String] ?? results
+        return results
+    }
+
+    /// Extract the timestamp prefix from an Ableton log line.
+    /// Ableton uses local time without timezone: `2024-03-15T14:32:07.123456`
+    nonisolated static func parseLogTimestamp(_ line: String, formatter: DateFormatter? = nil) -> Date? {
+        // Timestamp is the first space-delimited token: "2024-03-15T14:32:07.123456"
+        guard let spaceIndex = line.firstIndex(of: " ") else { return nil }
+        let timestampStr = String(line[line.startIndex..<spaceIndex])
+
+        if let fmt = formatter {
+            return fmt.date(from: timestampStr)
+        }
+
+        // Ableton log timestamps are local time without timezone suffix
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+        if let date = fmt.date(from: timestampStr) {
+            return date
+        }
+        // Fallback: without fractional seconds
+        fmt.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return fmt.date(from: timestampStr)
     }
 
     /// Find session files in a directory, recursing up to maxDepth levels.
@@ -528,7 +564,12 @@ class SessionMonitorService: ObservableObject {
 
         source.setEventHandler { [weak self] in
             guard let self else { return }
+            let events = source.data
             Task { @MainActor in
+                if events.contains(.rename) {
+                    // Atomic write: file was replaced. Re-open watcher on the new fd.
+                    self.reopenFileWatcher(path: path, watchPath: watchPath, daw: daw)
+                }
                 self.handleFileChange(projectPath: path, daw: daw)
             }
         }
@@ -550,6 +591,45 @@ class SessionMonitorService: ObservableObject {
         startWatchingDirectory(parentDir, projectPath: path, daw: daw)
 
         logger.debug("Watching project file: \(path)")
+    }
+
+    /// Re-open a file watcher after an atomic write (rename) replaces the original file.
+    /// The old fd is stale after the rename, so we cancel it and open a fresh one.
+    private func reopenFileWatcher(path: String, watchPath: String, daw: DAWProcessInfo) {
+        // Cancel the old source (which closes the old fd via setCancelHandler)
+        fileWatchers[path]?.cancel()
+        fileWatchers.removeValue(forKey: path)
+
+        let fd = open(watchPath, O_EVTONLY)
+        guard fd >= 0 else {
+            logger.warning("Could not re-open file for watching after rename: \(watchPath)")
+            return
+        }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .rename, .attrib],
+            queue: .global(qos: .utility)
+        )
+
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            let events = source.data
+            Task { @MainActor in
+                if events.contains(.rename) {
+                    self.reopenFileWatcher(path: path, watchPath: watchPath, daw: daw)
+                }
+                self.handleFileChange(projectPath: path, daw: daw)
+            }
+        }
+
+        source.setCancelHandler {
+            close(fd)
+        }
+
+        source.resume()
+        fileWatchers[path] = source
+        logger.debug("Re-opened file watcher after rename: \(path)")
     }
 
     private func startWatchingDirectory(_ dirPath: String, projectPath: String, daw: DAWProcessInfo) {
@@ -636,43 +716,19 @@ class SessionMonitorService: ObservableObject {
         let newSize = (attrs[.size] as? Int64) ?? 0
 
         let oldModTime = lastModTimes[projectPath]
-        let oldSize = lastFileSizes[projectPath]
 
-        // Only treat as a save if mod time AND size actually changed
-        // (avoids false positives from lock file operations)
-        guard newModTime != oldModTime, newSize != oldSize else { return }
+        // Only require mod-time change to detect a save — same-size saves are common
+        // (e.g. renaming a track, tweaking a parameter)
+        guard newModTime != oldModTime else { return }
 
         lastModTimes[projectPath] = newModTime
         lastFileSizes[projectPath] = newSize
 
-        // Debounce: cancel any pending work and schedule a new one
-        debounceWorkItems[projectPath]?.cancel()
-
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                self.processSaveEvent(projectPath: projectPath, daw: daw, fileSize: newSize)
-            }
-        }
-        debounceWorkItems[projectPath] = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.reparseThrottleSeconds, execute: workItem)
-    }
-
-    private func processSaveEvent(projectPath: String, daw: DAWProcessInfo, fileSize: Int64) {
-        // Throttle: skip if we parsed too recently
-        if let lastParse = lastParseTime[projectPath],
-           Date().timeIntervalSince(lastParse) < Self.reparseThrottleSeconds {
-            return
-        }
-
-        logger.info("Save detected: \(projectPath) (\(fileSize) bytes)")
-
-        // Find or create the live session
+        // Count save immediately (not gated by re-parse throttle)
         if let index = activeSessions.firstIndex(where: { $0.projectPath == projectPath }) {
-            // Update existing session
             activeSessions[index].saveCount += 1
             activeSessions[index].lastSaveAt = Date()
-            activeSessions[index].currentFileSize = fileSize
+            activeSessions[index].currentFileSize = newSize
         } else {
             // Create new session — this project was opened while the DAW was running
             let name = Self.projectName(from: projectPath)
@@ -684,33 +740,14 @@ class SessionMonitorService: ObservableObject {
             )
             session.saveCount = 1
             session.lastSaveAt = Date()
-            session.currentFileSize = fileSize
+            session.currentFileSize = newSize
             activeSessions.append(session)
             logger.info("New session discovered via save: \(name)")
         }
 
-        lastParseTime[projectPath] = Date()
+        logger.info("Save detected: \(projectPath) (\(newSize) bytes)")
 
-        // Trigger re-parse on a background thread and create a snapshot
-        if fileSize < Self.maxParseSizeBytes {
-            let format = daw.format
-            let path = projectPath
-            Task.detached(priority: .utility) {
-                let snapshot = Self.reparseAndSnapshot(path: path, format: format, fileSize: fileSize)
-                await MainActor.run { [weak self] in
-                    guard let self,
-                          let index = self.activeSessions.firstIndex(where: { $0.projectPath == path })
-                    else { return }
-                    if let snapshot {
-                        self.activeSessions[index].snapshots.append(snapshot)
-                        self.logger.info("Snapshot captured for \(self.activeSessions[index].projectName): \(snapshot.pluginCount ?? 0) plugins, \(snapshot.trackCount ?? 0) tracks")
-                        NotificationCenter.default.post(name: .sessionSnapshotCaptured, object: nil)
-                    }
-                }
-            }
-        }
-
-        // Post notification for other services (menu bar, auto-backup)
+        // Post save notification immediately
         let saveCount = activeSessions.first(where: { $0.projectPath == projectPath })?.saveCount ?? 1
         NotificationCenter.default.post(
             name: .sessionSaveDetected,
@@ -718,7 +755,7 @@ class SessionMonitorService: ObservableObject {
             userInfo: [
                 "projectPath": projectPath,
                 "format": daw.format.rawValue,
-                "fileSize": fileSize,
+                "fileSize": newSize,
                 "saveCount": saveCount,
             ]
         )
@@ -726,6 +763,45 @@ class SessionMonitorService: ObservableObject {
         // Check auto-backup on Nth save
         if autoBackupSaveInterval > 0, saveCount > 0, saveCount % autoBackupSaveInterval == 0 {
             triggerAutoBackup(projectPath: projectPath, reason: "every \(autoBackupSaveInterval) saves")
+        }
+
+        // Debounce only the expensive re-parse
+        debounceWorkItems[projectPath]?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                self.reparseForSnapshot(projectPath: projectPath, format: daw.format, fileSize: newSize)
+            }
+        }
+        debounceWorkItems[projectPath] = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.reparseThrottleSeconds, execute: workItem)
+    }
+
+    private func reparseForSnapshot(projectPath: String, format: SessionFormat, fileSize: Int64) {
+        // Throttle: skip if we parsed too recently
+        if let lastParse = lastParseTime[projectPath],
+           Date().timeIntervalSince(lastParse) < Self.reparseThrottleSeconds {
+            return
+        }
+
+        lastParseTime[projectPath] = Date()
+
+        // Trigger re-parse on a background thread and create a snapshot
+        guard fileSize < Self.maxParseSizeBytes else { return }
+
+        let path = projectPath
+        Task.detached(priority: .utility) {
+            let snapshot = Self.reparseAndSnapshot(path: path, format: format, fileSize: fileSize)
+            await MainActor.run { [weak self] in
+                guard let self,
+                      let index = self.activeSessions.firstIndex(where: { $0.projectPath == path })
+                else { return }
+                if let snapshot {
+                    self.activeSessions[index].snapshots.append(snapshot)
+                    self.logger.info("Snapshot captured for \(self.activeSessions[index].projectName): \(snapshot.pluginCount ?? 0) plugins, \(snapshot.trackCount ?? 0) tracks")
+                    NotificationCenter.default.post(name: .sessionSnapshotCaptured, object: nil)
+                }
+            }
         }
     }
 
@@ -914,8 +990,6 @@ class SessionMonitorService: ObservableObject {
     private func pollForChanges() {
         guard isMonitoring else { return }
 
-        let fm = FileManager.default
-
         // Re-check that DAWs are still running
         let runningPIDs = Set(NSWorkspace.shared.runningApplications.map { $0.processIdentifier })
         let terminatedDAWs = runningDAWs.filter { !runningPIDs.contains($0.pid) }
@@ -942,11 +1016,11 @@ class SessionMonitorService: ObservableObject {
             lastLogPollDate = Date()
             for daw in runningDAWs where daw.format == .ableton {
                 if let logPath = findAbletonLogPath() {
-                    let openSets = parseAbletonLogForOpenSets(logPath: logPath)
+                    let logEntries = parseAbletonLogForOpenSets(logPath: logPath)
                     // Close sessions for this DAW that are no longer the active project.
                     // Ableton only has one project open at a time, so the most recent
                     // "Loading document" entry is the current one — close all others.
-                    let currentProject = openSets.first // most recent from log (reversed parse)
+                    let currentProject = logEntries.first?.0 // most recent path from log
                     let staleSessions = activeSessions.indices.filter { i in
                         activeSessions[i].dawPID == daw.pid &&
                         activeSessions[i].format == .ableton &&
@@ -961,7 +1035,7 @@ class SessionMonitorService: ObservableObject {
                     }
 
                     // Add the current project if it's not already tracked
-                    if let path = currentProject,
+                    if let (path, openedAt) = logEntries.first,
                        !activeSessions.contains(where: { $0.projectPath == path }),
                        FileManager.default.fileExists(atPath: path) {
                         let name = Self.projectName(from: path)
@@ -969,7 +1043,8 @@ class SessionMonitorService: ObservableObject {
                             projectPath: path,
                             projectName: name,
                             format: daw.format,
-                            dawPID: daw.pid
+                            dawPID: daw.pid,
+                            openedAt: openedAt
                         )
                         activeSessions.append(session)
                         logger.info("Session opened (from log poll): \(name)")
@@ -982,30 +1057,8 @@ class SessionMonitorService: ObservableObject {
 
         // Poll watched files for changes (catches atomic writes that replace the fd)
         for session in activeSessions {
-            let path = session.projectPath
-            let checkPath: String
-            if session.format == .logic {
-                let candidates = [
-                    (path as NSString).appendingPathComponent("Alternatives/000/ProjectData"),
-                    (path as NSString).appendingPathComponent("ProjectData"),
-                ]
-                checkPath = candidates.first { fm.fileExists(atPath: $0) } ?? path
-            } else {
-                checkPath = path
-            }
-
-            guard let attrs = try? fm.attributesOfItem(atPath: checkPath) else { continue }
-            let modTime = attrs[.modificationDate] as? Date
-            let size = (attrs[.size] as? Int64) ?? 0
-
-            if let modTime, modTime != lastModTimes[path], size != lastFileSizes[path] {
-                lastModTimes[path] = modTime
-                lastFileSizes[path] = size
-
-                // Find the DAW for this session
-                if let daw = runningDAWs.first(where: { $0.pid == session.dawPID }) {
-                    processSaveEvent(projectPath: path, daw: daw, fileSize: size)
-                }
+            if let daw = runningDAWs.first(where: { $0.pid == session.dawPID }) {
+                handleFileChange(projectPath: session.projectPath, daw: daw)
             }
         }
     }
