@@ -58,6 +58,38 @@ cat > "$PLIST_DIR/Info.plist" << 'EOF'
     <true/>
     <key>LSUIElement</key>
     <false/>
+    <key>SUFeedURL</key>
+    <string>https://github.com/finngeorge/audioenv-app/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>/m0SETg14kym6SS2PJQJK+kyAMT1RAtmTjvgRSHkOIY=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.audioenv.app</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>audioenv</string>
+                <string>com.audioenv.app</string>
+                <string>com.googleusercontent.apps.809075910499-o01a42a6k9vo2e6a1sfcnifpei3bqnv9</string>
+            </array>
+        </dict>
+    </array>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>api.audioenv.com</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
 </dict>
 </plist>
 EOF

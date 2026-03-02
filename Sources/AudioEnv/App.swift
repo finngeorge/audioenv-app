@@ -1,4 +1,5 @@
 import SwiftUI
+import Sparkle
 import os.log
 
 @main
@@ -18,6 +19,7 @@ struct AudioEnvApp: App {
     @StateObject private var commandService = CommandService()
     @StateObject private var patternService = PatternService()
     @StateObject private var remoteCommand = RemoteCommandService()
+    @StateObject private var updater = UpdaterService()
     @StateObject private var colorTokens = ColorTokens.shared
 
     @Environment(\.scenePhase) private var scenePhase
@@ -43,6 +45,7 @@ struct AudioEnvApp: App {
                 .environmentObject(commandService)
                 .environmentObject(patternService)
                 .environmentObject(remoteCommand)
+                .environmentObject(updater)
                 .environmentObject(colorTokens)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
                 .onAppear {
@@ -198,6 +201,13 @@ struct AudioEnvApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             AudioEnvCommands()
+
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
+            }
 
             CommandGroup(after: .help) {
                 Button("How to Scan") {

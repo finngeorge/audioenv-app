@@ -39,6 +39,12 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>SUFeedURL</key>
+	<string>https://github.com/finngeorge/audioenv-app/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>/m0SETg14kym6SS2PJQJK+kyAMT1RAtmTjvgRSHkOIY=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

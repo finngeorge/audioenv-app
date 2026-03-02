@@ -4,6 +4,11 @@ options:
   deploymentTarget:
     macOS: "14.0"
 
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
 targets:
   AudioEnv:
     type: application
@@ -13,6 +18,8 @@ targets:
     resources:
       - path: Sources/AudioEnv/Resources
         type: folder
+    dependencies:
+      - package: Sparkle
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.audioenv.app
       MACOSX_DEPLOYMENT_TARGET: "14.0"
