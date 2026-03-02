@@ -504,6 +504,123 @@ final class AbletonParserTests: XCTestCase {
         }
     }
 
+    // MARK: - Sample Path Extraction Tests
+
+    func testExtractsSamplePathsFromSessionViewClips() throws {
+        // The minimalAbletonXML has a session-view clip with a FileRef
+        try withAbletonFixture(xml: minimalAbletonXML) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+            XCTAssertFalse(project!.samplePaths.isEmpty, "samplePaths should not be empty")
+            XCTAssertTrue(project!.samplePaths.contains("Samples/kick.wav"),
+                "samplePaths should contain 'Samples/kick.wav', got: \(project!.samplePaths)")
+        }
+    }
+
+    func testExtractsSamplePathsFromInstrumentFileRef() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Ableton MinorVersion="11.3.2">
+            <LiveSet>
+                <Transport><Tempo><Manual Value="120" /></Tempo></Transport>
+                <Tracks>
+                    <MidiTrack Id="1">
+                        <Name><EffectiveName Value="Sampler" /></Name>
+                        <DeviceChain>
+                            <DeviceChain>
+                                <Devices>
+                                    <OriginalSimpler Id="1">
+                                        <Player>
+                                            <MultiSampleMap>
+                                                <SampleParts>
+                                                    <MultiSamplePart Id="0">
+                                                        <SampleRef>
+                                                            <FileRef>
+                                                                <Path Value="/Users/test/Library/Samples/piano.aif" />
+                                                                <RelativePath Value="../../Library/Samples/piano.aif" />
+                                                            </FileRef>
+                                                        </SampleRef>
+                                                    </MultiSamplePart>
+                                                </SampleParts>
+                                            </MultiSampleMap>
+                                        </Player>
+                                    </OriginalSimpler>
+                                </Devices>
+                            </DeviceChain>
+                        </DeviceChain>
+                    </MidiTrack>
+                </Tracks>
+            </LiveSet>
+        </Ableton>
+        """
+
+        try withAbletonFixture(xml: xml) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+            XCTAssertTrue(project!.samplePaths.contains("/Users/test/Library/Samples/piano.aif"),
+                "samplePaths should contain instrument sample, got: \(project!.samplePaths)")
+        }
+    }
+
+    func testExtractsSamplePathsFromArrangementClips() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Ableton MinorVersion="11.3.2">
+            <LiveSet>
+                <Transport><Tempo><Manual Value="120" /></Tempo></Transport>
+                <Tracks>
+                    <AudioTrack Id="1">
+                        <Name><EffectiveName Value="Audio" /></Name>
+                        <DeviceChain>
+                            <DeviceChain><Devices /></DeviceChain>
+                            <MainSequencer>
+                                <Sample>
+                                    <ArrangerAutomation>
+                                        <Events />
+                                    </ArrangerAutomation>
+                                </Sample>
+                                <ClipTimeable>
+                                    <ArrangerAutomation>
+                                        <Events>
+                                            <AudioClip Id="0">
+                                                <Name Value="vocal" />
+                                                <SampleRef>
+                                                    <FileRef>
+                                                        <Path Value="/Users/test/Samples/vocal.wav" />
+                                                        <RelativePath Value="Samples/vocal.wav" />
+                                                    </FileRef>
+                                                </SampleRef>
+                                            </AudioClip>
+                                        </Events>
+                                    </ArrangerAutomation>
+                                </ClipTimeable>
+                            </MainSequencer>
+                        </DeviceChain>
+                    </AudioTrack>
+                </Tracks>
+            </LiveSet>
+        </Ableton>
+        """
+
+        try withAbletonFixture(xml: xml) { path in
+            let project = AbletonParser.parse(path: path)
+            XCTAssertNotNil(project)
+            XCTAssertTrue(project!.samplePaths.contains("/Users/test/Samples/vocal.wav"),
+                "samplePaths should contain arrangement clip sample, got: \(project!.samplePaths)")
+        }
+    }
+
+    func testSessionViewClipsAppearInTrackClips() throws {
+        try withAbletonFixture(xml: minimalAbletonXML) { path in
+            let project = AbletonParser.parse(path: path)
+            let drumsTrack = project?.tracks.first { $0.name == "Drums" }
+            XCTAssertNotNil(drumsTrack)
+            let audioClips = drumsTrack?.clips.filter { $0.type == .audio }
+            XCTAssertFalse(audioClips?.isEmpty ?? true, "Session-view audio clips should be extracted")
+            XCTAssertEqual(audioClips?.first?.samplePath, "Samples/kick.wav")
+        }
+    }
+
     // MARK: - Aggregated Plugins Test
 
     func testUsedPluginsAggregatesAllTracks() throws {

@@ -279,7 +279,7 @@ struct ContentView: View {
                 Color.clear
             }
         }
-        .frame(minWidth: 1200, idealWidth: 1360, minHeight: 620, idealHeight: 780)
+        .frame(minWidth: 1200, idealWidth: 1500, minHeight: 620, idealHeight: 780)
         .onChange(of: columnVisibility) { _, newValue in
             // Prevent macOS from auto-collapsing the sidebar
             if newValue != .all {

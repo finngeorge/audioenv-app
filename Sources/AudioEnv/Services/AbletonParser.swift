@@ -34,7 +34,10 @@ enum AbletonParser {
         }
         let allPlugins = Array(allPluginNames).sorted()
 
-        let samplePaths = Array(Set(tracks.flatMap { $0.clips }.compactMap { $0.samplePath })).sorted()
+        // Combine per-clip sample paths with document-wide FileRef scan
+        var allSamplePaths = Set(tracks.flatMap { $0.clips }.compactMap { $0.samplePath })
+        allSamplePaths.formUnion(extractAllFileRefs(doc))
+        let samplePaths = Array(allSamplePaths).sorted()
 
         let projectRoot = projectRoot(for: path)
         let projectSampleFiles = discoverFiles(in: projectRoot.appendingPathComponent("Samples"))
@@ -527,17 +530,28 @@ enum AbletonParser {
     private static func extractClips(_ el: XMLElement) -> [AbletonClip] {
         var clips: [AbletonClip] = []
 
-        // Audio clips
-        if let nodes = try? el.nodes(forXPath: ".//AudioClips/AudioClip") {
-            for node in nodes {
-                guard let clipEl = node as? XMLElement else { continue }
-                clips.append(AbletonClip(
-                    name:       clipEl.elements(forName: "Name").first?.stringValue ?? "Audio Clip",
-                    type:       .audio,
-                    position:   extractNumeric(clipEl, names: ["Pos", "Position"]) ?? 0,
-                    length:     extractNumeric(clipEl, names: ["Len", "Length"]) ?? 0,
-                    samplePath: extractSamplePath(clipEl)
-                ))
+        // Audio clips (arrangement view + session view)
+        let audioClipXPaths = [
+            ".//AudioClips/AudioClip",           // arrangement view
+            ".//ClipSlotList//AudioClip",         // session view
+        ]
+        var seenAudioClipIds = Set<String>()
+        for xpath in audioClipXPaths {
+            if let nodes = try? el.nodes(forXPath: xpath) {
+                for node in nodes {
+                    guard let clipEl = node as? XMLElement else { continue }
+                    // Deduplicate by Id attribute to avoid counting the same clip twice
+                    if let clipId = clipEl.attribute(forName: "Id")?.stringValue {
+                        guard seenAudioClipIds.insert(clipId).inserted else { continue }
+                    }
+                    clips.append(AbletonClip(
+                        name:       clipEl.elements(forName: "Name").first?.stringValue ?? "Audio Clip",
+                        type:       .audio,
+                        position:   extractNumeric(clipEl, names: ["Pos", "Position"]) ?? 0,
+                        length:     extractNumeric(clipEl, names: ["Len", "Length"]) ?? 0,
+                        samplePath: extractSamplePath(clipEl)
+                    ))
+                }
             }
         }
 
@@ -582,20 +596,63 @@ enum AbletonParser {
         return nil
     }
 
-    /// Walk SampleRef children for an audio-file path (absolute preferred).
+    /// Walk SampleRef/FileRef children for an audio-file path (absolute preferred).
+    ///
+    /// Ableton stores paths inside `<FileRef>` with `Value` attributes:
+    /// ```xml
+    /// <SampleRef>
+    ///     <FileRef>
+    ///         <Path Value="/Users/.../kick.wav" />
+    ///         <RelativePath Value="Samples/kick.wav" />
+    ///     </FileRef>
+    /// </SampleRef>
+    /// ```
     private static func extractSamplePath(_ clipEl: XMLElement) -> String? {
+        // Prefer absolute path, then relative
         let xpaths = [
-            ".//SampleRef/AbsolutePath",
-            ".//SampleRef/RelativePath",
-            ".//AbsolutePath",
-            ".//RelativePath",
+            ".//SampleRef/FileRef/Path",
+            ".//FileRef/Path",
+            ".//SampleRef/FileRef/RelativePath",
+            ".//FileRef/RelativePath",
         ]
         for xpath in xpaths {
             if let nodes = try? clipEl.nodes(forXPath: xpath),
-               let el    = nodes.first as? XMLElement,
-               let path  = el.stringValue, !path.isEmpty { return path }
+               let el = nodes.first as? XMLElement,
+               let path = el.attribute(forName: "Value")?.stringValue,
+               !path.isEmpty { return path }
         }
         return nil
+    }
+
+    // MARK: – Document-wide FileRef extraction
+
+    /// Scans the entire document for `FileRef` elements and extracts audio file paths.
+    /// This catches samples from instruments (Simpler, Sampler, Drum Rack), effects
+    /// (Convolution Reverb, Impulse), and any other device that references audio files.
+    private static func extractAllFileRefs(_ doc: XMLDocument) -> [String] {
+        guard let nodes = try? doc.nodes(forXPath: "//FileRef") else { return [] }
+
+        var paths = Set<String>()
+        for node in nodes {
+            guard let el = node as? XMLElement else { continue }
+
+            // Try absolute path first, then relative
+            let absPath = el.elements(forName: "Path").first?.attribute(forName: "Value")?.stringValue
+            let relPath = el.elements(forName: "RelativePath").first?.attribute(forName: "Value")?.stringValue
+
+            if let path = absPath, !path.isEmpty, hasAudioExtension(path) {
+                paths.insert(path)
+            } else if let path = relPath, !path.isEmpty, hasAudioExtension(path) {
+                paths.insert(path)
+            }
+        }
+        return Array(paths).sorted()
+    }
+
+    /// Returns true if the path has a recognized audio file extension.
+    private static func hasAudioExtension(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return audioExtensions.contains(ext)
     }
 
     // MARK: – Project folder helpers

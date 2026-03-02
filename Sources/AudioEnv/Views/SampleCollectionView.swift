@@ -4,10 +4,16 @@ import SwiftUI
 struct SampleCollectionView: View {
     let session: AudioSession
     @EnvironmentObject var sampleCollector: SampleCollectionService
+    @EnvironmentObject var scanner: ScannerService
     @Environment(\.dismiss) private var dismiss
 
     @State private var outputDirectory: String = ""
     @State private var showingFilePicker = false
+
+    /// Always read the latest version of this session from the scanner's array
+    private var liveSession: AudioSession {
+        scanner.sessions.first(where: { $0.path == session.path }) ?? session
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -59,7 +65,7 @@ struct SampleCollectionView: View {
                 .background(Color.secondary.opacity(0.05))
                 .cornerRadius(8)
 
-                Text("Default: Collected Samples folder next to project")
+                Text("Default: Samples/Collected inside the project folder")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -296,18 +302,27 @@ struct SampleCollectionView: View {
     // MARK: - Actions
 
     private func setupDefaultOutputDirectory() {
-        // Default to "Collected Samples" folder next to project
+        // Default to "Samples/Collected" inside the project folder (matches Ableton's "Collect All and Save")
         let projectPath = FileSystemHelpers.getProjectFolderPath(from: session)
         let projectURL = URL(fileURLWithPath: projectPath)
-        let defaultOutput = projectURL.deletingLastPathComponent().appendingPathComponent("Collected Samples")
+        let defaultOutput = projectURL.appendingPathComponent("Samples").appendingPathComponent("Collected")
         outputDirectory = defaultOutput.path
     }
 
     private func collectSamples() async {
+        guard !sampleCollector.isCollecting else { return }
+
         let outputURL = URL(fileURLWithPath: outputDirectory)
 
+        // Force a fresh parse to ensure samplePaths are populated (cache may be stale)
+        await withCheckedContinuation { continuation in
+            scanner.parseIndividualSession(path: session.path) {
+                continuation.resume()
+            }
+        }
+
         do {
-            _ = try await sampleCollector.collectSamples(for: session, outputDirectory: outputURL)
+            _ = try await sampleCollector.collectSamples(for: liveSession, outputDirectory: outputURL)
         } catch {
             sampleCollector.lastError = error.localizedDescription
         }

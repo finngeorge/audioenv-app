@@ -73,10 +73,20 @@ struct SessionDetailView: View {
             }
             .padding(24)
         }
-        .frame(minWidth: 340)
+        .frame(minWidth: 420)
+        .onAppear {
+            // Auto re-parse if cache is stale (samplePaths empty on a parsed Ableton session)
+            if case .ableton(let p) = liveSession.project, p.samplePaths.isEmpty, !isParsing {
+                isParsing = true
+                scanner.parseIndividualSession(path: session.path) {
+                    isParsing = false
+                }
+            }
+        }
         .sheet(isPresented: $showSampleCollection) {
-            SampleCollectionView(session: session)
+            SampleCollectionView(session: liveSession)
                 .environmentObject(sampleCollector)
+                .environmentObject(scanner)
         }
     }
 
@@ -167,6 +177,7 @@ struct SessionDetailView: View {
                     showSampleCollection = true
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(liveSession.project == nil)
             }
             .fixedSize(horizontal: true, vertical: false)
         }
@@ -218,6 +229,75 @@ struct SessionDetailView: View {
 
 struct AbletonDetailView: View {
     let project: AbletonProject
+
+    /// Sample paths that reference files outside the project folder
+    private var externalSamples: [String] {
+        let root = project.projectRootPath
+        return project.samplePaths.filter { path in
+            if path.hasPrefix("/") {
+                return !path.hasPrefix(root)
+            }
+            return path.hasPrefix("../")
+        }
+    }
+
+    /// External samples grouped by parent directory
+    private var groupedExternalSamples: [(directory: String, label: String, paths: [String])] {
+        var groups: [String: [String]] = [:]
+        for path in externalSamples {
+            let dir = (path as NSString).deletingLastPathComponent
+            groups[dir, default: []].append(path)
+        }
+        return groups.map { dir, paths in
+            (directory: dir, label: Self.directoryLabel(dir), paths: paths.sorted())
+        }.sorted { $0.label < $1.label }
+    }
+
+    /// Total uncollected count across all groups
+    private var uncollectedCount: Int {
+        externalSamples.filter { !isExternalSampleCollected($0) }.count
+    }
+
+    private func isExternalSampleCollected(_ path: String) -> Bool {
+        let fileName = (path as NSString).lastPathComponent
+        let collectedPath = URL(fileURLWithPath: project.projectRootPath)
+            .appendingPathComponent("Samples")
+            .appendingPathComponent("Collected")
+            .appendingPathComponent(fileName)
+            .path
+        return FileManager.default.fileExists(atPath: collectedPath)
+    }
+
+    /// Create a human-readable label from a directory path
+    private static func directoryLabel(_ dir: String) -> String {
+        let url = URL(fileURLWithPath: dir)
+        // For Ableton Core Library paths, use the last meaningful component
+        if dir.contains("Core Library") {
+            let components = url.pathComponents
+            if let coreIdx = components.firstIndex(of: "Core Library") {
+                return components.suffix(from: components.index(after: coreIdx)).joined(separator: " / ")
+            }
+        }
+        // For Splice, show pack name
+        if dir.contains("Splice/sounds/packs") {
+            let components = url.pathComponents
+            if let packsIdx = components.firstIndex(of: "packs"),
+               packsIdx + 1 < components.count {
+                return components[packsIdx + 1]
+            }
+        }
+        // Fallback: last 2 path components
+        let components = url.pathComponents.suffix(2)
+        return components.joined(separator: " / ")
+    }
+
+    /// Shorten absolute paths for display
+    private func shortenedSource(_ path: String) -> String {
+        if let home = ProcessInfo.processInfo.environment["HOME"], path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -294,26 +374,87 @@ struct AbletonDetailView: View {
                 .cornerRadius(8)
             }
 
-            // ── Sample files ──────────────────────────────────
-            if !project.samplePaths.isEmpty {
-                Text("Sample Files")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+            // ── External samples (uncollected) ──────────────────
+            if !externalSamples.isEmpty {
+                HStack {
+                    Text("External Samples")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    Spacer()
+                    if uncollectedCount > 0 {
+                        Text("\(uncollectedCount) uncollected")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    } else {
+                        Text("all collected")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
 
                 VStack(spacing: 0) {
-                    ForEach(0..<project.samplePaths.count, id: \.self) { i in
-                        HStack(spacing: 8) {
-                            Image(systemName: "music.note")
-                                .foregroundColor(.accentColor)
-                                .frame(width: 16)
-                            Text((project.samplePaths[i] as NSString).lastPathComponent)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer()
+                    ForEach(groupedExternalSamples, id: \.directory) { group in
+                        let allCollected = group.paths.allSatisfy { isExternalSampleCollected($0) }
+                        let collectedInGroup = group.paths.filter { isExternalSampleCollected($0) }.count
+
+                        if group.paths.count == 1 {
+                            // Single sample — show inline
+                            let path = group.paths[0]
+                            HStack(spacing: 8) {
+                                Image(systemName: allCollected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                    .foregroundColor(allCollected ? .green : .orange)
+                                    .frame(width: 16)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text((path as NSString).lastPathComponent)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    Text(shortenedSource((path as NSString).deletingLastPathComponent))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.head)
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 10)
+                        } else {
+                            // Multiple samples from same directory — collapsible group
+                            DisclosureGroup {
+                                ForEach(group.paths, id: \.self) { path in
+                                    HStack(spacing: 8) {
+                                        Image(systemName: isExternalSampleCollected(path) ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                            .foregroundColor(isExternalSampleCollected(path) ? .green : .orange)
+                                            .frame(width: 16)
+                                        Text((path as NSString).lastPathComponent)
+                                            .font(.caption)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                        Spacer()
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: allCollected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                        .foregroundColor(allCollected ? .green : .orange)
+                                        .frame(width: 16)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(group.label)
+                                            .font(.subheadline)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                        Text("\(group.paths.count) samples · \(collectedInGroup)/\(group.paths.count) collected")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 10)
                         }
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 10)
                         Divider()
                     }
                 }

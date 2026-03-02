@@ -53,28 +53,57 @@ class SampleCollectionService: ObservableObject {
     /// Collect Ableton samples using parsed sample paths (accurate)
     private func collectAbletonSamples(project: AbletonProject, session: AudioSession, outputDirectory: URL) async throws -> CollectionResult {
         log("Starting Ableton sample collection...", status: .info)
+        log("Project root: \(project.projectRootPath)", status: .info)
+        log("Output: \(outputDirectory.path)", status: .info)
 
         // Create output directory
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
         var copiedFiles = 0
         var failedFiles = 0
+        var skippedInternal = 0
         var missingFiles: [String] = []
         var totalSize: UInt64 = 0
 
         let samplePaths = project.samplePaths
         let totalFiles = samplePaths.count
+        let projectRootURL = URL(fileURLWithPath: project.projectRootPath)
 
-        log("Found \(totalFiles) sample references", status: .info)
+        log("Found \(totalFiles) sample references in .als", status: .info)
 
-        for (index, relativePath) in samplePaths.enumerated() {
-            // Resolve relative path to absolute
-            let sourcePath = URL(fileURLWithPath: project.projectRootPath).appendingPathComponent(relativePath)
+        for (index, samplePath) in samplePaths.enumerated() {
+            // Resolve path: use directly if absolute and exists, otherwise resolve against project root
+            let sourcePath: URL
+            if samplePath.hasPrefix("/") {
+                sourcePath = URL(fileURLWithPath: samplePath)
+            } else {
+                sourcePath = projectRootURL.appendingPathComponent(samplePath)
+            }
+
+            // Skip files already inside the project folder — they don't need collecting
+            if sourcePath.path.hasPrefix(projectRootURL.path) {
+                skippedInternal += 1
+                collectionProgress = Double(index + 1) / Double(totalFiles)
+                continue
+            }
 
             if FileManager.default.fileExists(atPath: sourcePath.path) {
                 do {
-                    let fileName = sourcePath.lastPathComponent
-                    let destinationPath = outputDirectory.appendingPathComponent(fileName)
+                    // Preserve subdirectory structure based on original path
+                    let relativePath = samplePath.hasPrefix("/") ? sourcePath.lastPathComponent : samplePath
+                    let destinationPath = outputDirectory.appendingPathComponent(relativePath)
+
+                    // Create intermediate directories
+                    let destDir = destinationPath.deletingLastPathComponent()
+                    try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+                    // Count as success if destination already exists
+                    if FileManager.default.fileExists(atPath: destinationPath.path) {
+                        copiedFiles += 1
+                        log("\(relativePath) (already collected)", status: .success)
+                        collectionProgress = Double(index + 1) / Double(totalFiles)
+                        continue
+                    }
 
                     // Copy file
                     try FileManager.default.copyItem(at: sourcePath, to: destinationPath)
@@ -85,29 +114,20 @@ class SampleCollectionService: ObservableObject {
                     totalSize += fileSize
 
                     copiedFiles += 1
-                    log(fileName, status: .success)
+                    log(relativePath, status: .success)
                 } catch {
                     failedFiles += 1
-                    log(relativePath, status: .failed, message: error.localizedDescription)
+                    log(samplePath, status: .failed, message: error.localizedDescription)
                 }
             } else {
-                missingFiles.append(relativePath)
-                log(relativePath, status: .missing)
+                missingFiles.append(samplePath)
+                log(samplePath, status: .missing)
             }
 
             collectionProgress = Double(index + 1) / Double(totalFiles)
         }
 
-        // Also collect project samples folder if it exists
-        let projectSamplesPath = URL(fileURLWithPath: project.projectRootPath).appendingPathComponent("Samples")
-        if FileManager.default.fileExists(atPath: projectSamplesPath.path) {
-            log("Collecting project Samples folder...", status: .info)
-            let samplesDestination = outputDirectory.appendingPathComponent("Project Samples")
-            try? FileManager.default.createDirectory(at: samplesDestination, withIntermediateDirectories: true)
-            try? FileManager.default.copyItem(at: projectSamplesPath, to: samplesDestination)
-        }
-
-        log("✅ Collection complete: \(copiedFiles) copied, \(failedFiles) failed, \(missingFiles.count) missing", status: .success)
+        log("Collection complete: \(copiedFiles) copied, \(skippedInternal) already in project, \(failedFiles) failed, \(missingFiles.count) missing", status: .success)
 
         return CollectionResult(
             format: .ableton,
