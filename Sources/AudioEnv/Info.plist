@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconFile</key>
+	<string>audioenv</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -15,36 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026. All rights reserved.</string>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.music</string>
-	<key>CFBundleIconFile</key>
-	<string>audioenv</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>api.audioenv.com</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-		</dict>
-	</dict>
-	<key>SUFeedURL</key>
-	<string>https://github.com/finngeorge/audioenv-app/releases/latest/download/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>/m0SETg14kym6SS2PJQJK+kyAMT1RAtmTjvgRSHkOIY=</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<string>1.0.0-beta.1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -58,5 +31,32 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>1.0.0-beta.1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.music</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>api.audioenv.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026. All rights reserved.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/finngeorge/audioenv-app/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>/m0SETg14kym6SS2PJQJK+kyAMT1RAtmTjvgRSHkOIY=</string>
 </dict>
 </plist>

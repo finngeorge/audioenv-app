@@ -4,10 +4,6 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
-	<key>keychain-access-groups</key>
-	<array>
-		<string>$(AppIdentifierPrefix)com.audioenv.app</string>
-	</array>
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
 	<key>com.apple.security.network.client</key>
