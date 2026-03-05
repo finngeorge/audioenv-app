@@ -191,10 +191,13 @@ enum ProToolsParser {
         let pageSize = 4096
         let numPages = (data.count + pageSize - 1) / pageSize
 
+        // Derive per-file XOR base key from header byte at offset 19
+        let baseKey: Int = data.count > 19 ? (Int(data[19]) * 0x5D) & 0xFF : 0xB1
+
         result.withUnsafeMutableBytes { raw in
             let ptr = raw.bindMemory(to: UInt8.self)
             for page in 1..<numPages {
-                let key = UInt8((page * 0xB1) & 0xFF)
+                let key = UInt8((page * baseKey) & 0xFF)
                 if key == 0 { continue }
                 let start = page * pageSize
                 let end = min(start + pageSize, data.count)
@@ -494,6 +497,14 @@ enum ProToolsParser {
             ("brwx", "AMVC", "com.plugin-alliance.plugins.aax.AmpegSVTVRClassic", "Ampeg SVTVR Classic"),
             ("SfTb", "TTCM", "com.softube.TubeTechCL1BmkII_AAX_Protect", "Tube-Tech CL 1B mk II"),
             ("sftb", "xfqy", "com.softube.TubeTechCL1BmkII_AAX_Protect", "Tube-Tech CL 1B mk II"),
+            ("sftb", "clST", "com.softube.cl1bST_AAX_Protect", "Tube-Tech CL 1B mk II Stereo"),
+            ("Digi", "47e3", "com.digidesign.aax.eq3.7band", "EQ III 7-Band"),
+            ("ksWV", "A560", "com.waves.aax.RTAS.A560.API-560", "API 560"),
+            ("ksWV", "SLCO", "com.waves.aax.RTAS.SLCO.SSLComp", "SSL G-Master Buss Compressor"),
+            ("ksWV", "STED", "com.waves.aax.RTAS.STED.Abbey Road Chambers", "Abbey Road Chambers"),
+            ("FabF", "FL2p", "com.fabfilter.Pro-L.2.AAX", "FabFilter Pro-L 2"),
+            ("FabF", "FC2p", "com.fabfilter.Pro-C.2.AAX", "FabFilter Pro-C 2"),
+            ("oDin", "VVrb", "com.ValhallaDSP.ValhallaVintageVerb", "Valhalla VintageVerb"),
         ]
         for (vendor, code, pid, name) in entries {
             map["\(vendor).\(code)"] = (pid, name)
@@ -520,6 +531,14 @@ enum ProToolsParser {
         "com.air.AIR Dynamic Delay": "AIR Dynamic Delay",
         "com.plugin-alliance.plugins.aax.AmpegSVTVRClassic": "Ampeg SVTVR Classic",
         "com.softube.TubeTechCL1BmkII_AAX_Protect": "Tube-Tech CL 1B mk II",
+        "com.softube.cl1bST_AAX_Protect": "Tube-Tech CL 1B mk II Stereo",
+        "com.digidesign.aax.eq3.7band": "EQ III 7-Band",
+        "com.waves.aax.RTAS.A560.API-560": "API 560",
+        "com.waves.aax.RTAS.SLCO.SSLComp": "SSL G-Master Buss Compressor",
+        "com.waves.aax.RTAS.STED.Abbey Road Chambers": "Abbey Road Chambers",
+        "com.fabfilter.Pro-L.2.AAX": "FabFilter Pro-L 2",
+        "com.fabfilter.Pro-C.2.AAX": "FabFilter Pro-C 2",
+        "com.ValhallaDSP.ValhallaVintageVerb": "Valhalla VintageVerb",
     ]
 
     private static let excludedCatalogIds: Set<String> = ["com.avid.aax.fela.2sola"]
