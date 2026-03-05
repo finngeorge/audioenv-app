@@ -8,7 +8,7 @@ class SpotlightPanel: NSPanel {
     init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 680, height: 420),
-            styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless],
+            styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
             backing: .buffered,
             defer: true
         )
@@ -25,6 +25,18 @@ class SpotlightPanel: NSPanel {
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = false
         animationBehavior = .utilityWindow
+
+        // Hide traffic light buttons so no titlebar chrome is visible
+        standardWindowButton(.closeButton)?.isHidden = true
+        standardWindowButton(.miniaturizeButton)?.isHidden = true
+        standardWindowButton(.zoomButton)?.isHidden = true
+
+        // Remove the titlebar visual effect view (the bar peeking through)
+        if let titlebarContainer = contentView?.superview?.subviews.first(where: {
+            $0.className.contains("NSTitlebarContainerView")
+        }) {
+            titlebarContainer.isHidden = true
+        }
 
         centerOnScreen()
     }
