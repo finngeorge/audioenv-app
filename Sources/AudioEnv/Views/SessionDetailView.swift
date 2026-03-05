@@ -18,8 +18,10 @@ struct SessionDetailView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                Color.clear.frame(height: 0).id("sessionDetailTop")
                 headerSection()
                 Divider()
                 metadataSection()
@@ -72,6 +74,10 @@ struct SessionDetailView: View {
                 }
             }
             .padding(24)
+        }
+        .onChange(of: session.path) { _, _ in
+            proxy.scrollTo("sessionDetailTop", anchor: .top)
+        }
         }
         .frame(minWidth: 420)
         .onAppear {
