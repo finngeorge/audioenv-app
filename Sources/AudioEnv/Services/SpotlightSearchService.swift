@@ -18,6 +18,9 @@ final class SpotlightSearchService: ObservableObject {
     @Published var searchMode: SearchMode = .local
     @Published var parsedInput: ParsedSpotlightInput = .empty
 
+    /// The currently locked-in verb (set when user types a verb + space)
+    @Published var activeVerb: SpotlightVerb?
+
     enum SearchMode: String, CaseIterable {
         case local = "Local"
         case cloud = "Cloud"
@@ -54,6 +57,8 @@ final class SpotlightSearchService: ObservableObject {
     }
 
     func reset() {
+        activeVerb = nil
+        isStrippingVerb = false
         query = ""
         results = []
         parsedInput = .empty
@@ -63,10 +68,31 @@ final class SpotlightSearchService: ObservableObject {
 
     // MARK: - Search
 
+    private var isStrippingVerb = false
+
     private func debouncedSearch() {
         debounceTask?.cancel()
 
-        parsedInput = SpotlightInputParser.parse(query)
+        // Don't re-trigger when we're programmatically stripping the verb text
+        guard !isStrippingVerb else { return }
+
+        // If we already have a locked-in verb, treat the entire query as the search term
+        if let verb = activeVerb {
+            parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: query)
+        } else {
+            // Check if the user just typed a verb followed by a space
+            let parsed = SpotlightInputParser.parse(query)
+            if let verb = parsed.verb, query.contains(" ") {
+                // Lock in the verb and strip it from the text field
+                activeVerb = verb
+                parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: parsed.searchQuery)
+                isStrippingVerb = true
+                query = parsed.searchQuery
+                isStrippingVerb = false
+                return
+            }
+            parsedInput = parsed
+        }
 
         if parsedInput.searchQuery.isEmpty && parsedInput.verb == nil {
             results = []
@@ -84,6 +110,13 @@ final class SpotlightSearchService: ObservableObject {
             guard !Task.isCancelled else { return }
             await performSearch()
         }
+    }
+
+    /// Clear the active verb (e.g. when user backspaces on empty query)
+    func clearVerb() {
+        activeVerb = nil
+        parsedInput = .empty
+        results = []
     }
 
     private func performSearch() async {

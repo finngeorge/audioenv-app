@@ -37,22 +37,37 @@ struct SpotlightPanelView: View {
 
     private var searchBar: some View {
         HStack(spacing: 10) {
-            Image(systemName: searchService.parsedInput.verb != nil ? "terminal" : "magnifyingglass")
+            Image(systemName: searchService.activeVerb != nil ? "terminal" : "magnifyingglass")
                 .font(.system(size: 16))
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
 
-            if let verb = searchService.parsedInput.verb {
+            if let verb = searchService.activeVerb {
                 verbBadge(verb)
+                    .onTapGesture {
+                        searchService.clearVerb()
+                    }
             }
 
-            TextField("Search or type a command...", text: $searchService.query)
+            TextField(searchService.activeVerb != nil ? "Type to search..." : "Search or type a command...", text: $searchService.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 18, weight: .light))
                 .focused($isTextFieldFocused)
                 .onKeyPress(.escape) {
+                    if searchService.activeVerb != nil {
+                        searchService.clearVerb()
+                        return .handled
+                    }
                     onDismiss()
                     return .handled
+                }
+                .onKeyPress(.delete) {
+                    // Backspace on empty query clears the active verb
+                    if searchService.query.isEmpty && searchService.activeVerb != nil {
+                        searchService.clearVerb()
+                        return .handled
+                    }
+                    return .ignored
                 }
                 .onKeyPress(.downArrow) {
                     moveSelection(1)
