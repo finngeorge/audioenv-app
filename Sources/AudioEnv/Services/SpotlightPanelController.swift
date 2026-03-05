@@ -54,6 +54,13 @@ final class SpotlightPanelController: ObservableObject {
     }
 
     func show() {
+        // Require authentication — don't show spotlight if not logged in
+        guard let auth, auth.isAuthenticated else {
+            logger.info("Spotlight blocked: not authenticated")
+            menuBar?.showMainWindow()
+            return
+        }
+
         if panel == nil { createPanel() }
 
         searchService.reset()

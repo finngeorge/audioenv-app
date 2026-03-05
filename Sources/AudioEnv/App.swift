@@ -109,6 +109,15 @@ struct AudioEnvApp: App {
                         }
                     }
 
+                    // Preload bounces and collections on launch so spotlight works immediately
+                    if auth.isAuthenticated, let token = auth.authToken {
+                        Task {
+                            async let b: () = bounceService.fetchBounces(token: token)
+                            async let c: () = collectionService.fetchCollections(token: token)
+                            _ = await (b, c)
+                        }
+                    }
+
                     // Load S3 config for current user if logged in
                     if let userId = auth.currentUser?.id {
                         Self.loadS3ConfigForUser(userId, backup: backup)
@@ -162,6 +171,15 @@ struct AudioEnvApp: App {
                        !scanner.plugins.isEmpty || !scanner.sessions.isEmpty {
                         Task {
                             await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                        }
+                    }
+
+                    // Preload bounces and collections on login so spotlight search works immediately
+                    if newUserId != nil, auth.isAuthenticated, let token = auth.authToken {
+                        Task {
+                            async let b: () = bounceService.fetchBounces(token: token)
+                            async let c: () = collectionService.fetchCollections(token: token)
+                            _ = await (b, c)
                         }
                     }
                 }
