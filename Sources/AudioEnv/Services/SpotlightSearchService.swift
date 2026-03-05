@@ -92,11 +92,12 @@ final class SpotlightSearchService: ObservableObject {
                 activeVerb = verb
                 parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: parsed.searchQuery)
                 isStrippingVerb = true
-                // Defer the query update so SwiftUI TextField binding syncs correctly
+                // Defer the query update to the next run loop so we don't publish during a view update
                 let strippedQuery = parsed.searchQuery
-                DispatchQueue.main.async { [weak self] in
-                    self?.query = strippedQuery
-                    self?.isStrippingVerb = false
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.query = strippedQuery
+                    self.isStrippingVerb = false
                 }
                 return
             }
