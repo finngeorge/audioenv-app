@@ -287,12 +287,20 @@ final class SpotlightPanelController: ObservableObject {
     }
 
     private func openInDAW(_ result: SpotlightResult) {
-        guard result.type == .project else { return }
-        // result.id is the session path — find the session to determine format
-        let sessionPath = result.id
-        guard let session = scanner?.sessions.first(where: { $0.path == sessionPath }) else { return }
+        guard result.type == .project, let scanner else { return }
+        // result.id is a session path — find the project group and pick the
+        // latest non-backup session so we don't open an auto-save
+        guard let matchedSession = scanner.sessions.first(where: { $0.path == result.id }) else { return }
 
-        let url = URL(fileURLWithPath: sessionPath)
+        let projectKey = matchedSession.projectGroupKey
+        let latestSession = scanner.sessions
+            .filter { $0.projectGroupKey == projectKey && !$0.isBackup }
+            .sorted { $0.modifiedDate > $1.modifiedDate }
+            .first
+            ?? matchedSession  // fallback to matched session if all are backups
+
+        let url = URL(fileURLWithPath: latestSession.path)
+        let session = latestSession
 
         // Open with the appropriate DAW based on session format
         let bundleID: String
