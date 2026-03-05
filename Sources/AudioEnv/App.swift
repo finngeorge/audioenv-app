@@ -49,6 +49,7 @@ struct AudioEnvApp: App {
                 .environmentObject(remoteCommand)
                 .environmentObject(updater)
                 .environmentObject(colorTokens)
+                .environmentObject(hotkeyManager)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
                 .onAppear {
                     // Set app icon programmatically so it works when running from Xcode / swift run

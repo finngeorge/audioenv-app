@@ -15,7 +15,6 @@ final class SpotlightSearchService: ObservableObject {
     }
     @Published var results: [SpotlightResultGroup] = []
     @Published var isSearching = false
-    @Published var searchMode: SearchMode = .local
     @Published var parsedInput: ParsedSpotlightInput = .empty
 
     /// The currently locked-in verb (set when user types a verb + space)
@@ -23,11 +22,6 @@ final class SpotlightSearchService: ObservableObject {
 
     /// Currently selected result index (shared with view for quick actions)
     @Published var selectedIndex = 0
-
-    enum SearchMode: String, CaseIterable {
-        case local = "Local"
-        case cloud = "Cloud"
-    }
 
     // MARK: - Service References
 
@@ -74,6 +68,13 @@ final class SpotlightSearchService: ObservableObject {
 
     private var isStrippingVerb = false
 
+    /// Call from the view when backspace/delete is pressed on an empty query with an active verb
+    func handleDeleteOnEmpty() {
+        if query.isEmpty && activeVerb != nil {
+            clearVerb()
+        }
+    }
+
     private func debouncedSearch() {
         debounceTask?.cancel()
 
@@ -91,8 +92,12 @@ final class SpotlightSearchService: ObservableObject {
                 activeVerb = verb
                 parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: parsed.searchQuery)
                 isStrippingVerb = true
-                query = parsed.searchQuery
-                isStrippingVerb = false
+                // Defer the query update so SwiftUI TextField binding syncs correctly
+                let strippedQuery = parsed.searchQuery
+                DispatchQueue.main.async { [weak self] in
+                    self?.query = strippedQuery
+                    self?.isStrippingVerb = false
+                }
                 return
             }
             parsedInput = parsed
@@ -125,14 +130,34 @@ final class SpotlightSearchService: ObservableObject {
 
     private func performSearch() async {
         isSearching = true
-        defer { isSearching = false }
 
-        switch searchMode {
-        case .local:
-            results = searchLocally(parsedInput.searchQuery, verb: parsedInput.verb)
-        case .cloud:
-            results = await searchAPI(parsedInput.searchQuery, verb: parsedInput.verb)
+        // Local results appear instantly
+        let localResults = searchLocally(parsedInput.searchQuery, verb: parsedInput.verb)
+        results = localResults
+
+        // Collect local IDs to deduplicate cloud results
+        let localIds = Set(localResults.flatMap { $0.results.map(\.id) })
+
+        // Fire cloud search in parallel — append any results not already local
+        let cloudResults = await searchAPI(parsedInput.searchQuery, verb: parsedInput.verb)
+        if !cloudResults.isEmpty {
+            var merged = results
+            for cloudGroup in cloudResults {
+                let newResults = cloudGroup.results.filter { !localIds.contains($0.id) }
+                guard !newResults.isEmpty else { continue }
+                if let idx = merged.firstIndex(where: { $0.type == cloudGroup.type }) {
+                    merged[idx] = SpotlightResultGroup(
+                        type: cloudGroup.type,
+                        results: merged[idx].results + newResults
+                    )
+                } else {
+                    merged.append(SpotlightResultGroup(type: cloudGroup.type, results: newResults))
+                }
+            }
+            results = merged
         }
+
+        isSearching = false
     }
 
     // MARK: - Local Search

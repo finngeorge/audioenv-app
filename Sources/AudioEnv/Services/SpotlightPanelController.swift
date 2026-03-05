@@ -11,6 +11,10 @@ final class SpotlightPanelController: ObservableObject {
 
     private var panel: SpotlightPanel?
     private let searchService = SpotlightSearchService()
+    private var localClickMonitor: Any?
+    private var globalClickMonitor: Any?
+    private var keyMonitor: Any?
+    private var deactivationObserver: Any?
 
     @Published var isVisible = false
 
@@ -78,12 +82,15 @@ final class SpotlightPanelController: ObservableObject {
             panel.animator().alphaValue = 1
         }
 
+        installEventMonitors()
         isVisible = true
         logger.info("Spotlight panel shown")
     }
 
     func hide() {
         guard let panel, isVisible else { return }
+
+        removeEventMonitors()
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
@@ -122,8 +129,14 @@ final class SpotlightPanelController: ObservableObject {
         let panel = SpotlightPanel()
         panel.contentView = hostingView
 
-        // Dismiss on click outside
-        NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self, weak panel] event in
+        self.panel = panel
+    }
+
+    // MARK: - Event Monitors
+
+    private func installEventMonitors() {
+        // Dismiss on click inside another app window
+        localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self, weak panel] event in
             guard let self, let panel, self.isVisible else { return event }
             if event.window != panel {
                 self.hide()
@@ -131,10 +144,33 @@ final class SpotlightPanelController: ObservableObject {
             return event
         }
 
+        let dismissOnFocusLoss = UserDefaults.standard.object(forKey: "spotlightDismissOnFocusLoss") as? Bool ?? true
+
+        if dismissOnFocusLoss {
+            // Dismiss on click outside the app entirely (like Raycast)
+            globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.isVisible else { return }
+                    self.hide()
+                }
+            }
+
+            // Dismiss when the app loses focus (e.g. Cmd+Tab away)
+            deactivationObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didResignActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.isVisible else { return }
+                    self.hide()
+                }
+            }
+        }
+
         // Handle modifier+Return for quick actions
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak panel] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak panel] event in
             guard let self, self.isVisible, event.window == panel else { return event }
-            // Return key = keyCode 36
             guard event.keyCode == 36 else { return event }
 
             let mods = event.modifierFlags.intersection([.command, .option, .shift])
@@ -151,8 +187,25 @@ final class SpotlightPanelController: ObservableObject {
             }
             return event
         }
+    }
 
-        self.panel = panel
+    private func removeEventMonitors() {
+        if let monitor = localClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            localClickMonitor = nil
+        }
+        if let monitor = globalClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalClickMonitor = nil
+        }
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
+        if let observer = deactivationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            deactivationObserver = nil
+        }
     }
 
     private func executeQuickActionForSelected(_ action: SpotlightQuickAction) {

@@ -11,6 +11,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case patterns    = "Patterns"
     case commands    = "Commands"
     case scan        = "Scan"
+    case spotlight    = "Spotlight"
     case backup      = "Backup"
     case profile     = "Profile"
 
@@ -94,6 +95,9 @@ struct ContentView: View {
                 Section("Settings") {
                     Label("Scan", systemImage: "viewfinder.circle")
                         .tag(AppSection.scan)
+
+                    Label("Spotlight", systemImage: "sparkle.magnifyingglass")
+                        .tag(AppSection.spotlight)
                 }
 
                 Section("Cloud") {
@@ -202,6 +206,8 @@ struct ContentView: View {
                     CommandBrowserView(selectedCommand: $selectedCommand)
                 case .scan:
                     ScanView()
+                case .spotlight:
+                    SpotlightSettingsView()
                 case .backup:
                     BackupConfigView(scanner: scanner, backup: backup, selectedBackup: $selectedBackup)
                 case .profile:
@@ -277,6 +283,8 @@ struct ContentView: View {
                 summaryDetailPanel()
             case .scan:
                 scanDetailPanel()
+            case .spotlight:
+                spotlightDetailPanel()
             default:
                 Color.clear
             }
@@ -682,6 +690,49 @@ struct ContentView: View {
         }
     }
 
+
+    private func spotlightDetailPanel() -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "sparkle.magnifyingglass")
+                            .font(.system(size: 40))
+                            .foregroundColor(.blue)
+                        Spacer()
+                    }
+                    Text("Spotlight Search")
+                        .font(.title)
+                        .fontWeight(.bold)
+                    Text("Global search for plugins, projects, bounces, and collections")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.bottom, 8)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("How to Use")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    InfoRow(label: "Trigger", value: "Press the global hotkey from any app")
+                    InfoRow(label: "Search", value: "Type to search across all items")
+                    InfoRow(label: "Commands", value: "Type play, go, share, queue, or download")
+                    InfoRow(label: "Navigate", value: "Arrow keys to move, Enter to select")
+                    InfoRow(label: "Dismiss", value: "Escape or click outside the panel")
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.05))
+                .cornerRadius(12)
+
+                Spacer()
+            }
+            .padding(20)
+        }
+    }
 
     private func lastScannedText() -> String {
         guard let date = scanner.lastScanDate else { return "Never" }

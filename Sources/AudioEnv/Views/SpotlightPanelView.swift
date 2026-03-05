@@ -66,9 +66,17 @@ struct SpotlightPanelView: View {
                     return .handled
                 }
                 .onKeyPress(.delete) {
-                    // Backspace on empty query clears the active verb
+                    // Backspace on empty query clears the active verb badge
                     if searchService.query.isEmpty && searchService.activeVerb != nil {
-                        searchService.clearVerb()
+                        searchService.handleDeleteOnEmpty()
+                        return .handled
+                    }
+                    return .ignored
+                }
+                .onKeyPress(characters: .init(charactersIn: "\u{7F}")) { _ in
+                    // Forward delete also clears verb badge on empty query
+                    if searchService.query.isEmpty && searchService.activeVerb != nil {
+                        searchService.handleDeleteOnEmpty()
                         return .handled
                     }
                     return .ignored
@@ -85,14 +93,6 @@ struct SpotlightPanelView: View {
                     executeSelected()
                     return .handled
                 }
-
-            Picker("", selection: $searchService.searchMode) {
-                ForEach(SpotlightSearchService.SearchMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 120)
 
             if searchService.isSearching {
                 ProgressView()

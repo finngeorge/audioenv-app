@@ -6,12 +6,11 @@ A Raycast/Alfred-style floating search panel triggered by **Ctrl+Space** from an
 
 Press **Ctrl+Space** anywhere (even while Ableton/Logic/Pro Tools has focus) to open a floating panel. Type to search or use command verbs. The panel never steals focus from the frontmost app.
 
-## Search Modes
+## Search
 
-- **Local** (default): Instant search against in-memory data from scanner, bounce, and collection services
-- **Cloud**: Hits the `/api/search` API endpoint (toggle via segmented control)
+Unified search: local results appear instantly from in-memory data (scanner, bounce, collection services), then cloud results from `/api/search` are merged in — deduplicating items already available locally. This surfaces cloud-only items (not yet synced) alongside local results in a single view.
 
-Both modes support 200ms debounced input with relevance-scored results grouped by type.
+200ms debounced input with relevance-scored results grouped by type.
 
 ## Command Verbs
 
@@ -25,7 +24,7 @@ Type a verb followed by a space to lock it in as a badge. The verb text is strip
 | `go` | `g`, `open` | All sections | `go plugins` |
 | `share` | `sh` | Projects | `share my song` |
 
-Backspace on an empty field clears the active verb. Escape clears verb first, then closes panel.
+Backspace/Delete on an empty field clears the active verb badge. Escape closes the panel.
 
 ## Keyboard Shortcuts
 
@@ -62,20 +61,21 @@ The panel is an `NSPanel` with `.nonactivatingPanel` style — it floats above a
 
 ## Files
 
-### New (7)
+### New (8)
 - `Models/SpotlightTypes.swift` — Verbs, result types, input parser, quick actions, go targets
 - `Views/SpotlightPanel.swift` — Non-activating NSPanel subclass
 - `Views/SpotlightPanelView.swift` — SwiftUI view with search, results, keyboard nav
+- `Views/SpotlightSettingsView.swift` — Settings UI for hotkey configuration, behavior toggles, command reference
 - `Services/HotkeyManager.swift` — Carbon global hotkey (configurable, persisted to UserDefaults)
-- `Services/SpotlightSearchService.swift` — Local + API search with debounce and verb detection
-- `Services/SpotlightPanelController.swift` — Panel lifecycle, command execution, quick actions
+- `Services/SpotlightSearchService.swift` — Unified local+cloud search with debounce and verb detection
+- `Services/SpotlightPanelController.swift` — Panel lifecycle, command execution, quick actions, dismiss-on-focus-loss
 
 ### Modified (4)
 - `App.swift` — Added `SpotlightPanelController` + `HotkeyManager` as `@StateObject`, preloads bounces/collections on login
 - `KeyboardCommands.swift` — Added notification names, "Spotlight Search" menu command
 - `MenuBarManager.swift` — Added "Quick Search" to status bar dropdown
 - `Views/SessionBrowserView.swift` — Auto-scrolls project list when navigating from spotlight
-- `Views/ContentView.swift` — Handles `.navigateToSection` notification, centered window positioning
+- `Views/ContentView.swift` — Handles `.navigateToSection` notification, "Spotlight" sidebar entry under Settings
 
 ## Requirements
 
