@@ -79,14 +79,7 @@ final class SpotlightSearchService: ObservableObject {
 
     // MARK: - Search
 
-    /// Call from the view when backspace/delete is pressed on an empty query with an active verb
-    func handleDeleteOnEmpty() {
-        if query.isEmpty && activeVerb != nil {
-            clearVerb()
-        }
-    }
-
-    /// Called by the view binding when a verb+space is detected.
+    /// Called by the view when a verb+space is detected.
     /// Sets the verb badge and query in one shot — no stripping needed.
     func activateVerb(_ verb: SpotlightVerb, searchQuery: String) {
         activeVerb = verb

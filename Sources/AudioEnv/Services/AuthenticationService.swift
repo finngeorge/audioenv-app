@@ -154,20 +154,19 @@ class AuthenticationService: ObservableObject {
                         do {
                             try await fetchUserProfile()
                         } catch {
-                            // Don't delete tokens — they may work later (network issue, server down).
-                            // Just mark as unauthenticated so the login gate shows.
-                            logger.warning("Profile fetch failed, marking unauthenticated (tokens preserved): \(error)")
-                            self.isAuthenticated = false
-                            self.currentUser = nil
+                            // Tokens are preserved — stay authenticated so the user
+                            // isn't forced to re-login on every launch when offline
+                            // or when the server is temporarily unreachable.
+                            logger.warning("Profile fetch also failed (tokens preserved, staying authenticated): \(error)")
                         }
                     }
                 } else {
                     do {
                         try await fetchUserProfile()
                     } catch {
-                        logger.warning("Failed to fetch user profile on init, marking unauthenticated: \(error)")
-                        self.isAuthenticated = false
-                        self.currentUser = nil
+                        // No refresh token but access token exists — stay authenticated.
+                        // The token will be validated on the next API call.
+                        logger.warning("Profile fetch failed on init (staying authenticated): \(error)")
                     }
                 }
             }

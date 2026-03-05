@@ -15,6 +15,9 @@ struct SpotlightPanelView: View {
         nonmutating set { searchService.selectedIndex = newValue }
     }
     @FocusState private var isTextFieldFocused: Bool
+    /// Local text field state — decoupled from the search service to avoid
+    /// SwiftUI "publishing during view updates" issues when stripping verb text.
+    @State private var fieldText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,6 +32,7 @@ struct SpotlightPanelView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
         .onAppear {
+            fieldText = ""
             isTextFieldFocused = true
             searchService.selectedIndex = 0
         }
@@ -53,30 +57,43 @@ struct SpotlightPanelView: View {
                     }
             }
 
-            TextField(searchService.activeVerb != nil ? "Type to search..." : "Search or type a command...", text: queryBinding)
+            TextField(searchService.activeVerb != nil ? "Type to search..." : "Search or type a command...", text: $fieldText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 18, weight: .light))
                 .focused($isTextFieldFocused)
+                .onChange(of: fieldText) { _, newValue in
+                    // Verb detection: intercept "go ", "play ", etc. before it reaches the service
+                    if searchService.activeVerb == nil {
+                        let parsed = SpotlightInputParser.parse(newValue)
+                        if let verb = parsed.verb, newValue.contains(" ") {
+                            // Clear the verb text from the field immediately (@State — no race)
+                            fieldText = parsed.searchQuery
+                            searchService.activateVerb(verb, searchQuery: parsed.searchQuery)
+                            return
+                        }
+                    }
+                    searchService.query = newValue
+                }
                 .onKeyPress(.escape) {
                     if searchService.activeVerb != nil {
                         searchService.clearVerb()
+                        fieldText = ""
                         return .handled
                     }
                     onDismiss()
                     return .handled
                 }
                 .onKeyPress(.delete) {
-                    // Backspace on empty query clears the active verb badge
-                    if searchService.query.isEmpty && searchService.activeVerb != nil {
-                        searchService.handleDeleteOnEmpty()
+                    // Backspace on empty field clears the active verb badge
+                    if fieldText.isEmpty && searchService.activeVerb != nil {
+                        searchService.clearVerb()
                         return .handled
                     }
                     return .ignored
                 }
                 .onKeyPress(characters: .init(charactersIn: "\u{7F}")) { _ in
-                    // Forward delete also clears verb badge on empty query
-                    if searchService.query.isEmpty && searchService.activeVerb != nil {
-                        searchService.handleDeleteOnEmpty()
+                    if fieldText.isEmpty && searchService.activeVerb != nil {
+                        searchService.clearVerb()
                         return .handled
                     }
                     return .ignored
@@ -366,27 +383,6 @@ struct SpotlightPanelView: View {
     }
 
     // MARK: - Helpers
-
-    /// Custom binding that intercepts verb+space before it reaches `query`.
-    /// The verb text never enters the query — it's caught here and converted
-    /// to an activeVerb badge, so there's no text to strip and no race condition.
-    private var queryBinding: Binding<String> {
-        Binding(
-            get: { searchService.query },
-            set: { newValue in
-                // Only check for verbs when no verb is active yet
-                if searchService.activeVerb == nil {
-                    let parsed = SpotlightInputParser.parse(newValue)
-                    if let verb = parsed.verb, newValue.contains(" ") {
-                        // Activate the verb badge; set query to just the remainder (usually empty)
-                        searchService.activateVerb(verb, searchQuery: parsed.searchQuery)
-                        return
-                    }
-                }
-                searchService.query = newValue
-            }
-        )
-    }
 
     private func verbBadge(_ verb: SpotlightVerb) -> some View {
         Text(verb.label)
