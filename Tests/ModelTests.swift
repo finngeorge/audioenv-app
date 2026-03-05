@@ -196,7 +196,7 @@ final class ScanCacheCodableTests: XCTestCase {
         let data = try encoder.encode(cache)
         let decoded = try decoder.decode(ScanCache.self, from: data)
 
-        XCTAssertEqual(decoded.version, 6)
+        XCTAssertEqual(decoded.version, 7)
         XCTAssertEqual(decoded.plugins.count, 1)
         XCTAssertEqual(decoded.sessions.count, 1)
         XCTAssertEqual(decoded.skippedLargeSessions, 2)

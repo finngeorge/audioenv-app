@@ -318,16 +318,14 @@ private struct ProjectRow: View {
                 pluginSet.append(contentsOf: p.usedPlugins)
             case .logic(let p):
                 pluginSet.append(contentsOf: p.trackPlugins.values.flatMap { $0 })
+            case .proTools(let p):
+                pluginSet.append(contentsOf: p.pluginCatalog.map { $0.name })
             default:
                 break
             }
         }
         guard !pluginSet.isEmpty else {
-            // Only show "none detected" for formats we can parse plugins from
-            if project.format == .ableton || project.format == .logic {
-                return "Plugins: none detected"
-            }
-            return nil
+            return "Plugins: none detected"
         }
         let unique = Array(Set(pluginSet)).sorted()
         let top = unique.prefix(3)
