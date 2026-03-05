@@ -11,6 +11,9 @@ extension Notification.Name {
     static let navigateToProject = Notification.Name("AudioEnv.navigateToProject")
     static let navigateToCommands = Notification.Name("AudioEnv.navigateToCommands")
     static let togglePlayPause = Notification.Name("AudioEnv.togglePlayPause")
+    static let spotlightHotkeyPressed = Notification.Name("AudioEnv.spotlightHotkeyPressed")
+    static let toggleSpotlight = Notification.Name("AudioEnv.toggleSpotlight")
+    static let navigateToSection = Notification.Name("AudioEnv.navigateToSection")
 }
 
 // MARK: - App Commands
@@ -53,6 +56,13 @@ struct AudioEnvCommands: Commands {
             Button("Play / Pause") {
                 NotificationCenter.default.post(name: .togglePlayPause, object: nil)
             }
+
+            Divider()
+
+            Button("Spotlight Search") {
+                NotificationCenter.default.post(name: .toggleSpotlight, object: nil)
+            }
+            .keyboardShortcut(" ", modifiers: .control)
         }
     }
 }

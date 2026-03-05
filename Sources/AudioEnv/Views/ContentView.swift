@@ -339,6 +339,12 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .togglePlayPause)) { _ in
             audioPlayer.togglePlayPause()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToSection)) { notification in
+            if let raw = notification.userInfo?["section"] as? String,
+               let target = AppSection(rawValue: raw) {
+                section = target
+            }
+        }
         .onAppear {
             NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 // Space bar play/pause — skip if a text field has focus

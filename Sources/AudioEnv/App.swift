@@ -20,6 +20,8 @@ struct AudioEnvApp: App {
     @StateObject private var patternService = PatternService()
     @StateObject private var remoteCommand = RemoteCommandService()
     @StateObject private var updater = UpdaterService()
+    @StateObject private var spotlight = SpotlightPanelController()
+    @StateObject private var hotkeyManager = HotkeyManager()
     @StateObject private var colorTokens = ColorTokens.shared
 
     @Environment(\.scenePhase) private var scenePhase
@@ -79,6 +81,19 @@ struct AudioEnvApp: App {
                     if auth.isAuthenticated, let token = auth.authToken {
                         webSocket.connect(token: token)
                     }
+
+                    // Configure spotlight search panel
+                    spotlight.configure(
+                        scanner: scanner,
+                        bounceService: bounceService,
+                        collectionService: collectionService,
+                        audioPlayer: audioPlayer,
+                        auth: auth,
+                        menuBar: menuBar
+                    )
+
+                    // Register global hotkey (Ctrl+Space)
+                    hotkeyManager.register()
 
                     // Check for orphaned temp restore sessions
                     tempRestore.checkForOrphanedSessions()
@@ -192,6 +207,12 @@ struct AudioEnvApp: App {
                        window.title.contains("AudioEnv") {
                         menuBar.mainWindowDidClose()
                     }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .spotlightHotkeyPressed)) { _ in
+                    spotlight.toggle()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .toggleSpotlight)) { _ in
+                    spotlight.toggle()
                 }
                 .onOpenURL { url in
                     Self.handleURL(url, scanner: scanner, sync: sync, auth: auth)

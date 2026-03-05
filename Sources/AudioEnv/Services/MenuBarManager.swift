@@ -244,6 +244,13 @@ class MenuBarManager: ObservableObject {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Quick Search (spotlight)
+        let searchItem = NSMenuItem(title: "Quick Search", action: #selector(toggleSpotlight(_:)), keyEquivalent: "")
+        searchItem.target = self
+        menu.addItem(searchItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         // Quick scan
         let scanItem = NSMenuItem(title: "Scan Now", action: #selector(scanNow(_:)), keyEquivalent: "s")
         scanItem.target = self
@@ -308,6 +315,10 @@ class MenuBarManager: ObservableObject {
             object: nil,
             userInfo: ["projectPath": projectPath]
         )
+    }
+
+    @objc private func toggleSpotlight(_ sender: Any?) {
+        NotificationCenter.default.post(name: .toggleSpotlight, object: nil)
     }
 
     @objc private func quitApp(_ sender: Any?) {
