@@ -44,12 +44,16 @@ class SpotlightPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    /// Position: center horizontally, upper third of screen
+    /// Position: center horizontally, upper third of screen.
+    /// Uses the screen containing the mouse cursor so it always appears
+    /// on the display the user is actively looking at.
     func centerOnScreen() {
-        guard let screen = NSScreen.main else { return }
-        let screenFrame = screen.visibleFrame
+        let mouseLocation = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? NSScreen.main ?? NSScreen.screens.first
+        guard let screen else { return }
+        let screenFrame = screen.frame
         let x = screenFrame.midX - frame.width / 2
-        let y = screenFrame.maxY - frame.height - 180
+        let y = screenFrame.midY + (screenFrame.height / 6) - frame.height / 2
         setFrameOrigin(NSPoint(x: x, y: y))
     }
 }
