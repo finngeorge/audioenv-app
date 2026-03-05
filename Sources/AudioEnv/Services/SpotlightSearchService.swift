@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import os.log
 
@@ -10,9 +11,7 @@ final class SpotlightSearchService: ObservableObject {
 
     // MARK: - Published State
 
-    @Published var query: String = "" {
-        didSet { debouncedSearch() }
-    }
+    @Published var query: String = ""
     @Published var results: [SpotlightResultGroup] = []
     @Published var isSearching = false
     @Published var parsedInput: ParsedSpotlightInput = .empty
@@ -31,6 +30,9 @@ final class SpotlightSearchService: ObservableObject {
     private weak var auth: AuthenticationService?
 
     private var debounceTask: Task<Void, Never>?
+    private var queryCancellable: AnyCancellable?
+    /// When true, the Combine sink ignores the next query change (we're stripping the verb text)
+    private var ignoreNextQueryChange = false
 
     private let apiBaseURL: String = {
         if let override = UserDefaults.standard.string(forKey: "apiBaseURL"), !override.isEmpty {
@@ -38,6 +40,12 @@ final class SpotlightSearchService: ObservableObject {
         }
         return "https://api.audioenv.com"
     }()
+
+    // MARK: - Init
+
+    nonisolated init() {
+        // Combine pipeline set up in configure() after properties are initialized
+    }
 
     // MARK: - Configuration
 
@@ -51,11 +59,19 @@ final class SpotlightSearchService: ObservableObject {
         self.bounceService = bounceService
         self.collectionService = collectionService
         self.auth = auth
+
+        // Use Combine to observe query changes — this runs on the next RunLoop tick,
+        // so programmatic query changes (verb stripping) don't race with SwiftUI's TextField.
+        queryCancellable = $query
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.handleQueryChanged()
+            }
     }
 
     func reset() {
         activeVerb = nil
-        isStrippingVerb = false
+        ignoreNextQueryChange = false
         query = ""
         results = []
         parsedInput = .empty
@@ -66,8 +82,6 @@ final class SpotlightSearchService: ObservableObject {
 
     // MARK: - Search
 
-    private var isStrippingVerb = false
-
     /// Call from the view when backspace/delete is pressed on an empty query with an active verb
     func handleDeleteOnEmpty() {
         if query.isEmpty && activeVerb != nil {
@@ -75,11 +89,14 @@ final class SpotlightSearchService: ObservableObject {
         }
     }
 
-    private func debouncedSearch() {
+    private func handleQueryChanged() {
         debounceTask?.cancel()
 
-        // Don't re-trigger when we're programmatically stripping the verb text
-        guard !isStrippingVerb else { return }
+        // Skip processing when we just programmatically stripped the verb text
+        if ignoreNextQueryChange {
+            ignoreNextQueryChange = false
+            return
+        }
 
         // If we already have a locked-in verb, treat the entire query as the search term
         if let verb = activeVerb {
@@ -88,20 +105,20 @@ final class SpotlightSearchService: ObservableObject {
             // Check if the user just typed a verb followed by a space
             let parsed = SpotlightInputParser.parse(query)
             if let verb = parsed.verb, query.contains(" ") {
-                // Lock in the verb and strip it from the text field
+                // Lock in the verb and strip the verb text from the field
                 activeVerb = verb
                 parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: parsed.searchQuery)
-                isStrippingVerb = true
-                // Defer the query update to the next run loop so we don't publish during a view update
-                let strippedQuery = parsed.searchQuery
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.query = strippedQuery
-                    self.isStrippingVerb = false
+                // Set the flag before changing query so the sink ignores the next change
+                ignoreNextQueryChange = true
+                query = parsed.searchQuery
+                // If the remaining query is empty, show go targets / empty state
+                if parsed.searchQuery.isEmpty {
+                    if verb == .go { results = [] }
+                    return
                 }
-                return
+            } else {
+                parsedInput = parsed
             }
-            parsedInput = parsed
         }
 
         if parsedInput.searchQuery.isEmpty && parsedInput.verb == nil {
