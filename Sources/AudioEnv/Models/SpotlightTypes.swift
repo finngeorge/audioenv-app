@@ -165,6 +165,66 @@ enum SpotlightInputParser {
     }
 }
 
+// MARK: - Quick Actions (modifier keys)
+
+/// Actions available via modifier+Enter on a selected result
+enum SpotlightQuickAction: Identifiable {
+    case showInFinder       // ⌘↩  — any local file
+    case openInDAW          // ⌥↩  — projects (Ableton, Logic, Pro Tools)
+    case openInQuickLook    // ⇧↩  — audio files
+    case revealPlugin       // ⌘↩  — plugins
+
+    var id: String {
+        switch self {
+        case .showInFinder: return "finder"
+        case .openInDAW: return "daw"
+        case .openInQuickLook: return "quicklook"
+        case .revealPlugin: return "reveal"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .showInFinder: return "Show in Finder"
+        case .openInDAW: return "Open in DAW"
+        case .openInQuickLook: return "Quick Look"
+        case .revealPlugin: return "Show in Finder"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .showInFinder: return "folder"
+        case .openInDAW: return "pianokeys"
+        case .openInQuickLook: return "eye"
+        case .revealPlugin: return "folder"
+        }
+    }
+
+    var shortcut: String {
+        switch self {
+        case .showInFinder: return "⌘↩"
+        case .openInDAW: return "⌥↩"
+        case .openInQuickLook: return "⇧↩"
+        case .revealPlugin: return "⌘↩"
+        }
+    }
+
+    /// Returns available quick actions for a given result type
+    static func actions(for type: SpotlightResultType) -> [SpotlightQuickAction] {
+        switch type {
+        case .bounce:
+            return [.showInFinder, .openInQuickLook]
+        case .project:
+            return [.openInDAW, .showInFinder]
+        case .plugin:
+            return [.revealPlugin]
+        case .collection:
+            return []
+        }
+    }
+}
+
 // MARK: - Go Targets
 
 struct SpotlightGoTarget: Identifiable {

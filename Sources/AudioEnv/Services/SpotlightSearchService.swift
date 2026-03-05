@@ -21,6 +21,9 @@ final class SpotlightSearchService: ObservableObject {
     /// The currently locked-in verb (set when user types a verb + space)
     @Published var activeVerb: SpotlightVerb?
 
+    /// Currently selected result index (shared with view for quick actions)
+    @Published var selectedIndex = 0
+
     enum SearchMode: String, CaseIterable {
         case local = "Local"
         case cloud = "Cloud"
@@ -63,6 +66,7 @@ final class SpotlightSearchService: ObservableObject {
         results = []
         parsedInput = .empty
         isSearching = false
+        selectedIndex = 0
         debounceTask?.cancel()
     }
 

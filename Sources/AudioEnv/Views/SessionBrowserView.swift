@@ -57,13 +57,23 @@ struct SessionBrowserView: View {
             if projects.isEmpty {
                 sessionEmptyState()
             } else {
-                List(selection: $selectedProject) {
-                    ForEach(projects) { project in
-                        ProjectRow(project: project)
-                            .tag(project)
+                ScrollViewReader { proxy in
+                    List(selection: $selectedProject) {
+                        ForEach(projects) { project in
+                            ProjectRow(project: project)
+                                .tag(project)
+                                .id(project.id)
+                        }
+                    }
+                    .listStyle(.inset)
+                    .onChange(of: selectedProject) { _, newProject in
+                        if let project = newProject {
+                            withAnimation {
+                                proxy.scrollTo(project.id, anchor: .center)
+                            }
+                        }
                     }
                 }
-                .listStyle(.inset)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in

@@ -6,10 +6,14 @@ struct SpotlightPanelView: View {
     @ObservedObject var searchService: SpotlightSearchService
     @ObservedObject var audioPlayer: AudioPlayerService
     let onExecute: (SpotlightVerb?, SpotlightResult) -> Void
+    let onQuickAction: (SpotlightQuickAction, SpotlightResult) -> Void
     let onNavigateSection: (AppSection) -> Void
     let onDismiss: () -> Void
 
-    @State private var selectedIndex = 0
+    private var selectedIndex: Int {
+        get { searchService.selectedIndex }
+        nonmutating set { searchService.selectedIndex = newValue }
+    }
     @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
@@ -26,10 +30,10 @@ struct SpotlightPanelView: View {
         .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
         .onAppear {
             isTextFieldFocused = true
-            selectedIndex = 0
+            searchService.selectedIndex = 0
         }
         .onChange(of: searchService.results) { _, _ in
-            selectedIndex = 0
+            searchService.selectedIndex = 0
         }
     }
 
@@ -146,7 +150,7 @@ struct SpotlightPanelView: View {
                 }
                 .padding(.vertical, 4)
             }
-            .onChange(of: selectedIndex) { _, newIndex in
+            .onChange(of: searchService.selectedIndex) { _, newIndex in
                 let flat = searchService.flatResults
                 if newIndex >= 0 && newIndex < flat.count {
                     proxy.scrollTo("result-\(flat[newIndex].id)", anchor: .center)
@@ -197,6 +201,16 @@ struct SpotlightPanelView: View {
             }
 
             if isSelected {
+                let actions = SpotlightQuickAction.actions(for: result.type)
+                if !actions.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(actions) { action in
+                            Text(action.shortcut)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.45))
+                        }
+                    }
+                }
                 Image(systemName: searchService.parsedInput.verb?.icon ?? "return")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.6))
@@ -323,30 +337,13 @@ struct SpotlightPanelView: View {
     // MARK: - Footer
 
     private var footerBar: some View {
-        HStack(spacing: 16) {
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(.system(size: 9))
-                Text("Navigate")
-                    .font(.system(size: 10))
-            }
-            .foregroundStyle(.tertiary)
-
-            HStack(spacing: 4) {
-                Image(systemName: "return")
-                    .font(.system(size: 9))
-                Text("Select")
-                    .font(.system(size: 10))
-            }
-            .foregroundStyle(.tertiary)
-
-            HStack(spacing: 4) {
-                Text("esc")
-                    .font(.system(size: 9, design: .monospaced))
-                Text("Close")
-                    .font(.system(size: 10))
-            }
-            .foregroundStyle(.tertiary)
+        HStack(spacing: 12) {
+            footerHint(key: "↑↓", label: "Navigate")
+            footerHint(key: "↩", label: "Select")
+            footerHint(key: "⌘↩", label: "Finder")
+            footerHint(key: "⌥↩", label: "Open in DAW")
+            footerHint(key: "⇧↩", label: "Quick Look")
+            footerHint(key: "esc", label: "Close")
 
             Spacer()
 
@@ -356,6 +353,16 @@ struct SpotlightPanelView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+    }
+
+    private func footerHint(key: String, label: String) -> some View {
+        HStack(spacing: 3) {
+            Text(key)
+                .font(.system(size: 9, design: .monospaced))
+            Text(label)
+                .font(.system(size: 10))
+        }
+        .foregroundStyle(.tertiary)
     }
 
     // MARK: - Helpers
@@ -398,6 +405,15 @@ struct SpotlightPanelView: View {
         guard selectedIndex >= 0 && selectedIndex < flat.count else { return }
         let result = flat[selectedIndex]
         onExecute(searchService.parsedInput.verb, result)
+    }
+
+    private func executeQuickAction(_ action: SpotlightQuickAction) {
+        let flat = searchService.flatResults
+        guard selectedIndex >= 0 && selectedIndex < flat.count else { return }
+        let result = flat[selectedIndex]
+        // Only execute if this action is valid for the result type
+        guard SpotlightQuickAction.actions(for: result.type).contains(where: { $0.id == action.id }) else { return }
+        onQuickAction(action, result)
     }
 
     private func currentGlobalIndex(for result: SpotlightResult) -> Int {

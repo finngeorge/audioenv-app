@@ -105,6 +105,9 @@ final class SpotlightPanelController: ObservableObject {
             onExecute: { [weak self] verb, result in
                 self?.executeCommand(verb: verb, result: result)
             },
+            onQuickAction: { [weak self] action, result in
+                self?.executeQuickAction(action, result: result)
+            },
             onNavigateSection: { [weak self] section in
                 self?.navigateToSection(section)
             },
@@ -128,7 +131,37 @@ final class SpotlightPanelController: ObservableObject {
             return event
         }
 
+        // Handle modifier+Return for quick actions
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak panel] event in
+            guard let self, self.isVisible, event.window == panel else { return event }
+            // Return key = keyCode 36
+            guard event.keyCode == 36 else { return event }
+
+            let mods = event.modifierFlags.intersection([.command, .option, .shift])
+
+            if mods == .command {
+                self.executeQuickActionForSelected(.showInFinder)
+                return nil
+            } else if mods == .option {
+                self.executeQuickActionForSelected(.openInDAW)
+                return nil
+            } else if mods == .shift {
+                self.executeQuickActionForSelected(.openInQuickLook)
+                return nil
+            }
+            return event
+        }
+
         self.panel = panel
+    }
+
+    private func executeQuickActionForSelected(_ action: SpotlightQuickAction) {
+        let flat = searchService.flatResults
+        let index = searchService.selectedIndex
+        guard index >= 0 && index < flat.count else { return }
+        let result = flat[index]
+        guard SpotlightQuickAction.actions(for: result.type).contains(where: { $0.id == action.id }) else { return }
+        executeQuickAction(action, result: result)
     }
 
     // MARK: - Command Execution
@@ -206,6 +239,94 @@ final class SpotlightPanelController: ObservableObject {
             object: nil,
             userInfo: ["section": section.rawValue]
         )
+    }
+
+    // MARK: - Quick Actions
+
+    private func executeQuickAction(_ action: SpotlightQuickAction, result: SpotlightResult) {
+        switch action {
+        case .showInFinder:
+            revealInFinder(result)
+            hide()
+
+        case .openInDAW:
+            openInDAW(result)
+            hide()
+
+        case .openInQuickLook:
+            quickLookFile(result)
+            hide()
+
+        case .revealPlugin:
+            revealInFinder(result)
+            hide()
+        }
+    }
+
+    private func revealInFinder(_ result: SpotlightResult) {
+        let path: String?
+        switch result.type {
+        case .bounce:
+            path = findBounce(id: result.id)?.filePath
+        case .project:
+            // result.id is the session path
+            path = result.id
+        case .plugin:
+            // Find the plugin path from scanner
+            if let uuid = UUID(uuidString: result.id) {
+                path = scanner?.plugins.first(where: { $0.id == uuid })?.path
+            } else {
+                path = nil
+            }
+        case .collection:
+            path = nil
+        }
+        guard let path else { return }
+        let url = URL(fileURLWithPath: path)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func openInDAW(_ result: SpotlightResult) {
+        guard result.type == .project else { return }
+        // result.id is the session path — find the session to determine format
+        let sessionPath = result.id
+        guard let session = scanner?.sessions.first(where: { $0.path == sessionPath }) else { return }
+
+        let url = URL(fileURLWithPath: sessionPath)
+
+        // Open with the appropriate DAW based on session format
+        let bundleID: String
+        switch session.format {
+        case .ableton:
+            bundleID = "com.ableton.live"
+        case .logic:
+            bundleID = "com.apple.logic10"
+        case .proTools:
+            bundleID = "com.avid.ProTools"
+        }
+
+        let config = NSWorkspace.OpenConfiguration()
+        if let dawURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            NSWorkspace.shared.open([url], withApplicationAt: dawURL, configuration: config)
+        } else {
+            // Fallback: open with default app
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func quickLookFile(_ result: SpotlightResult) {
+        let path: String?
+        switch result.type {
+        case .bounce:
+            path = findBounce(id: result.id)?.filePath
+        case .project:
+            path = result.id
+        default:
+            path = nil
+        }
+        guard let path else { return }
+        // Open in Quick Look via default handler
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     // MARK: - Helpers
