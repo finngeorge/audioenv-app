@@ -50,12 +50,14 @@ struct ContentView: View {
                 .background(WindowAccessor { window in
                     window.maxSize = NSSize(width: 500, height: 600)
                     window.minSize = NSSize(width: 500, height: 600)
-                    let oldFrame = window.frame
+                    let size = NSSize(width: 500, height: 600)
+                    let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first
+                    let screenFrame = screen?.visibleFrame ?? .zero
                     let newOrigin = NSPoint(
-                        x: oldFrame.midX - 250,
-                        y: oldFrame.midY - 300
+                        x: screenFrame.midX - size.width / 2,
+                        y: screenFrame.midY - size.height / 2
                     )
-                    let newFrame = NSRect(origin: newOrigin, size: NSSize(width: 500, height: 600))
+                    let newFrame = NSRect(origin: newOrigin, size: size)
                     window.setFrame(newFrame, display: true, animate: true)
                 })
         } else {
@@ -374,12 +376,14 @@ struct ContentView: View {
         .background(WindowAccessor { window in
             window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             window.minSize = NSSize(width: 1200, height: 620)
-            let oldFrame = window.frame
+            let size = NSSize(width: 1360, height: 780)
+            let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first
+            let screenFrame = screen?.visibleFrame ?? .zero
             let newOrigin = NSPoint(
-                x: oldFrame.midX - 680,
-                y: oldFrame.midY - 390
+                x: screenFrame.midX - size.width / 2,
+                y: screenFrame.midY - size.height / 2
             )
-            let newFrame = NSRect(origin: newOrigin, size: NSSize(width: 1360, height: 780))
+            let newFrame = NSRect(origin: newOrigin, size: size)
             window.setFrame(newFrame, display: true, animate: true)
         })
         .onAppear {
