@@ -31,8 +31,6 @@ final class SpotlightSearchService: ObservableObject {
 
     private var debounceTask: Task<Void, Never>?
     private var queryCancellable: AnyCancellable?
-    /// When true, the Combine sink ignores the next query change (we're stripping the verb text)
-    private var ignoreNextQueryChange = false
 
     private let apiBaseURL: String = {
         if let override = UserDefaults.standard.string(forKey: "apiBaseURL"), !override.isEmpty {
@@ -71,7 +69,6 @@ final class SpotlightSearchService: ObservableObject {
 
     func reset() {
         activeVerb = nil
-        ignoreNextQueryChange = false
         query = ""
         results = []
         parsedInput = .empty
@@ -89,36 +86,25 @@ final class SpotlightSearchService: ObservableObject {
         }
     }
 
+    /// Called by the view binding when a verb+space is detected.
+    /// Sets the verb badge and query in one shot — no stripping needed.
+    func activateVerb(_ verb: SpotlightVerb, searchQuery: String) {
+        activeVerb = verb
+        query = searchQuery
+        parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: searchQuery)
+        if searchQuery.isEmpty {
+            results = []
+        }
+    }
+
     private func handleQueryChanged() {
         debounceTask?.cancel()
 
-        // Skip processing when we just programmatically stripped the verb text
-        if ignoreNextQueryChange {
-            ignoreNextQueryChange = false
-            return
-        }
-
-        // If we already have a locked-in verb, treat the entire query as the search term
+        // Build parsed input from current state
         if let verb = activeVerb {
             parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: query)
         } else {
-            // Check if the user just typed a verb followed by a space
-            let parsed = SpotlightInputParser.parse(query)
-            if let verb = parsed.verb, query.contains(" ") {
-                // Lock in the verb and strip the verb text from the field
-                activeVerb = verb
-                parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: parsed.searchQuery)
-                // Set the flag before changing query so the sink ignores the next change
-                ignoreNextQueryChange = true
-                query = parsed.searchQuery
-                // If the remaining query is empty, show go targets / empty state
-                if parsed.searchQuery.isEmpty {
-                    if verb == .go { results = [] }
-                    return
-                }
-            } else {
-                parsedInput = parsed
-            }
+            parsedInput = SpotlightInputParser.parse(query)
         }
 
         if parsedInput.searchQuery.isEmpty && parsedInput.verb == nil {

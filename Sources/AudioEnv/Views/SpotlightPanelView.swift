@@ -53,7 +53,7 @@ struct SpotlightPanelView: View {
                     }
             }
 
-            TextField(searchService.activeVerb != nil ? "Type to search..." : "Search or type a command...", text: $searchService.query)
+            TextField(searchService.activeVerb != nil ? "Type to search..." : "Search or type a command...", text: queryBinding)
                 .textFieldStyle(.plain)
                 .font(.system(size: 18, weight: .light))
                 .focused($isTextFieldFocused)
@@ -301,7 +301,7 @@ struct SpotlightPanelView: View {
                     .padding(.vertical, 6)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        searchService.query = verb.rawValue + " "
+                        searchService.activateVerb(verb, searchQuery: "")
                     }
                 }
 
@@ -366,6 +366,27 @@ struct SpotlightPanelView: View {
     }
 
     // MARK: - Helpers
+
+    /// Custom binding that intercepts verb+space before it reaches `query`.
+    /// The verb text never enters the query — it's caught here and converted
+    /// to an activeVerb badge, so there's no text to strip and no race condition.
+    private var queryBinding: Binding<String> {
+        Binding(
+            get: { searchService.query },
+            set: { newValue in
+                // Only check for verbs when no verb is active yet
+                if searchService.activeVerb == nil {
+                    let parsed = SpotlightInputParser.parse(newValue)
+                    if let verb = parsed.verb, newValue.contains(" ") {
+                        // Activate the verb badge; set query to just the remainder (usually empty)
+                        searchService.activateVerb(verb, searchQuery: parsed.searchQuery)
+                        return
+                    }
+                }
+                searchService.query = newValue
+            }
+        )
+    }
 
     private func verbBadge(_ verb: SpotlightVerb) -> some View {
         Text(verb.label)
