@@ -324,7 +324,6 @@ gh release create "v$VERSION" \
     --repo "$GITHUB_REPO" \
     --title "AudioEnv v$VERSION" \
     --notes "$RELEASE_NOTES" \
-    --prerelease \
     "${UPLOAD_FILES[@]}"
 
 echo ""
