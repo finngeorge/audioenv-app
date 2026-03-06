@@ -13,6 +13,7 @@ Native macOS app for audio production dependency management. Scans your system f
 - **Bounce Management** — Scan bounce folders, auto-link bounces to projects, playback
 - **Session Monitoring** — Live monitoring of open DAW sessions via FSEvents
 - **Project Sharing** — Share project plugin requirements and check compatibility
+- **Spotlight / Command Palette** — Global search and command launcher for quick navigation
 
 ## Requirements
 
@@ -45,6 +46,7 @@ open AudioEnv.app
 
 | Shortcut | Action |
 |----------|--------|
+| `Ctrl+Space` | Open Spotlight / command palette (configurable) |
 | `Cmd+R` | Rescan plugins and projects |
 | `Cmd+F` | Focus search field |
 | `Cmd+P` | Manage scan paths |
