@@ -20,6 +20,7 @@ targets:
         type: folder
     dependencies:
       - package: Sparkle
+        embed: true
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.audioenv.app
       MACOSX_DEPLOYMENT_TARGET: "14.0"

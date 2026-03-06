@@ -108,10 +108,16 @@ fi
 
 # Copy Sparkle framework from SPM artifacts
 SPARKLE_FW="$PROJECT_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
-if [ -d "$SPARKLE_FW" ]; then
-    mkdir -p "$APP_PATH/Contents/Frameworks"
-    cp -R "$SPARKLE_FW" "$APP_PATH/Contents/Frameworks/"
+if [ ! -d "$SPARKLE_FW" ]; then
+    echo "ERROR: Sparkle.framework not found at $SPARKLE_FW"
+    echo "Run 'swift build' first to fetch SPM dependencies."
+    exit 1
 fi
+mkdir -p "$APP_PATH/Contents/Frameworks"
+cp -R "$SPARKLE_FW" "$APP_PATH/Contents/Frameworks/"
+
+# Add rpath so the binary can find frameworks in Contents/Frameworks/
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP_PATH/Contents/MacOS/$APP_NAME" 2>/dev/null || true
 
 # Write Info.plist with version baked in
 cat > "$APP_PATH/Contents/Info.plist" << EOF
