@@ -153,13 +153,14 @@ class SyncService: ObservableObject {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             if statusCode == 401 {
                 throw SyncError.unauthorized
             }
-            throw SyncError.serverError("Plugin sync failed with status \(statusCode)")
+            let detail = Self.extractErrorDetail(from: data)
+            throw SyncError.serverError("Plugin sync failed (\(statusCode)): \(detail)")
         }
 
         logger.info("Synced \(plugins.count) plugins")
@@ -279,13 +280,14 @@ class SyncService: ObservableObject {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             if statusCode == 401 {
                 throw SyncError.unauthorized
             }
-            throw SyncError.serverError("Session delta sync failed with status \(statusCode)")
+            let detail = Self.extractErrorDetail(from: data)
+            throw SyncError.serverError("Session delta sync failed (\(statusCode)): \(detail)")
         }
 
         saveFingerprints(currentFingerprints)
@@ -318,17 +320,29 @@ class SyncService: ObservableObject {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.httpBody = try JSONSerialization.data(withJSONObject: wrapper)
 
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
                 if statusCode == 401 {
                     throw SyncError.unauthorized
                 }
-                throw SyncError.serverError("Session sync batch \(index + 1) failed with status \(statusCode)")
+                let detail = Self.extractErrorDetail(from: data)
+                throw SyncError.serverError("Session sync batch \(index + 1) failed (\(statusCode)): \(detail)")
             }
 
             logger.info("Synced session batch \(index + 1)/\(batches.count) (\(batch.count) sessions)")
         }
+    }
+
+    // MARK: - Error detail extraction
+
+    /// Extract error detail from API JSON response body (expects {"detail": "..."}).
+    private static func extractErrorDetail(from data: Data) -> String {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let detail = json["detail"] as? String {
+            return detail
+        }
+        return String(data: data, encoding: .utf8) ?? "unknown error"
     }
 
     // MARK: - Session payload builder
