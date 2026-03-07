@@ -396,7 +396,8 @@ class MenuBarManager: ObservableObject {
             }
 
             // Auto-sync if authenticated
-            if let auth, let sync, auth.isAuthenticated, let token = auth.authToken {
+            if let auth, let sync, auth.isAuthenticated,
+               let token = try? await auth.validToken() {
                 await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
             }
 

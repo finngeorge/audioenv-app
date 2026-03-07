@@ -59,6 +59,9 @@ struct AudioEnvApp: App {
                     let colorBaseURL = UserDefaults.standard.string(forKey: "apiBaseURL") ?? "https://api.audioenv.com"
                     ColorTokens.shared.fetch(baseURL: colorBaseURL)
 
+                    // Wire auth into sync for 401 retry
+                    sync.authService = auth
+
                     // Configure menu bar manager with services
                     menuBar.configure(scanner: scanner, sync: sync, auth: auth, sessionMonitor: sessionMonitor)
 
@@ -113,9 +116,12 @@ struct AudioEnvApp: App {
                     // Preload bounces and collections on launch so spotlight works immediately
                     if auth.isAuthenticated, let token = auth.authToken {
                         Task {
+                            await bounceService.fetchFolders(token: token)
                             async let b: () = bounceService.fetchBounces(token: token)
                             async let c: () = collectionService.fetchCollections(token: token)
                             _ = await (b, c)
+                            // Scan tracked bounce folders for new local files
+                            await bounceService.scanAllAutoFolders(token: token)
                         }
                     }
 
@@ -168,9 +174,10 @@ struct AudioEnvApp: App {
                     }
 
                     // Auto-sync on login if scanner has data
-                    if newUserId != nil, auth.isAuthenticated, let token = auth.authToken,
+                    if newUserId != nil, auth.isAuthenticated,
                        !scanner.plugins.isEmpty || !scanner.sessions.isEmpty {
                         Task {
+                            guard let token = try? await auth.validToken() else { return }
                             await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
                         }
                     }
@@ -178,17 +185,19 @@ struct AudioEnvApp: App {
                     // Preload bounces and collections on login so spotlight search works immediately
                     if newUserId != nil, auth.isAuthenticated, let token = auth.authToken {
                         Task {
+                            await bounceService.fetchFolders(token: token)
                             async let b: () = bounceService.fetchBounces(token: token)
                             async let c: () = collectionService.fetchCollections(token: token)
                             _ = await (b, c)
+                            await bounceService.scanAllAutoFolders(token: token)
                         }
                     }
                 }
                 .onChange(of: scanner.isScanning) { oldValue, newValue in
                     // Auto-sync when scan completes
-                    if oldValue == true && newValue == false,
-                       auth.isAuthenticated, let token = auth.authToken {
+                    if oldValue == true && newValue == false, auth.isAuthenticated {
                         Task {
+                            guard let token = try? await auth.validToken() else { return }
                             await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
                         }
                     }
@@ -336,8 +345,9 @@ struct AudioEnvApp: App {
                 scanner.scanAll()
             }
         case "sync":
-            if auth.isAuthenticated, let token = auth.authToken {
+            if auth.isAuthenticated {
                 Task {
+                    guard let token = try? await auth.validToken() else { return }
                     await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
                 }
             }

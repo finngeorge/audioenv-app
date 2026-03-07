@@ -38,6 +38,9 @@ class SyncService: ObservableObject {
 
     // MARK: - Public API
 
+    /// Reference to auth service for token refresh on 401.
+    weak var authService: AuthenticationService?
+
     /// Sync plugins and sessions to the backend.
     func syncToCloud(plugins: [AudioPlugin], sessions: [AudioSession], token: String) async {
         guard !isSyncing else { return }
@@ -47,14 +50,34 @@ class SyncService: ObservableObject {
         logger.info("Starting cloud sync: \(plugins.count) plugins, \(sessions.count) sessions")
 
         do {
+            var currentToken = token
+
             // 1. Register device
-            try await registerDevice(token: token)
+            try await registerDevice(token: currentToken)
 
-            // 2. Sync plugins
-            try await syncPlugins(plugins, token: token)
+            // 2. Sync plugins (with 401 retry)
+            do {
+                try await syncPlugins(plugins, token: currentToken)
+            } catch SyncError.unauthorized {
+                if let refreshedToken = await refreshAndRetry() {
+                    currentToken = refreshedToken
+                    try await syncPlugins(plugins, token: currentToken)
+                } else {
+                    throw SyncError.serverError("Plugin sync failed: authentication expired")
+                }
+            }
 
-            // 3. Sync sessions (enriched with device + project info)
-            try await syncSessions(sessions, token: token)
+            // 3. Sync sessions (with 401 retry)
+            do {
+                try await syncSessions(sessions, token: currentToken)
+            } catch SyncError.unauthorized {
+                if let refreshedToken = await refreshAndRetry() {
+                    currentToken = refreshedToken
+                    try await syncSessions(sessions, token: currentToken)
+                } else {
+                    throw SyncError.serverError("Session sync failed: authentication expired")
+                }
+            }
 
             lastSyncDate = Date()
             logger.info("Cloud sync completed successfully")
@@ -64,6 +87,13 @@ class SyncService: ObservableObject {
         }
 
         isSyncing = false
+    }
+
+    /// Attempt to refresh the auth token via AuthenticationService.
+    private func refreshAndRetry() async -> String? {
+        guard let auth = authService else { return nil }
+        let refreshed = await auth.handleUnauthorized()
+        return refreshed ? auth.authToken : nil
     }
 
     // MARK: - Device registration
@@ -126,49 +156,236 @@ class SyncService: ObservableObject {
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if statusCode == 401 {
+                throw SyncError.unauthorized
+            }
             throw SyncError.serverError("Plugin sync failed with status \(statusCode)")
         }
 
         logger.info("Synced \(plugins.count) plugins")
     }
 
+    // MARK: - Session sync fingerprints
+
+    /// Fingerprint for change detection: path → "modifiedDate:fileSize"
+    private struct SessionFingerprint: Codable {
+        let modifiedDate: TimeInterval  // secondsSince1970
+        let fileSize: UInt64
+    }
+
+    private static let fingerprintURL: URL = {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport.appendingPathComponent("AudioEnv", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("session-sync-fingerprints.json")
+    }()
+
+    private func loadFingerprints() -> [String: SessionFingerprint] {
+        guard let data = try? Data(contentsOf: Self.fingerprintURL),
+              let fingerprints = try? JSONDecoder().decode([String: SessionFingerprint].self, from: data) else {
+            return [:]
+        }
+        return fingerprints
+    }
+
+    private func saveFingerprints(_ fingerprints: [String: SessionFingerprint]) {
+        if let data = try? JSONEncoder().encode(fingerprints) {
+            try? data.write(to: Self.fingerprintURL, options: .atomic)
+        }
+    }
+
     // MARK: - Session sync
 
     private func syncSessions(_ sessions: [AudioSession], token: String) async throws {
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let previousFingerprints = loadFingerprints()
+        let currentFingerprints = Dictionary(uniqueKeysWithValues: sessions.map { session in
+            (session.path, SessionFingerprint(
+                modifiedDate: session.modifiedDate.timeIntervalSince1970,
+                fileSize: session.fileSize
+            ))
+        })
 
-        let sessionPayloads = sessions.compactMap { session -> [String: Any]? in
-            // Compute folder_path: parent directory, stripping /Backups suffix
-            var folderPath = (session.path as NSString).deletingLastPathComponent
+        // Compute diff
+        let currentPaths = Set(currentFingerprints.keys)
+        let previousPaths = Set(previousFingerprints.keys)
+
+        let addedPaths = currentPaths.subtracting(previousPaths)
+        let removedPaths = previousPaths.subtracting(currentPaths)
+        let commonPaths = currentPaths.intersection(previousPaths)
+        let modifiedPaths = commonPaths.filter { path in
+            let curr = currentFingerprints[path]!
+            let prev = previousFingerprints[path]!
+            return curr.fileSize != prev.fileSize
+                || abs(curr.modifiedDate - prev.modifiedDate) > 1.0
+        }
+
+        let changedPaths = addedPaths.union(modifiedPaths)
+
+        // No changes — skip sync entirely
+        if changedPaths.isEmpty && removedPaths.isEmpty {
+            logger.info("Sessions unchanged, skipping sync")
+            return
+        }
+
+        // First sync (no previous fingerprints) → full replace via batched sync
+        if previousFingerprints.isEmpty {
+            logger.info("First session sync, sending all \(sessions.count) sessions")
+            try await syncSessionsFull(sessions, token: token)
+            saveFingerprints(currentFingerprints)
+            return
+        }
+
+        // Delta sync
+        let changedSessions = sessions.filter { changedPaths.contains($0.path) }
+        logger.info("Delta sync: \(changedSessions.count) upserted, \(removedPaths.count) removed (of \(sessions.count) total)")
+
+        let upsertedPayloads = changedSessions.map { buildSessionPayload($0) }
+        let removedKeys = removedPaths.compactMap { path -> [String: Any]? in
+            // Reconstruct the natural key from the path
+            guard let prev = previousFingerprints[path] else { return nil }
+            let sessionName = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+            var folderPath = (path as NSString).deletingLastPathComponent
             if folderPath.lowercased().hasSuffix("/backups") || folderPath.lowercased().hasSuffix("/backup") {
                 folderPath = (folderPath as NSString).deletingLastPathComponent
             }
-
-            var dict: [String: Any] = [
-                "session_name": session.name,
-                "session_format": session.format.rawValue,
-                "file_size_bytes": session.fileSize,
-                "modified_date": dateFormatter.string(from: session.modifiedDate),
-                "is_backup": session.isBackup,
-                "project_name": session.projectDisplayName,
+            // Infer format from extension
+            let ext = (path as NSString).pathExtension.lowercased()
+            let format: String
+            switch ext {
+            case "als": format = "Ableton Live"
+            case "logicx": format = "Logic Pro"
+            case "ptx", "ptf": format = "Pro Tools"
+            default: format = "Ableton Live"
+            }
+            _ = prev // suppress unused warning
+            return [
+                "session_name": sessionName,
+                "session_format": format,
                 "folder_path": folderPath,
             ]
+        }
 
-            // Extract metadata from ParsedProject
-            if let project = session.project {
-                switch project {
-                case .ableton(let ableton):
-                    dict["track_count"] = ableton.tracks.count
-                    dict["plugin_count"] = ableton.usedPlugins.count
-                    dict["sample_count"] = ableton.samplePaths.count
-                    dict["tempo"] = ableton.tempo
-                    // Send enriched plugin objects when available, fall back to string array
-                    let hasPluginInfos = ableton.tracks.contains { $0.pluginInfos != nil && !($0.pluginInfos!.isEmpty) }
-                    if hasPluginInfos {
-                        let allInfos = ableton.tracks.flatMap { $0.pluginInfos ?? [] }
-                        let uniqueInfos = Array(Set(allInfos))
-                        dict["used_plugins"] = uniqueInfos.map { info -> [String: Any] in
+        let payload: [String: Any] = [
+            "device_uuid": deviceUUID,
+            "device_name": deviceName,
+            "upserted": upsertedPayloads,
+            "removed": removedKeys,
+        ]
+
+        let url = URL(string: "\(baseURL)/api/sessions/sync/delta")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if statusCode == 401 {
+                throw SyncError.unauthorized
+            }
+            throw SyncError.serverError("Session delta sync failed with status \(statusCode)")
+        }
+
+        saveFingerprints(currentFingerprints)
+        logger.info("Delta sync complete: \(changedSessions.count) upserted, \(removedPaths.count) removed")
+    }
+
+    /// Full replace sync (batched) for first sync or recovery.
+    private func syncSessionsFull(_ sessions: [AudioSession], token: String) async throws {
+        let sessionPayloads = sessions.map { buildSessionPayload($0) }
+
+        let batchSize = 500
+        let batches = stride(from: 0, to: sessionPayloads.count, by: batchSize).map {
+            Array(sessionPayloads[$0..<min($0 + batchSize, sessionPayloads.count)])
+        }
+
+        for (index, batch) in batches.enumerated() {
+            var wrapper: [String: Any] = [
+                "device_uuid": deviceUUID,
+                "device_name": deviceName,
+                "sessions": batch,
+            ]
+            if index > 0 {
+                wrapper["replace"] = false
+            }
+
+            let url = URL(string: "\(baseURL)/api/sessions/sync")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.httpBody = try JSONSerialization.data(withJSONObject: wrapper)
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if statusCode == 401 {
+                    throw SyncError.unauthorized
+                }
+                throw SyncError.serverError("Session sync batch \(index + 1) failed with status \(statusCode)")
+            }
+
+            logger.info("Synced session batch \(index + 1)/\(batches.count) (\(batch.count) sessions)")
+        }
+    }
+
+    // MARK: - Session payload builder
+
+    private func buildSessionPayload(_ session: AudioSession) -> [String: Any] {
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        var folderPath = (session.path as NSString).deletingLastPathComponent
+        if folderPath.lowercased().hasSuffix("/backups") || folderPath.lowercased().hasSuffix("/backup") {
+            folderPath = (folderPath as NSString).deletingLastPathComponent
+        }
+
+        var dict: [String: Any] = [
+            "session_name": session.name,
+            "session_format": session.format.rawValue,
+            "file_size_bytes": session.fileSize,
+            "modified_date": dateFormatter.string(from: session.modifiedDate),
+            "is_backup": session.isBackup,
+            "project_name": session.projectDisplayName,
+            "folder_path": folderPath,
+        ]
+
+        if let project = session.project {
+            switch project {
+            case .ableton(let ableton):
+                dict["track_count"] = ableton.tracks.count
+                dict["plugin_count"] = ableton.usedPlugins.count
+                dict["sample_count"] = ableton.samplePaths.count
+                dict["tempo"] = ableton.tempo
+                let hasPluginInfos = ableton.tracks.contains { $0.pluginInfos != nil && !($0.pluginInfos!.isEmpty) }
+                if hasPluginInfos {
+                    let allInfos = ableton.tracks.flatMap { $0.pluginInfos ?? [] }
+                    let uniqueInfos = Array(Set(allInfos))
+                    dict["used_plugins"] = uniqueInfos.map { info -> [String: Any] in
+                        var obj: [String: Any] = ["name": info.name, "format": info.format]
+                        if let preset = info.presetName { obj["preset_name"] = preset }
+                        if let mfr = info.manufacturer { obj["manufacturer"] = mfr }
+                        if info.isInstalled { obj["is_installed"] = true }
+                        return obj
+                    }
+                } else {
+                    dict["used_plugins"] = ableton.usedPlugins
+                }
+                if let key = ableton.keyRoot { dict["key_signature"] = key }
+                if let scale = ableton.keyScale { dict["key_scale"] = scale }
+                if let timeSig = ableton.timeSignature { dict["time_signature"] = timeSig }
+                dict["tracks"] = ableton.tracks.enumerated().map { (index, track) -> [String: Any] in
+                    var t: [String: Any] = [
+                        "track_index": index,
+                        "track_name": track.name,
+                        "track_type": track.type.rawValue,
+                        "is_muted": track.isMuted,
+                        "is_solo": track.isSolo,
+                    ]
+                    if let infos = track.pluginInfos, !infos.isEmpty {
+                        t["plugins"] = infos.map { info -> [String: Any] in
                             var obj: [String: Any] = ["name": info.name, "format": info.format]
                             if let preset = info.presetName { obj["preset_name"] = preset }
                             if let mfr = info.manufacturer { obj["manufacturer"] = mfr }
@@ -176,133 +393,69 @@ class SyncService: ObservableObject {
                             return obj
                         }
                     } else {
-                        dict["used_plugins"] = ableton.usedPlugins
+                        t["plugins"] = track.plugins
                     }
-                    // Sync key/scale/time signature (already parsed, previously not sent)
-                    if let key = ableton.keyRoot {
-                        dict["key_signature"] = key
-                    }
-                    if let scale = ableton.keyScale {
-                        dict["key_scale"] = scale
-                    }
-                    if let timeSig = ableton.timeSignature {
-                        dict["time_signature"] = timeSig
-                    }
-                    dict["tracks"] = ableton.tracks.enumerated().map { (index, track) -> [String: Any] in
+                    if let color = track.color { t["color"] = String(color) }
+                    return t
+                }
+            case .logic(let logic):
+                dict["sample_count"] = logic.mediaFiles.count
+                if let tempo = logic.tempo { dict["tempo"] = tempo }
+                if let trackCount = logic.trackCount { dict["track_count"] = trackCount }
+                if let key = logic.songKey { dict["key_signature"] = key }
+                if let scale = logic.songScale { dict["key_scale"] = scale }
+                if let num = logic.timeSignatureNumerator,
+                   let den = logic.timeSignatureDenominator {
+                    dict["time_signature"] = "\(num)/\(den)"
+                }
+                if !logic.pluginHints.isEmpty {
+                    dict["used_plugins"] = logic.pluginHints
+                    dict["plugin_count"] = logic.pluginHints.count
+                }
+                if !logic.trackNames.isEmpty {
+                    dict["tracks"] = logic.trackNames.sorted(by: { $0.key < $1.key }).enumerated().map { (index, entry) -> [String: Any] in
                         var t: [String: Any] = [
                             "track_index": index,
-                            "track_name": track.name,
-                            "track_type": track.type.rawValue,
-                            "is_muted": track.isMuted,
-                            "is_solo": track.isSolo,
+                            "track_name": entry.value,
                         ]
-                        // Send enriched plugin objects per-track when available
-                        if let infos = track.pluginInfos, !infos.isEmpty {
-                            t["plugins"] = infos.map { info -> [String: Any] in
-                                var obj: [String: Any] = ["name": info.name, "format": info.format]
-                                if let preset = info.presetName { obj["preset_name"] = preset }
-                                if let mfr = info.manufacturer { obj["manufacturer"] = mfr }
-                                if info.isInstalled { obj["is_installed"] = true }
-                                return obj
-                            }
-                        } else {
-                            t["plugins"] = track.plugins
-                        }
-                        if let color = track.color {
-                            t["color"] = String(color)
+                        if let plugins = logic.trackPlugins[entry.key], !plugins.isEmpty {
+                            t["plugins"] = plugins
                         }
                         return t
                     }
-                case .logic(let logic):
-                    dict["sample_count"] = logic.mediaFiles.count
-                    if let tempo = logic.tempo {
-                        dict["tempo"] = tempo
+                }
+            case .proTools(let proTools):
+                dict["sample_count"] = proTools.audioFiles.count
+                dict["track_count"] = proTools.trackCount
+                if !proTools.pluginCatalog.isEmpty {
+                    dict["used_plugins"] = proTools.pluginCatalog.map { insert -> [String: Any] in
+                        var obj: [String: Any] = ["name": insert.name, "format": "AAX"]
+                        if !insert.presetName.isEmpty { obj["preset_name"] = insert.presetName }
+                        if !insert.manufacturer.isEmpty { obj["manufacturer"] = insert.manufacturer }
+                        if insert.isInstalled { obj["is_installed"] = true }
+                        return obj
                     }
-                    if let trackCount = logic.trackCount {
-                        dict["track_count"] = trackCount
-                    }
-                    if let key = logic.songKey {
-                        dict["key_signature"] = key
-                    }
-                    if let scale = logic.songScale {
-                        dict["key_scale"] = scale
-                    }
-                    if let num = logic.timeSignatureNumerator,
-                       let den = logic.timeSignatureDenominator {
-                        dict["time_signature"] = "\(num)/\(den)"
-                    }
-                    if !logic.pluginHints.isEmpty {
-                        dict["used_plugins"] = logic.pluginHints
-                        dict["plugin_count"] = logic.pluginHints.count
-                    }
-                    if !logic.trackNames.isEmpty {
-                        dict["tracks"] = logic.trackNames.sorted(by: { $0.key < $1.key }).enumerated().map { (index, entry) -> [String: Any] in
-                            var t: [String: Any] = [
-                                "track_index": index,
-                                "track_name": entry.value,
-                            ]
-                            if let plugins = logic.trackPlugins[entry.key], !plugins.isEmpty {
-                                t["plugins"] = plugins
-                            }
-                            return t
-                        }
-                    }
-                case .proTools(let proTools):
-                    dict["sample_count"] = proTools.audioFiles.count
-                    dict["track_count"] = proTools.trackCount
-                    if !proTools.pluginCatalog.isEmpty {
-                        // Send enriched plugin objects for Pro Tools (data already in PTPluginInsert)
-                        dict["used_plugins"] = proTools.pluginCatalog.map { insert -> [String: Any] in
+                    dict["plugin_count"] = proTools.pluginCatalog.count
+                }
+                dict["tracks"] = proTools.tracks.map { track -> [String: Any] in
+                    [
+                        "track_index": track.index,
+                        "track_name": track.name,
+                        "track_type": track.trackType,
+                        "is_stereo": track.isStereo,
+                        "plugins": track.plugins.map { insert -> [String: Any] in
                             var obj: [String: Any] = ["name": insert.name, "format": "AAX"]
                             if !insert.presetName.isEmpty { obj["preset_name"] = insert.presetName }
                             if !insert.manufacturer.isEmpty { obj["manufacturer"] = insert.manufacturer }
                             if insert.isInstalled { obj["is_installed"] = true }
                             return obj
-                        }
-                        dict["plugin_count"] = proTools.pluginCatalog.count
-                    }
-                    dict["tracks"] = proTools.tracks.map { track -> [String: Any] in
-                        [
-                            "track_index": track.index,
-                            "track_name": track.name,
-                            "track_type": track.trackType,
-                            "is_stereo": track.isStereo,
-                            "plugins": track.plugins.map { insert -> [String: Any] in
-                                var obj: [String: Any] = ["name": insert.name, "format": "AAX"]
-                                if !insert.presetName.isEmpty { obj["preset_name"] = insert.presetName }
-                                if !insert.manufacturer.isEmpty { obj["manufacturer"] = insert.manufacturer }
-                                if insert.isInstalled { obj["is_installed"] = true }
-                                return obj
-                            },
-                        ]
-                    }
+                        },
+                    ]
                 }
             }
-
-            return dict
         }
 
-        // Wrap in device-aware envelope
-        let wrapper: [String: Any] = [
-            "device_uuid": deviceUUID,
-            "device_name": deviceName,
-            "sessions": sessionPayloads,
-        ]
-
-        let url = URL(string: "\(baseURL)/api/sessions/sync")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: wrapper)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw SyncError.serverError("Session sync failed with status \(statusCode)")
-        }
-
-        logger.info("Synced \(sessions.count) sessions")
+        return dict
     }
 
     // MARK: - S3 Config Sync
@@ -495,11 +648,14 @@ class SyncService: ObservableObject {
 
 enum SyncError: Error, LocalizedError {
     case serverError(String)
+    case unauthorized
 
     var errorDescription: String? {
         switch self {
         case .serverError(let message):
             return message
+        case .unauthorized:
+            return "Authentication expired"
         }
     }
 }

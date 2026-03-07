@@ -147,8 +147,8 @@ struct SummaryView: View {
 
                 if auth.isAuthenticated {
                     Button("Sync Now") {
-                        guard let token = auth.authToken else { return }
                         Task {
+                            guard let token = try? await auth.validToken() else { return }
                             await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
                         }
                     }

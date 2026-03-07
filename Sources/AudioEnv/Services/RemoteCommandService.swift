@@ -76,7 +76,8 @@ class RemoteCommandService: ObservableObject {
             case "sync":
                 guard let sync = syncService else { throw RemoteCommandError.serviceUnavailable("SyncService") }
                 guard let scanner = scannerService else { throw RemoteCommandError.serviceUnavailable("ScannerService") }
-                guard let token = authService?.authToken else { throw RemoteCommandError.notAuthenticated }
+                guard let auth = authService,
+                      let token = try? await auth.validToken() else { throw RemoteCommandError.notAuthenticated }
                 await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
 
             case "backup_plugin":

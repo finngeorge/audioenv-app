@@ -217,10 +217,10 @@ class WebSocketService: ObservableObject {
     }
 
     private func triggerDataRefresh() {
-        guard let auth, let sync, let scanner,
-              auth.isAuthenticated, let token = auth.authToken else { return }
+        guard let auth, let sync, let scanner, auth.isAuthenticated else { return }
 
         Task {
+            guard let token = try? await auth.validToken() else { return }
             await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
         }
     }
