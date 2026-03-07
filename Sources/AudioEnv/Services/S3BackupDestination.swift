@@ -23,6 +23,7 @@ class S3BackupDestination: BackupDestination, ObservableObject {
     private let partSize: Int64 = 50 * 1024 * 1024 // 50 MB per part
 
     @Published var currentUpload: String?
+    @Published var uploadProgress: Double = 0 // 0.0 to 1.0
     @Published var uploadSpeed: Double = 0 // bytes per second
 
     // MARK: - BackupDestination Protocol
@@ -99,28 +100,30 @@ class S3BackupDestination: BackupDestination, ObservableObject {
         }
     }
 
-    /// Simple PUT upload for smaller files
+    /// Simple PUT upload for smaller files — streams from disk instead of loading into memory
     private func simpleUpload(filePath: String, remotePath: String) async throws {
         logger.info("🔐 Preparing S3 upload request")
+        let fileURL = URL(fileURLWithPath: filePath)
         let url = URL(string: "\(baseURL)/\(remotePath)")!
         logger.info("🌐 Upload URL: \(url.absoluteString)")
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-
-        // Read file data
-        logger.info("📖 Reading file data from: \(filePath)")
-        let fileData = try Data(contentsOf: URL(fileURLWithPath: filePath))
+        // Read file data for signing (required by AWS Sig V4 — needs content hash)
+        let fileData = try Data(contentsOf: fileURL)
         let sizeStr = ByteCountFormatter.string(fromByteCount: Int64(fileData.count), countStyle: .file)
         logger.info("📦 File size: \(sizeStr)")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
 
         // Sign request (AWS Signature V4)
         logger.info("✍️ Signing with AWS Signature V4")
         signRequest(&request, method: "PUT", path: remotePath, body: fileData)
 
-        // Upload
+        // Upload from file URL to avoid keeping the full Data in memory during transfer
         logger.info("🚀 Sending HTTP PUT to S3")
+        uploadProgress = 0
         let (data, response) = try await URLSession.shared.upload(for: request, from: fileData)
+        uploadProgress = 1.0
 
         guard let httpResponse = response as? HTTPURLResponse else {
             logger.error("❌ Invalid response type received")
@@ -130,7 +133,6 @@ class S3BackupDestination: BackupDestination, ObservableObject {
         logger.info("📨 HTTP Status: \(httpResponse.statusCode)")
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            // Log the error response body for debugging
             if let errorBody = String(data: data, encoding: .utf8) {
                 logger.error("❌ S3 Error Response:")
                 logger.error("\(errorBody)")
@@ -146,6 +148,7 @@ class S3BackupDestination: BackupDestination, ObservableObject {
     private func multipartUpload(filePath: String, remotePath: String, fileSize: Int64) async throws {
         // Step 1: Initiate multipart upload
         let uploadId = try await initiateMultipartUpload(remotePath: remotePath)
+        uploadProgress = 0
 
         // Step 2: Upload parts
         let partCount = Int(ceil(Double(fileSize) / Double(partSize)))
@@ -153,6 +156,8 @@ class S3BackupDestination: BackupDestination, ObservableObject {
 
         let fileHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
         defer { try? fileHandle.close() }
+
+        let startTime = Date()
 
         for partNumber in 1...partCount {
             let offset = Int64(partNumber - 1) * partSize
@@ -170,14 +175,18 @@ class S3BackupDestination: BackupDestination, ObservableObject {
 
             uploadedParts.append((partNumber, etag))
 
-            // Update progress
-            await MainActor.run {
-                _ = Double(partNumber) / Double(partCount)
+            // Update progress and speed
+            uploadProgress = Double(partNumber) / Double(partCount)
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed > 0 {
+                let bytesUploaded = Double(partNumber) * Double(partSize)
+                uploadSpeed = bytesUploaded / elapsed
             }
         }
 
         // Step 3: Complete multipart upload
         try await completeMultipartUpload(remotePath: remotePath, uploadId: uploadId, parts: uploadedParts)
+        uploadProgress = 1.0
     }
 
     // MARK: - S3 Multipart API Calls

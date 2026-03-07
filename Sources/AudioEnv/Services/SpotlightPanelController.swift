@@ -254,6 +254,11 @@ final class SpotlightPanelController: ObservableObject {
                 userInfo: ["projectPath": result.id]
             )
             hide()
+
+        case .open:
+            guard result.type == .project else { break }
+            openInDAW(result)
+            hide()
         }
     }
 

@@ -22,6 +22,7 @@ final class PluginCatalogStore {
     private var byName: [String: PluginCatalogEntry] = [:]
     private var byNormalized: [String: PluginCatalogEntry] = [:]
     private(set) var pluginCount: Int = 0
+    private var loaded = false
 
     /// Resource bundle — tries nested SPM resource bundle, then main bundle.
     private static let resourceBundle: Bundle = {
@@ -44,10 +45,18 @@ final class PluginCatalogStore {
     }()
 
     init() {
+        // Catalog is loaded lazily on first access to avoid blocking the main thread at launch.
+    }
+
+    /// Ensures the plugin catalog JSON has been loaded and lookup dictionaries built.
+    private func ensureLoaded() {
+        guard !loaded else { return }
+        loaded = true
         load()
     }
 
     func lookup(name: String) -> PluginCatalogEntry? {
+        ensureLoaded()
         for candidate in Self.candidateNames(for: name) {
             if let entry = byName[candidate.lowercased()] { return entry }
         }

@@ -22,6 +22,9 @@ final class SpotlightSearchService: ObservableObject {
     /// Currently selected result index (shared with view for quick actions)
     @Published var selectedIndex = 0
 
+    /// Incremented on each reset/show — used to re-trigger text field focus
+    @Published var activationCount = 0
+
     // MARK: - Service References
 
     private weak var scanner: ScannerService?
@@ -74,6 +77,7 @@ final class SpotlightSearchService: ObservableObject {
         parsedInput = .empty
         isSearching = false
         selectedIndex = 0
+        activationCount += 1
         debounceTask?.cancel()
     }
 
@@ -86,7 +90,8 @@ final class SpotlightSearchService: ObservableObject {
         query = searchQuery
         parsedInput = ParsedSpotlightInput(mode: .command, verb: verb, searchQuery: searchQuery)
         if searchQuery.isEmpty {
-            results = []
+            // Show recent actionable items for this verb immediately
+            results = recentItems(for: verb)
         }
     }
 
@@ -108,6 +113,12 @@ final class SpotlightSearchService: ObservableObject {
         // Show go targets immediately for "go" verb without further query
         if parsedInput.verb == .go && parsedInput.searchQuery.isEmpty {
             results = []
+            return
+        }
+
+        // When a verb is active but query is empty, show recent items
+        if let verb = activeVerb, parsedInput.searchQuery.isEmpty {
+            results = recentItems(for: verb)
             return
         }
 
@@ -165,22 +176,38 @@ final class SpotlightSearchService: ObservableObject {
         var groups: [SpotlightResultGroup] = []
 
         if targetTypes.contains(.plugin), let scanner, !q.isEmpty {
-            let matches = scanner.plugins
+            let matchingPlugins = scanner.plugins
                 .filter {
                     $0.name.lowercased().contains(q) ||
                     ($0.manufacturer?.lowercased().contains(q) ?? false) ||
                     ($0.auDescription?.lowercased().contains(q) ?? false)
                 }
-                .sorted { relevanceScore($0.name, query: q) > relevanceScore($1.name, query: q) }
+
+            // Group by plugin name so "Serum" shows once with [VST3, AU, AAX] badges
+            let grouped = Dictionary(grouping: matchingPlugins) { $0.name }
+            let formatOrder = ["AU", "VST3", "VST", "AAX"]
+            let matches = grouped.keys
+                .sorted { relevanceScore($0, query: q) > relevanceScore($1, query: q) }
                 .prefix(8)
-                .map {
-                    SpotlightResult(
-                        id: $0.id.uuidString,
+                .compactMap { name -> SpotlightResult? in
+                    guard let plugins = grouped[name], let first = plugins.first else { return nil }
+                    let sortedPlugins = plugins.sorted { a, b in
+                        (formatOrder.firstIndex(of: a.format.rawValue) ?? 99) <
+                        (formatOrder.firstIndex(of: b.format.rawValue) ?? 99)
+                    }
+                    let formats = sortedPlugins.map(\.format.rawValue)
+                    let variants = sortedPlugins.map {
+                        SpotlightFormatVariant(id: $0.id.uuidString, format: $0.format.rawValue, path: $0.path)
+                    }
+                    return SpotlightResult(
+                        id: first.id.uuidString,
                         type: .plugin,
-                        name: $0.name,
-                        subtitle: $0.manufacturer ?? $0.auDescription,
-                        format: $0.format.rawValue,
-                        relevance: relevanceScore($0.name, query: q)
+                        name: name,
+                        subtitle: first.manufacturer ?? first.auDescription,
+                        format: nil,
+                        relevance: relevanceScore(name, query: q),
+                        formats: formats,
+                        formatVariants: variants
                     )
                 }
             if !matches.isEmpty {
@@ -189,14 +216,18 @@ final class SpotlightSearchService: ObservableObject {
         }
 
         if targetTypes.contains(.project), let scanner, !q.isEmpty {
-            // Group sessions by project and search project names
-            let seen = NSMutableSet()
-            let matches = scanner.sessions
-                .filter {
-                    let name = $0.projectDisplayName.lowercased()
-                    return name.contains(q) || $0.name.lowercased().contains(q)
+            // Exclude backups for "open" verb; sort all by recency
+            let filtered = scanner.sessions
+                .filter { session in
+                    if verb == .open && session.isBackup { return false }
+                    let name = session.projectDisplayName.lowercased()
+                    return name.contains(q) || session.name.lowercased().contains(q)
                 }
-                .sorted { relevanceScore($0.projectDisplayName, query: q) > relevanceScore($1.projectDisplayName, query: q) }
+                .sorted { $0.modifiedDate > $1.modifiedDate }
+
+            // Deduplicate by project group, keeping the first (best-ranked) session per group
+            let seen = NSMutableSet()
+            let matches = filtered
                 .filter { session in
                     let key = session.projectGroupKey
                     if seen.contains(key) { return false }
@@ -211,7 +242,8 @@ final class SpotlightSearchService: ObservableObject {
                         name: $0.projectDisplayName,
                         subtitle: $0.format.rawValue,
                         format: nil,
-                        relevance: relevanceScore($0.projectDisplayName, query: q)
+                        relevance: 1.0,
+                        dawName: $0.format.rawValue
                     )
                 }
             if !matches.isEmpty {
@@ -222,7 +254,7 @@ final class SpotlightSearchService: ObservableObject {
         if targetTypes.contains(.bounce), let bounceService, !q.isEmpty {
             let matches = bounceService.bounces
                 .filter { $0.fileName.lowercased().contains(q) }
-                .sorted { relevanceScore($0.fileName, query: q) > relevanceScore($1.fileName, query: q) }
+                .sorted { $0.fileModifiedAt > $1.fileModifiedAt }
                 .prefix(8)
                 .map {
                     var subtitle: String? = nil
@@ -252,7 +284,7 @@ final class SpotlightSearchService: ObservableObject {
                     $0.name.lowercased().contains(q) ||
                     ($0.description?.lowercased().contains(q) ?? false)
                 }
-                .sorted { relevanceScore($0.name, query: q) > relevanceScore($1.name, query: q) }
+                .sorted { $0.updatedAt > $1.updatedAt }
                 .prefix(8)
                 .map {
                     SpotlightResult(
@@ -261,11 +293,141 @@ final class SpotlightSearchService: ObservableObject {
                         name: $0.name,
                         subtitle: $0.description,
                         format: nil,
-                        relevance: relevanceScore($0.name, query: q)
+                        relevance: 1.0
                     )
                 }
             if !matches.isEmpty {
                 groups.append(SpotlightResultGroup(type: .collection, results: Array(matches)))
+            }
+        }
+
+        return groups
+    }
+
+    // MARK: - Recent Items
+
+    /// Returns recent items for a verb's target types (shown when verb is active but query is empty)
+    private func recentItems(for verb: SpotlightVerb) -> [SpotlightResultGroup] {
+        let targetTypes = verb.targetTypes
+        var groups: [SpotlightResultGroup] = []
+
+        if targetTypes.contains(.bounce), let bounceService {
+            let recents = bounceService.bounces
+                .sorted { $0.fileModifiedAt > $1.fileModifiedAt }
+                .prefix(5)
+                .map { bounce -> SpotlightResult in
+                    var parts: [String] = []
+                    if let bpm = bounce.bpm { parts.append("\(bpm) BPM") }
+                    if let key = bounce.musicalKey { parts.append(key) }
+                    if let stage = bounce.stage { parts.append(stage) }
+                    return SpotlightResult(
+                        id: bounce.id.uuidString, type: .bounce, name: bounce.fileName,
+                        subtitle: parts.isEmpty ? nil : parts.joined(separator: " · "),
+                        format: bounce.format, relevance: 1.0
+                    )
+                }
+            if !recents.isEmpty {
+                groups.append(SpotlightResultGroup(type: .bounce, results: Array(recents)))
+            }
+        }
+
+        if targetTypes.contains(.project), let scanner {
+            let seen = NSMutableSet()
+            let recents = scanner.sessions
+                .filter { !$0.isBackup }
+                .sorted { $0.modifiedDate > $1.modifiedDate }
+                .filter { session in
+                    let key = session.projectGroupKey
+                    if seen.contains(key) { return false }
+                    seen.add(key)
+                    return true
+                }
+                .prefix(5)
+                .map {
+                    SpotlightResult(
+                        id: $0.path, type: .project, name: $0.projectDisplayName,
+                        subtitle: $0.format.rawValue, format: nil, relevance: 1.0,
+                        dawName: $0.format.rawValue
+                    )
+                }
+            if !recents.isEmpty {
+                groups.append(SpotlightResultGroup(type: .project, results: Array(recents)))
+            }
+        }
+
+        if targetTypes.contains(.collection), let collectionService {
+            let recents = collectionService.collections
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(5)
+                .map {
+                    SpotlightResult(
+                        id: $0.id.uuidString, type: .collection, name: $0.name,
+                        subtitle: $0.description, format: nil, relevance: 1.0
+                    )
+                }
+            if !recents.isEmpty {
+                groups.append(SpotlightResultGroup(type: .collection, results: Array(recents)))
+            }
+        }
+
+        return groups
+    }
+
+    /// Returns a preview of recent items across all types (for the empty search state)
+    func recentPreview() -> [SpotlightResultGroup] {
+        var groups: [SpotlightResultGroup] = []
+
+        if let scanner {
+            let seen = NSMutableSet()
+            let recents = scanner.sessions
+                .filter { !$0.isBackup }
+                .sorted { $0.modifiedDate > $1.modifiedDate }
+                .filter { session in
+                    let key = session.projectGroupKey
+                    if seen.contains(key) { return false }
+                    seen.add(key)
+                    return true
+                }
+                .prefix(3)
+                .map {
+                    SpotlightResult(
+                        id: $0.path, type: .project, name: $0.projectDisplayName,
+                        subtitle: $0.format.rawValue, format: nil, relevance: 1.0,
+                        dawName: $0.format.rawValue
+                    )
+                }
+            if !recents.isEmpty {
+                groups.append(SpotlightResultGroup(type: .project, results: Array(recents)))
+            }
+        }
+
+        if let bounceService {
+            let recents = bounceService.bounces
+                .sorted { $0.fileModifiedAt > $1.fileModifiedAt }
+                .prefix(3)
+                .map {
+                    SpotlightResult(
+                        id: $0.id.uuidString, type: .bounce, name: $0.fileName,
+                        subtitle: nil, format: $0.format, relevance: 1.0
+                    )
+                }
+            if !recents.isEmpty {
+                groups.append(SpotlightResultGroup(type: .bounce, results: Array(recents)))
+            }
+        }
+
+        if let collectionService {
+            let recents = collectionService.collections
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(2)
+                .map {
+                    SpotlightResult(
+                        id: $0.id.uuidString, type: .collection, name: $0.name,
+                        subtitle: $0.description, format: nil, relevance: 1.0
+                    )
+                }
+            if !recents.isEmpty {
+                groups.append(SpotlightResultGroup(type: .collection, results: Array(recents)))
             }
         }
 

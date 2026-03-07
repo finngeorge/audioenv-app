@@ -95,10 +95,8 @@ class AuthenticationService: ObservableObject {
         }
     }
 
-    // MARK: - Legacy token migration
+    // MARK: - File-based Token Storage (primary, survives ad-hoc re-signing)
 
-    /// Legacy token storage location used by previous builds.
-    /// We keep this only to migrate old plaintext tokens into Keychain, then delete them.
     private static let tokenStorageURL: URL = {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport.appendingPathComponent("AudioEnv", isDirectory: true)
@@ -109,36 +107,69 @@ class AuthenticationService: ObservableObject {
     private static let accessTokenFile = tokenStorageURL.appendingPathComponent(".auth_token")
     private static let refreshTokenFile = tokenStorageURL.appendingPathComponent(".refresh_token")
 
-    private func loadLegacyTokenFromFile() -> String? {
+    private func loadTokenFromFile() -> String? {
         try? String(contentsOf: Self.accessTokenFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func loadLegacyRefreshTokenFromFile() -> String? {
+    private func loadRefreshTokenFromFile() -> String? {
         try? String(contentsOf: Self.refreshTokenFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func purgeLegacyTokenFiles() {
+    private func saveTokenToFile(_ token: String) {
+        do {
+            try token.write(to: Self.accessTokenFile, atomically: true, encoding: .utf8)
+            logger.info("Access token saved to file")
+        } catch {
+            logger.error("Failed to save access token to file: \(error)")
+        }
+    }
+
+    private func saveRefreshTokenToFile(_ token: String) {
+        do {
+            try token.write(to: Self.refreshTokenFile, atomically: true, encoding: .utf8)
+            logger.info("Refresh token saved to file")
+        } catch {
+            logger.error("Failed to save refresh token to file: \(error)")
+        }
+    }
+
+    private func deleteTokenFiles() {
         try? FileManager.default.removeItem(at: Self.accessTokenFile)
         try? FileManager.default.removeItem(at: Self.refreshTokenFile)
     }
 
-    private func migrateLegacyTokenFilesIfNeeded() {
-        if loadTokenFromKeychain() == nil, let legacyAccess = loadLegacyTokenFromFile(), !legacyAccess.isEmpty {
-            saveTokenToKeychain(legacyAccess)
+    /// Migrate: if Keychain has tokens but files don't, write them to files.
+    /// If files have tokens but Keychain doesn't, write them to Keychain.
+    private func ensureTokensInSync() {
+        let fileAccess = loadTokenFromFile()
+        let fileRefresh = loadRefreshTokenFromFile()
+        let kcAccess = loadKeychainItem(account: "authToken")
+        let kcRefresh = loadKeychainItem(account: "refreshToken")
+
+        // File → Keychain
+        if let fa = fileAccess, !fa.isEmpty, (kcAccess ?? "").isEmpty {
+            saveKeychainItem(account: "authToken", value: fa)
         }
-        if loadRefreshTokenFromKeychain() == nil, let legacyRefresh = loadLegacyRefreshTokenFromFile(), !legacyRefresh.isEmpty {
-            saveRefreshTokenToKeychain(legacyRefresh)
+        if let fr = fileRefresh, !fr.isEmpty, (kcRefresh ?? "").isEmpty {
+            saveKeychainItem(account: "refreshToken", value: fr)
         }
-        purgeLegacyTokenFiles()
+        // Keychain → File
+        if let ka = kcAccess, !ka.isEmpty, (fileAccess ?? "").isEmpty {
+            saveTokenToFile(ka)
+        }
+        if let kr = kcRefresh, !kr.isEmpty, (fileRefresh ?? "").isEmpty {
+            saveRefreshTokenToFile(kr)
+        }
     }
 
     // MARK: - Initialization
 
     init() {
-        // One-time migration from legacy plaintext files to Keychain.
-        migrateLegacyTokenFilesIfNeeded()
+        // Ensure file and Keychain storage are in sync (files survive ad-hoc re-signing)
+        ensureTokensInSync()
 
-        let savedToken = loadTokenFromKeychain()
+        // File-based storage is primary (survives ad-hoc rebuilds)
+        let savedToken = loadTokenFromFile() ?? loadKeychainItem(account: "authToken")
         if let savedToken, !savedToken.isEmpty {
             self.authToken = savedToken
             self.isAuthenticated = true
@@ -342,14 +373,12 @@ class AuthenticationService: ObservableObject {
     func logout() {
         // Note: We do NOT clear S3 config from keychain on logout
         // This allows users to keep their S3 credentials between sessions
-
         isAuthenticated = false
         currentUser = nil
         authToken = nil
         tokenObtainedAt = nil
         deleteTokenFromKeychain()
         deleteRefreshTokenFromKeychain()
-        purgeLegacyTokenFiles()
     }
 
     // MARK: - Token Refresh
@@ -416,14 +445,19 @@ class AuthenticationService: ObservableObject {
 
             // Refresh user profile with new token
             try? await fetchUserProfile()
+        } else if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            logger.error("Token refresh rejected with status \(httpResponse.statusCode)")
+            throw AuthError.serverError("Refresh token expired or revoked")
         } else {
             logger.error("Token refresh failed with status \(httpResponse.statusCode)")
-            throw AuthError.serverError("Token refresh failed")
+            // Throw as a generic error so handleUnauthorized doesn't logout
+            throw URLError(.badServerResponse)
         }
     }
 
     /// Attempt a reactive refresh after receiving a 401 response.
     /// Returns true if refresh succeeded (caller should retry their request).
+    /// Only logs out on a definitive server rejection (401/403), not on network errors.
     func handleUnauthorized() async -> Bool {
         guard loadRefreshTokenFromKeychain() != nil else {
             logout()
@@ -433,9 +467,14 @@ class AuthenticationService: ObservableObject {
         do {
             try await refreshToken()
             return true
-        } catch {
-            logger.warning("Reactive refresh failed, logging out: \(error)")
+        } catch let error as AuthError {
+            // Server explicitly rejected the refresh token — logout
+            logger.warning("Reactive refresh rejected by server, logging out: \(error)")
             logout()
+            return false
+        } catch {
+            // Network error, timeout, etc. — keep tokens, don't force re-login
+            logger.warning("Reactive refresh failed (network error, staying authenticated): \(error)")
             return false
         }
     }
@@ -493,26 +532,30 @@ class AuthenticationService: ObservableObject {
     // MARK: - Keychain
 
     private func saveTokenToKeychain(_ token: String) {
+        saveTokenToFile(token)
         saveKeychainItem(account: "authToken", value: token)
     }
 
     private func loadTokenFromKeychain() -> String? {
-        loadKeychainItem(account: "authToken")
+        loadTokenFromFile() ?? loadKeychainItem(account: "authToken")
     }
 
     private func deleteTokenFromKeychain() {
+        try? FileManager.default.removeItem(at: Self.accessTokenFile)
         deleteKeychainItem(account: "authToken")
     }
 
     private func saveRefreshTokenToKeychain(_ token: String) {
+        saveRefreshTokenToFile(token)
         saveKeychainItem(account: "refreshToken", value: token)
     }
 
     private func loadRefreshTokenFromKeychain() -> String? {
-        loadKeychainItem(account: "refreshToken")
+        loadRefreshTokenFromFile() ?? loadKeychainItem(account: "refreshToken")
     }
 
     private func deleteRefreshTokenFromKeychain() {
+        try? FileManager.default.removeItem(at: Self.refreshTokenFile)
         deleteKeychainItem(account: "refreshToken")
     }
 

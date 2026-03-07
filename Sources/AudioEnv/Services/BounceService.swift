@@ -102,7 +102,7 @@ class BounceService: ObservableObject {
     func fetchFolders(token: String) async {
         do {
             var components = URLComponents(string: "\(baseURL)/api/bounces/folders")!
-            components.queryItems = [URLQueryItem(name: "per_page", value: "10000")]
+            components.queryItems = [URLQueryItem(name: "per_page", value: "200")]
 
             var request = URLRequest(url: components.url!)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -130,7 +130,7 @@ class BounceService: ObservableObject {
 
         do {
             var components = URLComponents(string: "\(baseURL)/api/bounces/")!
-            var queryItems: [URLQueryItem] = [URLQueryItem(name: "per_page", value: "10000")]
+            var queryItems: [URLQueryItem] = [URLQueryItem(name: "per_page", value: "200")]
             if let fid = folderId { queryItems.append(.init(name: "folder_id", value: fid.uuidString)) }
             if let fmt = format { queryItems.append(.init(name: "format", value: fmt)) }
             if let lnk = linked { queryItems.append(.init(name: "linked", value: lnk ? "true" : "false")) }
@@ -335,7 +335,7 @@ class BounceService: ObservableObject {
     func fetchSuggestions(token: String) async {
         do {
             var components = URLComponents(string: "\(baseURL)/api/bounces/suggestions")!
-            components.queryItems = [URLQueryItem(name: "per_page", value: "10000")]
+            components.queryItems = [URLQueryItem(name: "per_page", value: "200")]
 
             var request = URLRequest(url: components.url!)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

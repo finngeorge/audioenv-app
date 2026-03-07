@@ -172,6 +172,12 @@ class SyncService: ObservableObject {
     private struct SessionFingerprint: Codable {
         let modifiedDate: TimeInterval  // secondsSince1970
         let fileSize: UInt64
+
+        /// Returns true if only the modification date changed (fileSize is identical).
+        func isMetadataOnlyChange(comparedTo other: SessionFingerprint) -> Bool {
+            return fileSize == other.fileSize
+                && abs(modifiedDate - other.modifiedDate) > 1.0
+        }
     }
 
     private static let fingerprintURL: URL = {
@@ -220,6 +226,13 @@ class SyncService: ObservableObject {
                 || abs(curr.modifiedDate - prev.modifiedDate) > 1.0
         }
 
+        // Identify metadata-only changes (modifiedDate changed but fileSize is identical)
+        let metadataOnlyPaths = Set(modifiedPaths.filter { path in
+            let curr = currentFingerprints[path]!
+            let prev = previousFingerprints[path]!
+            return prev.isMetadataOnlyChange(comparedTo: curr)
+        })
+
         let changedPaths = addedPaths.union(modifiedPaths)
 
         // No changes — skip sync entirely
@@ -238,9 +251,12 @@ class SyncService: ObservableObject {
 
         // Delta sync
         let changedSessions = sessions.filter { changedPaths.contains($0.path) }
-        logger.info("Delta sync: \(changedSessions.count) upserted, \(removedPaths.count) removed (of \(sessions.count) total)")
+        let metadataOnlyCount = changedSessions.filter { metadataOnlyPaths.contains($0.path) }.count
+        logger.info("Delta sync: \(changedSessions.count) upserted (\(metadataOnlyCount) metadata-only), \(removedPaths.count) removed (of \(sessions.count) total)")
 
-        let upsertedPayloads = changedSessions.map { buildSessionPayload($0) }
+        let upsertedPayloads = changedSessions.map { session in
+            buildSessionPayload(session, metadataOnly: metadataOnlyPaths.contains(session.path))
+        }
         let removedKeys = removedPaths.compactMap { path -> [String: Any]? in
             // Reconstruct the natural key from the path
             guard let prev = previousFingerprints[path] else { return nil }
@@ -347,7 +363,7 @@ class SyncService: ObservableObject {
 
     // MARK: - Session payload builder
 
-    private func buildSessionPayload(_ session: AudioSession) -> [String: Any] {
+    private func buildSessionPayload(_ session: AudioSession, metadataOnly: Bool = false) -> [String: Any] {
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -390,27 +406,29 @@ class SyncService: ObservableObject {
                 if let key = ableton.keyRoot { dict["key_signature"] = key }
                 if let scale = ableton.keyScale { dict["key_scale"] = scale }
                 if let timeSig = ableton.timeSignature { dict["time_signature"] = timeSig }
-                dict["tracks"] = ableton.tracks.enumerated().map { (index, track) -> [String: Any] in
-                    var t: [String: Any] = [
-                        "track_index": index,
-                        "track_name": track.name,
-                        "track_type": track.type.rawValue,
-                        "is_muted": track.isMuted,
-                        "is_solo": track.isSolo,
-                    ]
-                    if let infos = track.pluginInfos, !infos.isEmpty {
-                        t["plugins"] = infos.map { info -> [String: Any] in
-                            var obj: [String: Any] = ["name": info.name, "format": info.format]
-                            if let preset = info.presetName { obj["preset_name"] = preset }
-                            if let mfr = info.manufacturer { obj["manufacturer"] = mfr }
-                            if info.isInstalled { obj["is_installed"] = true }
-                            return obj
+                if !metadataOnly {
+                    dict["tracks"] = ableton.tracks.enumerated().map { (index, track) -> [String: Any] in
+                        var t: [String: Any] = [
+                            "track_index": index,
+                            "track_name": track.name,
+                            "track_type": track.type.rawValue,
+                            "is_muted": track.isMuted,
+                            "is_solo": track.isSolo,
+                        ]
+                        if let infos = track.pluginInfos, !infos.isEmpty {
+                            t["plugins"] = infos.map { info -> [String: Any] in
+                                var obj: [String: Any] = ["name": info.name, "format": info.format]
+                                if let preset = info.presetName { obj["preset_name"] = preset }
+                                if let mfr = info.manufacturer { obj["manufacturer"] = mfr }
+                                if info.isInstalled { obj["is_installed"] = true }
+                                return obj
+                            }
+                        } else {
+                            t["plugins"] = track.plugins
                         }
-                    } else {
-                        t["plugins"] = track.plugins
+                        if let color = track.color { t["color"] = String(color) }
+                        return t
                     }
-                    if let color = track.color { t["color"] = String(color) }
-                    return t
                 }
             case .logic(let logic):
                 dict["sample_count"] = logic.mediaFiles.count
@@ -426,7 +444,7 @@ class SyncService: ObservableObject {
                     dict["used_plugins"] = logic.pluginHints
                     dict["plugin_count"] = logic.pluginHints.count
                 }
-                if !logic.trackNames.isEmpty {
+                if !metadataOnly && !logic.trackNames.isEmpty {
                     dict["tracks"] = logic.trackNames.sorted(by: { $0.key < $1.key }).enumerated().map { (index, entry) -> [String: Any] in
                         var t: [String: Any] = [
                             "track_index": index,
@@ -451,20 +469,22 @@ class SyncService: ObservableObject {
                     }
                     dict["plugin_count"] = proTools.pluginCatalog.count
                 }
-                dict["tracks"] = proTools.tracks.map { track -> [String: Any] in
-                    [
-                        "track_index": track.index,
-                        "track_name": track.name,
-                        "track_type": track.trackType,
-                        "is_stereo": track.isStereo,
-                        "plugins": track.plugins.map { insert -> [String: Any] in
-                            var obj: [String: Any] = ["name": insert.name, "format": "AAX"]
-                            if !insert.presetName.isEmpty { obj["preset_name"] = insert.presetName }
-                            if !insert.manufacturer.isEmpty { obj["manufacturer"] = insert.manufacturer }
-                            if insert.isInstalled { obj["is_installed"] = true }
-                            return obj
-                        },
-                    ]
+                if !metadataOnly {
+                    dict["tracks"] = proTools.tracks.map { track -> [String: Any] in
+                        [
+                            "track_index": track.index,
+                            "track_name": track.name,
+                            "track_type": track.trackType,
+                            "is_stereo": track.isStereo,
+                            "plugins": track.plugins.map { insert -> [String: Any] in
+                                var obj: [String: Any] = ["name": insert.name, "format": "AAX"]
+                                if !insert.presetName.isEmpty { obj["preset_name"] = insert.presetName }
+                                if !insert.manufacturer.isEmpty { obj["manufacturer"] = insert.manufacturer }
+                                if insert.isInstalled { obj["is_installed"] = true }
+                                return obj
+                            },
+                        ]
+                    }
                 }
             }
         }

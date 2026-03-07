@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Command Verbs (mirrors web app's COMMAND_VERBS)
 
@@ -8,14 +9,16 @@ enum SpotlightVerb: String, CaseIterable {
     case go
     case share
     case queue
+    case open
 
     var aliases: [String] {
         switch self {
         case .play: return ["p"]
         case .download: return ["d", "dl"]
-        case .go: return ["g", "open"]
+        case .go: return ["g"]
         case .share: return ["sh"]
         case .queue: return ["q", "add"]
+        case .open: return ["o"]
         }
     }
 
@@ -26,6 +29,7 @@ enum SpotlightVerb: String, CaseIterable {
         case .go: return SpotlightResultType.allCases
         case .share: return [.project]
         case .queue: return [.bounce]
+        case .open: return [.project]
         }
     }
 
@@ -36,6 +40,7 @@ enum SpotlightVerb: String, CaseIterable {
         case .go: return "Go to"
         case .share: return "Share"
         case .queue: return "Add to queue"
+        case .open: return "Open in DAW"
         }
     }
 
@@ -46,6 +51,7 @@ enum SpotlightVerb: String, CaseIterable {
         case .go: return "arrow.right.circle"
         case .share: return "square.and.arrow.up"
         case .queue: return "text.append"
+        case .open: return "pianokeys"
         }
     }
 
@@ -56,6 +62,18 @@ enum SpotlightVerb: String, CaseIterable {
         case .go: return "go <section or item>"
         case .share: return "share <project name>"
         case .queue: return "queue <bounce name>"
+        case .open: return "open <project name>"
+        }
+    }
+
+    var badgeColor: Color {
+        switch self {
+        case .play: return Color(red: 0.145, green: 0.388, blue: 0.922)    // #2563eb
+        case .download: return Color(red: 0.961, green: 0.620, blue: 0.043) // #f59e0b
+        case .go: return Color(red: 0.545, green: 0.361, blue: 0.965)       // #8b5cf6
+        case .share: return Color(red: 0.063, green: 0.725, blue: 0.506)    // #10b981
+        case .queue: return Color(red: 0.145, green: 0.388, blue: 0.922)    // #2563eb
+        case .open: return Color(red: 0.612, green: 0.639, blue: 0.682)     // #9ca3af
         }
     }
 
@@ -103,6 +121,13 @@ enum SpotlightResultType: String, CaseIterable, Identifiable {
 
 // MARK: - Results
 
+/// A single format variant of a plugin (used for expanded sub-items)
+struct SpotlightFormatVariant: Identifiable {
+    let id: String        // plugin UUID
+    let format: String    // e.g. "VST3", "AU"
+    let path: String      // file path for Finder reveal
+}
+
 struct SpotlightResult: Identifiable {
     let id: String
     let type: SpotlightResultType
@@ -110,14 +135,54 @@ struct SpotlightResult: Identifiable {
     let subtitle: String?
     let format: String?
     let relevance: Double
+    /// DAW name for project results (e.g. "Ableton Live", "Logic Pro")
+    let dawName: String?
+    /// All format variants for grouped plugins (e.g. ["VST3", "AU", "AAX"])
+    let formats: [String]
+    /// Format sub-items for expansion (plugin only)
+    let formatVariants: [SpotlightFormatVariant]
 
-    init(id: String, type: SpotlightResultType, name: String, subtitle: String? = nil, format: String? = nil, relevance: Double = 0.7) {
+    init(id: String, type: SpotlightResultType, name: String, subtitle: String? = nil, format: String? = nil, relevance: Double = 0.7, dawName: String? = nil, formats: [String] = [], formatVariants: [SpotlightFormatVariant] = []) {
         self.id = id
         self.type = type
         self.name = name
         self.subtitle = subtitle
         self.format = format
         self.relevance = relevance
+        self.dawName = dawName
+        self.formats = formats
+        self.formatVariants = formatVariants
+    }
+
+    /// Returns the action badge text for a given active verb
+    func actionBadge(for verb: SpotlightVerb?) -> String? {
+        guard let verb else {
+            // Default actions in plain search mode
+            switch type {
+            case .bounce: return "Play"
+            case .project: return dawName.map { "Open in \($0)" }
+            case .plugin: return nil
+            case .collection: return nil
+            }
+        }
+        switch verb {
+        case .play: return "Play"
+        case .download: return "Download"
+        case .go: return "Go"
+        case .share: return "Share"
+        case .queue: return "Queue"
+        case .open: return dawName.map { "Open in \($0)" } ?? "Open"
+        }
+    }
+
+    /// Returns the badge color for a given active verb
+    func actionBadgeColor(for verb: SpotlightVerb?) -> Color {
+        if let verb { return verb.badgeColor }
+        switch type {
+        case .bounce: return SpotlightVerb.play.badgeColor
+        case .project: return SpotlightVerb.open.badgeColor
+        default: return .secondary
+        }
     }
 }
 
