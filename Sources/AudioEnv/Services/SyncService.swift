@@ -648,6 +648,33 @@ class SyncService: ObservableObject {
     // MARK: - Backup Manifest Sync
 
     /// Sync a backup manifest to the backend after successful backup.
+    /// Delete a backup manifest from the backend and get updated storage.
+    /// Returns the new storage_used_bytes, or nil on failure.
+    func deleteBackupManifest(backupId: String, token: String) async -> Int? {
+        let url = URL(string: "\(baseURL)/api/backup/manifests/\(backupId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if statusCode == 200 {
+                logger.info("Backup manifest deleted from backend: \(backupId)")
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let storageUsed = json["storage_used_bytes"] as? Int {
+                    return storageUsed
+                }
+                return 0
+            } else {
+                logger.warning("Manifest delete returned status \(statusCode)")
+            }
+        } catch {
+            logger.error("Failed to delete backup manifest: \(error)")
+        }
+        return nil
+    }
+
     func syncBackupManifest(manifest: BackupManifest, token: String) async {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

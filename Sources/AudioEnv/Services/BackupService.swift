@@ -223,6 +223,10 @@ class BackupService: ObservableObject {
     /// Set by the app layer to sync manifests to the backend.
     var onManifestUploaded: ((BackupManifest) -> Void)?
 
+    /// Callback invoked with the backup ID after a successful deletion.
+    /// Set by the app layer to notify the backend and update storage.
+    var onBackupDeleted: ((String) async -> Void)?
+
     // MARK: – Computed Properties
 
     /// Total storage used across all backups
@@ -1129,18 +1133,21 @@ class BackupService: ObservableObject {
         // List all objects in this backup's prefix
         let objects = try await dest.list(prefix: backup.s3Prefix)
 
-        // Delete all objects (plugins, metadata, etc.)
+        // Delete all objects (projects, bounces, metadata — plugins are in the shared pool)
         for object in objects {
             try await dest.delete(key: object.id)
         }
 
+        // Notify backend to delete the manifest record and recalculate storage
+        await onBackupDeleted?(backup.id)
+
         // Remove from local cache
-        await MainActor.run {
-            availableBackups.removeAll { $0.id == backup.id }
-            // Also remove from plugin index
-            pluginBackupIndex = pluginBackupIndex.mapValues { backupIds in
-                backupIds.filter { $0 != backup.id }
-            }
+        availableBackups.removeAll { $0.id == backup.id }
+        pluginBackupIndex = pluginBackupIndex.mapValues { backupIds in
+            backupIds.filter { $0 != backup.id }
+        }
+        projectBackupIndex = projectBackupIndex.mapValues { backupIds in
+            backupIds.filter { $0 != backup.id }
         }
     }
 

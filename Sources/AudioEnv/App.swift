@@ -19,6 +19,7 @@ struct AudioEnvApp: App {
     @StateObject private var commandService = CommandService()
     @StateObject private var patternService = PatternService()
     @StateObject private var remoteCommand = RemoteCommandService()
+    @StateObject private var activityService = ActivityService()
     @StateObject private var updater = UpdaterService()
     @StateObject private var spotlight = SpotlightPanelController()
     @StateObject private var hotkeyManager = HotkeyManager()
@@ -50,6 +51,7 @@ struct AudioEnvApp: App {
                 .environmentObject(remoteCommand)
                 .environmentObject(updater)
                 .environmentObject(contentShareService)
+                .environmentObject(activityService)
                 .environmentObject(colorTokens)
                 .environmentObject(hotkeyManager)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))
@@ -112,6 +114,16 @@ struct AudioEnvApp: App {
                         guard let token = auth.authToken else { return }
                         Task {
                             await sync.syncBackupManifest(manifest: manifest, token: token)
+                        }
+                    }
+
+                    // Wire up backup deletion callback
+                    backup.onBackupDeleted = { backupId in
+                        guard let token = auth.authToken else { return }
+                        if let updatedStorage = await sync.deleteBackupManifest(backupId: backupId, token: token) {
+                            await MainActor.run {
+                                auth.currentUser?.storageUsedBytes = updatedStorage
+                            }
                         }
                     }
 

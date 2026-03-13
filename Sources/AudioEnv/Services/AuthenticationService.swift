@@ -49,7 +49,7 @@ class AuthenticationService: ObservableObject {
         let email: String
         let username: String
         let subscriptionTier: String
-        let storageUsedBytes: Int
+        var storageUsedBytes: Int
 
         enum CodingKeys: String, CodingKey {
             case id, email, username
