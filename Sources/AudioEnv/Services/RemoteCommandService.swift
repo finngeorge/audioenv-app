@@ -8,6 +8,22 @@ struct RemoteCommandInfo: Identifiable {
     var status: String  // running, completed, failed
 }
 
+/// Info shown to the user when a web-uploaded project arrives and needs a save location.
+struct WebDownloadPrompt: Identifiable {
+    let id = UUID()
+    let filename: String
+    let detectedFormat: SessionFormat?
+    let suggestedPath: String
+    let sessions: [AudioSession]
+    let continuation: CheckedContinuation<WebDownloadPromptResult, Never>
+}
+
+struct WebDownloadPromptResult {
+    let savePath: String
+    let selectedFormat: SessionFormat?
+    let rememberForFormat: Bool
+}
+
 struct RemoteCommandMessage {
     let commandId: String
     let commandType: String
@@ -19,6 +35,7 @@ class RemoteCommandService: ObservableObject {
     private let logger = Logger(subsystem: "com.audioenv.app", category: "RemoteCommand")
 
     @Published var activeCommand: RemoteCommandInfo?
+    @Published var pendingDownloadPrompt: WebDownloadPrompt?
 
     // Service references (set via configure)
     private weak var scannerService: ScannerService?
@@ -138,11 +155,22 @@ class RemoteCommandService: ObservableObject {
                 }
                 let filename = command.payload["filename"] as? String ?? "project.zip"
 
+                // Detect DAW type from filename
+                let detectedFormat = Self.detectSessionFormat(from: filename)
+
+                // Resolve save path: check saved preference, or prompt user
+                let savePath = try await resolveSavePath(
+                    filename: filename,
+                    detectedFormat: detectedFormat,
+                    sessions: scanner.sessions
+                )
+
                 let localPath = try await downloadAndExtractUploadedProject(
                     token: token,
                     fileId: fileId,
                     s3Key: s3Key,
-                    filename: filename
+                    filename: filename,
+                    destinationFolder: savePath
                 )
 
                 // Trigger a scan to pick up the new session
@@ -193,11 +221,74 @@ class RemoteCommandService: ObservableObject {
         return "https://api.audioenv.com"
     }()
 
+    // MARK: - DAW Detection
+
+    static func detectSessionFormat(from filename: String) -> SessionFormat? {
+        let lower = filename.lowercased()
+        if lower.contains(".als") { return .ableton }
+        if lower.contains(".logicx") || lower.contains(".logicpro") { return .logic }
+        if lower.contains(".ptx") || lower.contains(".ptf") || lower.contains(".pts") { return .proTools }
+        // Check common naming patterns
+        if lower.contains("ableton") || lower.contains("live set") || lower.contains("live project") { return .ableton }
+        if lower.contains("logic") { return .logic }
+        if lower.contains("pro tools") || lower.contains("protools") { return .proTools }
+        return nil
+    }
+
+    // MARK: - Save Path Resolution
+
+    private func resolveSavePath(
+        filename: String,
+        detectedFormat: SessionFormat?,
+        sessions: [AudioSession]
+    ) async throws -> String {
+        // 1. Check for a saved path for this DAW type
+        if let format = detectedFormat, let saved = WebDownloadPaths.path(for: format) {
+            if WebDownloadPaths.skipPrompt {
+                return saved
+            }
+        }
+
+        // 2. Build a suggested path: infer from existing sessions or fall back to ~/Music/Projects
+        let suggested: String
+        if let format = detectedFormat, let inferred = WebDownloadPaths.inferPath(for: format, from: sessions) {
+            suggested = inferred
+        } else if let format = detectedFormat, let saved = WebDownloadPaths.path(for: format) {
+            suggested = saved
+        } else {
+            suggested = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Music")
+                .appendingPathComponent("Projects")
+                .path
+        }
+
+        // 3. Prompt the user
+        let result = await withCheckedContinuation { continuation in
+            self.pendingDownloadPrompt = WebDownloadPrompt(
+                filename: filename,
+                detectedFormat: detectedFormat,
+                suggestedPath: suggested,
+                sessions: sessions,
+                continuation: continuation
+            )
+        }
+
+        // 4. Save preference if requested (use user-selected format over auto-detected)
+        let resolvedFormat = result.selectedFormat ?? detectedFormat
+        if result.rememberForFormat, let format = resolvedFormat {
+            WebDownloadPaths.setPath(result.savePath, for: format)
+        }
+
+        pendingDownloadPrompt = nil
+        return result.savePath
+    }
+
     private func downloadAndExtractUploadedProject(
         token: String,
         fileId: String,
         s3Key: String,
-        filename: String
+        filename: String,
+        destinationFolder: String
     ) async throws -> String {
         // 1. Get presigned download URL
         let downloadUrlEndpoint = URL(string: "\(apiBaseURL)/api/upload/download-url")!
@@ -225,13 +316,11 @@ class RemoteCommandService: ObservableObject {
         let (downloadedUrl, _) = try await URLSession.shared.download(from: downloadUrl)
         try FileManager.default.moveItem(at: downloadedUrl, to: tempZipPath)
 
-        // 3. Extract to user's projects folder
-        let projectsFolder = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Music")
-            .appendingPathComponent("Projects")
-        try FileManager.default.createDirectory(at: projectsFolder, withIntermediateDirectories: true)
+        // 3. Extract to the chosen destination
+        let destURL = URL(fileURLWithPath: destinationFolder)
+        try FileManager.default.createDirectory(at: destURL, withIntermediateDirectories: true)
 
-        let extractDir = projectsFolder.appendingPathComponent(
+        let extractDir = destURL.appendingPathComponent(
             filename.replacingOccurrences(of: ".zip", with: "")
         )
 
