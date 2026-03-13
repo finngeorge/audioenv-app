@@ -1,7 +1,47 @@
+import CryptoKit
 import Foundation
 
 /// Shared file system utilities for backup operations
 enum FileSystemHelpers {
+
+    /// Compute a SHA-256 hash of sorted relative file paths within a directory.
+    /// This "structure hash" identifies a project by its file layout, so two
+    /// versions of the same project (with the same files but different content)
+    /// produce the same hash, while differently-structured projects that happen
+    /// to share a name produce different hashes.
+    /// - Parameter path: The root directory to hash
+    /// - Returns: Hex-encoded SHA-256 digest, or nil if path is invalid
+    static func computeStructureHash(_ path: String) -> String? {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+
+        guard let enumerator = fileManager.enumerator(atPath: path) else {
+            return nil
+        }
+
+        var relativePaths: [String] = []
+        for case let file as String in enumerator {
+            // Skip hidden/system files that may change between machines
+            let fileName = (file as NSString).lastPathComponent
+            if fileName.hasPrefix(".") || fileName == ".DS_Store" || fileName == "Thumbs.db" {
+                continue
+            }
+            relativePaths.append(file)
+        }
+
+        // Sort for deterministic ordering
+        relativePaths.sort()
+
+        // Hash the joined paths
+        let joined = relativePaths.joined(separator: "\n")
+        guard let data = joined.data(using: .utf8) else { return nil }
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
 
     /// Recursively calculate the total size of a directory
     /// - Parameter url: The directory URL to calculate

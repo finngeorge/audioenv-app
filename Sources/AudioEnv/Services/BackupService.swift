@@ -132,6 +132,8 @@ struct ProjectBackupItem: Codable {
     let totalSizeBytes: UInt64     // Complete folder size
     let sessionCount: Int          // Number of session files
     let sessions: [SessionBackupItem]
+    let structureHash: String?     // SHA-256 of sorted relative file paths (for version detection)
+    let contentHash: String?       // SHA-256 of the zip file (for exact duplicate detection)
 }
 
 /// Individual session file in a backup
@@ -345,7 +347,7 @@ class BackupService: ObservableObject {
 
         // Track successfully uploaded items
         var uploadedPlugins: [(plugin: AudioPlugin, s3Key: String, checksum: String?)] = []
-        var uploadedProjects: [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date)] = []
+        var uploadedProjects: [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date, structureHash: String?)] = []
         var uploadedBounces: [(bounce: Bounce, s3Key: String)] = []
 
         // Calculate progress splits based on which phases are non-empty
@@ -447,8 +449,8 @@ class BackupService: ObservableObject {
         destination: BackupDestination,
         progressOffset: Double = 0.5,
         progressScale: Double = 0.5
-    ) async -> [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date)] {
-        var uploadedProjects: [(SessionProject, String, String, UInt64, Date)] = []
+    ) async -> [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date, structureHash: String?)] {
+        var uploadedProjects: [(SessionProject, String, String, UInt64, Date, String?)] = []
 
         let total = max(projects.count, 1)
         for (i, project) in projects.enumerated() {
@@ -479,6 +481,9 @@ class BackupService: ObservableObject {
                 continue
             }
 
+            // Compute structure hash for version tracking
+            let structureHash = FileSystemHelpers.computeStructureHash(projectPath)
+
             // Generate S3 key
             let s3Key = BackupPath.projectZipKey(
                 userId: userId,
@@ -490,7 +495,7 @@ class BackupService: ObservableObject {
                 // Upload entire project folder (S3BackupDestination will zip it)
                 try await destination.upload(localPath: projectPath, remotePath: s3Key)
                 uploadLog.append(BackupLogEntry(path: projectPath, remote: s3Key, status: .success))
-                uploadedProjects.append((project, projectPath, s3Key, folderSize, modDate))
+                uploadedProjects.append((project, projectPath, s3Key, folderSize, modDate, structureHash))
             } catch {
                 let detail = Self.detailedErrorMessage(error)
                 uploadLog.append(BackupLogEntry(path: projectPath, remote: s3Key, status: .failed(detail)))
@@ -751,7 +756,7 @@ class BackupService: ObservableObject {
         backupName: String,
         scopeDescription: String,
         uploadedPlugins: [(plugin: AudioPlugin, s3Key: String, checksum: String?)],
-        uploadedProjects: [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date)],
+        uploadedProjects: [(project: SessionProject, path: String, s3Key: String, size: UInt64, modDate: Date, structureHash: String?)],
         uploadedBounces: [(bounce: Bounce, s3Key: String)] = [],
         destination: BackupDestination
     ) async {
@@ -771,7 +776,7 @@ class BackupService: ObservableObject {
 
         // Build project items
         let projectItems = uploadedProjects.map { item in
-            let (project, path, s3Key, size, modDate) = item
+            let (project, path, s3Key, size, modDate, structureHash) = item
 
             // Build session items for this project
             let sessionItems = project.sessions.map { session in
@@ -806,7 +811,9 @@ class BackupService: ObservableObject {
                 lastModified: modDate,
                 totalSizeBytes: size,
                 sessionCount: project.sessions.count,
-                sessions: sessionItems
+                sessions: sessionItems,
+                structureHash: structureHash,
+                contentHash: nil  // Zip is created and cleaned up during upload; content hash requires pipeline changes
             )
         }
 
