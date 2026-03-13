@@ -1026,12 +1026,15 @@ class SessionMonitorService: ObservableObject {
                         activeSessions[i].format == .ableton &&
                         activeSessions[i].projectPath != currentProject
                     }
+                    // Collect closed sessions for Save As detection
+                    var closedSessions: [LiveSession] = []
                     for i in staleSessions.reversed() {
                         var session = activeSessions.remove(at: i)
                         session.closedAt = Date()
                         logger.info("Session closed (project switched): \(session.projectName)")
                         syncSessionToAPI(session)
                         recentSessions.insert(session, at: 0)
+                        closedSessions.append(session)
                     }
 
                     // Add the current project if it's not already tracked
@@ -1039,13 +1042,37 @@ class SessionMonitorService: ObservableObject {
                        !activeSessions.contains(where: { $0.projectPath == path }),
                        FileManager.default.fileExists(atPath: path) {
                         let name = Self.projectName(from: path)
-                        let session = LiveSession(
+
+                        // Save As detection: check if the new project is a version
+                        // of a just-closed session (same directory, same base name)
+                        var relatedPath: String? = nil
+                        var inheritedSnapshot: SessionSnapshot? = nil
+                        let newDir = (path as NSString).deletingLastPathComponent
+                        let newBase = Self.stripVersionSuffix(from: (path as NSString).lastPathComponent)
+
+                        for closed in closedSessions {
+                            let closedDir = (closed.projectPath as NSString).deletingLastPathComponent
+                            let closedBase = Self.stripVersionSuffix(from: (closed.projectPath as NSString).lastPathComponent)
+                            if newDir == closedDir && newBase == closedBase {
+                                relatedPath = closed.projectPath
+                                inheritedSnapshot = closed.snapshots.last
+                                logger.info("Save As detected: \(closed.projectName) → \(name)")
+                                break
+                            }
+                        }
+
+                        var session = LiveSession(
                             projectPath: path,
                             projectName: name,
                             format: daw.format,
                             dawPID: daw.pid,
-                            openedAt: openedAt
+                            openedAt: openedAt,
+                            relatedProjectPath: relatedPath
                         )
+                        // Copy last snapshot from closed session for cross-version diffing
+                        if let snapshot = inheritedSnapshot {
+                            session.snapshots.append(snapshot)
+                        }
                         activeSessions.append(session)
                         logger.info("Session opened (from log poll): \(name)")
                         captureInitialSnapshot(projectPath: path, format: daw.format)
@@ -1068,6 +1095,20 @@ class SessionMonitorService: ObservableObject {
     private nonisolated static func projectName(from path: String) -> String {
         let filename = (path as NSString).lastPathComponent
         return (filename as NSString).deletingPathExtension
+    }
+
+    /// Strip version suffix from a filename for Save As grouping.
+    /// e.g. "findU 1.2.als" → "findU.als", "My Song v3.als" → "My Song.als"
+    private nonisolated static func stripVersionSuffix(from filename: String) -> String {
+        let name = (filename as NSString).deletingPathExtension
+        let ext = (filename as NSString).pathExtension
+        // Strip trailing version patterns: " 1.2", " v3", " 1.2.3"
+        let stripped = name.replacingOccurrences(
+            of: #"\s+v?\d+(\.\d+)*$"#,
+            with: "",
+            options: .regularExpression
+        )
+        return ext.isEmpty ? stripped : "\(stripped).\(ext)"
     }
 
     /// Get the active session for a given project path.

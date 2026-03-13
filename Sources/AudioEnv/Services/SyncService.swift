@@ -596,6 +596,10 @@ class SyncService: ObservableObject {
             payload["closed_at"] = dateFormatter.string(from: closedAt)
         }
 
+        if let relatedPath = session.relatedProjectPath {
+            payload["related_project_path"] = relatedPath
+        }
+
         if !session.snapshots.isEmpty {
             payload["snapshots"] = session.snapshots.map { snapshot -> [String: Any] in
                 var dict: [String: Any] = [
@@ -607,6 +611,16 @@ class SyncService: ObservableObject {
                 if let tempo = snapshot.tempo { dict["tempo"] = tempo }
                 if let key = snapshot.keySignature { dict["key_signature"] = key }
                 if let ts = snapshot.timeSignature { dict["time_signature"] = ts }
+                if let names = snapshot.pluginNames { dict["plugin_names"] = names }
+                if let tp = snapshot.trackPlugins {
+                    dict["track_plugins"] = tp.map { [$0.pluginName, $0.trackName, $0.trackType] }
+                }
+                if let c = snapshot.audioTrackCount { dict["audio_track_count"] = c }
+                if let c = snapshot.midiTrackCount { dict["midi_track_count"] = c }
+                if let c = snapshot.returnTrackCount { dict["return_track_count"] = c }
+                if let c = snapshot.clipCount { dict["clip_count"] = c }
+                if let c = snapshot.sampleCount { dict["sample_count"] = c }
+                if let v = snapshot.abletonVersion { dict["ableton_version"] = v }
                 return dict
             }
         }

@@ -71,8 +71,9 @@ struct LiveSession: Identifiable, Codable {
     var newAudioFiles: [String]
     var newBounces: [String]
     var snapshots: [SessionSnapshot]
+    var relatedProjectPath: String?
 
-    init(projectPath: String, projectName: String, format: SessionFormat, dawPID: Int32, openedAt: Date? = nil) {
+    init(projectPath: String, projectName: String, format: SessionFormat, dawPID: Int32, openedAt: Date? = nil, relatedProjectPath: String? = nil) {
         self.id = UUID()
         self.projectPath = projectPath
         self.projectName = projectName
@@ -89,6 +90,7 @@ struct LiveSession: Identifiable, Codable {
         self.newAudioFiles = []
         self.newBounces = []
         self.snapshots = []
+        self.relatedProjectPath = relatedProjectPath
     }
 
     /// Duration the session has been open.
