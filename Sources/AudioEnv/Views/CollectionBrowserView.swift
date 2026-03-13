@@ -13,6 +13,7 @@ struct CollectionBrowserView: View {
     @State private var renameText = ""
     @State private var collectionToDelete: AudioCollection?
     @State private var showDeleteConfirmation = false
+    @State private var shareTarget: ShareTarget?
 
     private var filteredCollections: [AudioCollection] {
         if search.isEmpty { return collectionService.collections }
@@ -91,6 +92,16 @@ struct CollectionBrowserView: View {
                         .tag(collection)
                         .contextMenu {
                             Button {
+                                shareTarget = ShareTarget(
+                                    entityType: "collection",
+                                    entityId: collection.id.uuidString,
+                                    entityName: collection.name
+                                )
+                            } label: {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+
+                            Button {
                                 renameText = collection.name
                                 renamingCollectionId = collection.id
                             } label: {
@@ -140,6 +151,9 @@ struct CollectionBrowserView: View {
         }
         .sheet(isPresented: $showNewCollectionSheet) {
             NewCollectionSheet()
+        }
+        .sheet(item: $shareTarget) { target in
+            ShareSheet(entityType: target.entityType, entityId: target.entityId, entityName: target.entityName)
         }
     }
 

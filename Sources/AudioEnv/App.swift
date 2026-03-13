@@ -22,6 +22,7 @@ struct AudioEnvApp: App {
     @StateObject private var updater = UpdaterService()
     @StateObject private var spotlight = SpotlightPanelController()
     @StateObject private var hotkeyManager = HotkeyManager()
+    @StateObject private var contentShareService = ContentShareService()
     @StateObject private var colorTokens = ColorTokens.shared
 
     @Environment(\.scenePhase) private var scenePhase
@@ -48,6 +49,7 @@ struct AudioEnvApp: App {
                 .environmentObject(patternService)
                 .environmentObject(remoteCommand)
                 .environmentObject(updater)
+                .environmentObject(contentShareService)
                 .environmentObject(colorTokens)
                 .environmentObject(hotkeyManager)
                 .handlesExternalEvents(preferring: Set(arrayLiteral: "*"), allowing: Set(arrayLiteral: "*"))

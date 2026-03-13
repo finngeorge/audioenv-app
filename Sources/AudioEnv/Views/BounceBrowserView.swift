@@ -37,6 +37,7 @@ struct BounceBrowserView: View {
     @State private var bpmMax: String = ""
     @State private var versionFilter: Int? = nil
     @State private var showMetadataFilters = false
+    @State private var shareTarget: ShareTarget?
 
     // Dynamic filter options derived from current bounces
     @State private var availableKeys: [String] = []
@@ -280,6 +281,17 @@ struct BounceBrowserView: View {
                             audioPlayer.play(bounce: bounce)
                         }
                     }
+                    .contextMenu {
+                        Button {
+                            shareTarget = ShareTarget(
+                                entityType: "bounce",
+                                entityId: bounce.id.uuidString,
+                                entityName: bounce.fileName
+                            )
+                        } label: {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -309,6 +321,9 @@ struct BounceBrowserView: View {
         }
         .sheet(isPresented: $showLinkFolderPrompt) {
             LinkBounceFolderSheet()
+        }
+        .sheet(item: $shareTarget) { target in
+            ShareSheet(entityType: target.entityType, entityId: target.entityId, entityName: target.entityName)
         }
         .onChange(of: search) { _, _ in refilter() }
         .onChange(of: formatFilter) { _, _ in refilter() }

@@ -9,6 +9,7 @@ struct SessionBrowserView: View {
     @Binding var formatFilter: SessionFormat?
     @State   private var search       = ""
     @State   private var projects: [SessionProject] = []
+    @State   private var shareTarget: ShareTarget?
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
@@ -63,6 +64,17 @@ struct SessionBrowserView: View {
                             ProjectRow(project: project)
                                 .tag(project)
                                 .id(project.id)
+                                .contextMenu {
+                                    Button {
+                                        shareTarget = ShareTarget(
+                                            entityType: "project",
+                                            entityId: project.id,
+                                            entityName: project.name
+                                        )
+                                    } label: {
+                                        Label("Share", systemImage: "square.and.arrow.up")
+                                    }
+                                }
                         }
                     }
                     .listStyle(.inset)
@@ -83,6 +95,9 @@ struct SessionBrowserView: View {
         .onChange(of: formatFilter) { _, _ in refilter() }
         .onChange(of: scanner.sessions) { _, _ in refilter() }
         .onAppear { refilter() }
+        .sheet(item: $shareTarget) { target in
+            ShareSheet(entityType: target.entityType, entityId: target.entityId, entityName: target.entityName)
+        }
     }
 
     private func refilter() {

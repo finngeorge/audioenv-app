@@ -27,6 +27,7 @@ struct CollectionDetailView: View {
     @State private var isLoadingProjects = false
     @State private var isLoadingBounces = false
     @State private var showSharePopup = false
+    @State private var shareTarget: ShareTarget?
     @State private var stackBounceFormats = false
     @State private var expandedBounceGroups: Set<String> = []
     @State private var bounceSortOrder: BounceSortOrder = .newestFirst
@@ -154,6 +155,9 @@ struct CollectionDetailView: View {
         .sheet(isPresented: $showSmartQuerySheet) {
             SmartWatchSheet(collection: collection)
         }
+        .sheet(item: $shareTarget) { target in
+            ShareSheet(entityType: target.entityType, entityId: target.entityId, entityName: target.entityName)
+        }
         .confirmationDialog(
             backupConfirmationTitle,
             isPresented: $showBackupConfirmation,
@@ -277,6 +281,20 @@ struct CollectionDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                 }
+
+                // Share with another user
+                Button {
+                    shareTarget = ShareTarget(
+                        entityType: "collection",
+                        entityId: collectionId.uuidString,
+                        entityName: collection.name
+                    )
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
 
                 // Copy Link (only visible after backup exists)
                 if hasExistingBackup(for: collection) {
