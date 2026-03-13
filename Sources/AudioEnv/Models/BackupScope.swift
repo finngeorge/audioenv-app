@@ -131,40 +131,40 @@ struct BackupScopeStats {
 
 /// Extension to calculate stats for a scope
 extension BackupScope {
-    @MainActor func calculateStats(scanner: ScannerService) -> BackupScopeStats {
-        let (plugins, projects) = self.resolve(scanner: scanner)
+    @MainActor func calculateStats(scanner: ScannerService, matchUsedFormatsOnly: Bool = true) async -> BackupScopeStats {
+        let (plugins, projects) = self.resolve(scanner: scanner, matchUsedFormatsOnly: matchUsedFormatsOnly)
 
-        let pluginSize = plugins.reduce(into: UInt64(0)) { result, plugin in
-            result += getPluginSize(plugin)
-        }
-
-        // Calculate entire project folder sizes (not just session files)
-        let projectSize = projects.reduce(into: UInt64(0)) { result, project in
-            guard let firstSession = project.sessions.first else { return }
-            let projectPath = FileSystemHelpers.getProjectFolderPath(from: firstSession)
-            result += FileSystemHelpers.calculateDirectorySize(projectPath)
-        }
-
+        // Capture paths for off-thread file I/O
+        let pluginPaths = plugins.map { $0.path }
+        let projectPaths = projects.compactMap { $0.sessions.first }.map { FileSystemHelpers.getProjectFolderPath(from: $0) }
         let sessionCount = projects.flatMap(\.sessions).count
 
-        // Calculate bounce sizes for collection scope
-        let bounces: [Bounce]
-        let bounceSize: UInt64
-        if case .collection(_, _, _, let collectionBounces) = self {
-            bounces = collectionBounces
-            bounceSize = collectionBounces.reduce(into: UInt64(0)) { result, bounce in
+        let collectionBounces: [Bounce]
+        if case .collection(_, _, _, let bounces) = self {
+            collectionBounces = bounces
+        } else {
+            collectionBounces = []
+        }
+
+        // Heavy file I/O runs off the main thread
+        let (pluginSize, projectSize, bounceSize) = await Task.detached {
+            let pSize = pluginPaths.reduce(into: UInt64(0)) { result, path in
+                result += Self.getPathSize(path)
+            }
+            let prSize = projectPaths.reduce(into: UInt64(0)) { result, path in
+                result += FileSystemHelpers.calculateDirectorySize(path)
+            }
+            let bSize = collectionBounces.reduce(into: UInt64(0)) { result, bounce in
                 result += UInt64(bounce.fileSizeBytes)
             }
-        } else {
-            bounces = []
-            bounceSize = 0
-        }
+            return (pSize, prSize, bSize)
+        }.value
 
         return BackupScopeStats(
             pluginCount: plugins.count,
             projectCount: projects.count,
             sessionCount: sessionCount,
-            bounceCount: bounces.count,
+            bounceCount: collectionBounces.count,
             totalSize: pluginSize + projectSize + bounceSize,
             pluginSize: pluginSize,
             projectSize: projectSize,
@@ -172,25 +172,23 @@ extension BackupScope {
         )
     }
 
-    /// Get the size of a plugin bundle by recursively summing all files
-    private func getPluginSize(_ plugin: AudioPlugin) -> UInt64 {
+    /// Get the size of a file or bundle at a path by recursively summing all files
+    static func getPathSize(_ path: String) -> UInt64 {
         let fileManager = FileManager.default
         var totalSize: UInt64 = 0
 
-        // Check if path is a directory (bundle)
         var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: plugin.path, isDirectory: &isDirectory) else {
+        guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {
             return 0
         }
 
         if isDirectory.boolValue {
-            // Recursively calculate total size of all files in the bundle
-            guard let enumerator = fileManager.enumerator(atPath: plugin.path) else {
+            guard let enumerator = fileManager.enumerator(atPath: path) else {
                 return 0
             }
 
             for case let file as String in enumerator {
-                let filePath = (plugin.path as NSString).appendingPathComponent(file)
+                let filePath = (path as NSString).appendingPathComponent(file)
                 if let attrs = try? fileManager.attributesOfItem(atPath: filePath),
                    let fileSize = attrs[.size] as? UInt64,
                    attrs[.type] as? FileAttributeType == .typeRegular {
@@ -198,8 +196,7 @@ extension BackupScope {
                 }
             }
         } else {
-            // Single file
-            if let attrs = try? fileManager.attributesOfItem(atPath: plugin.path),
+            if let attrs = try? fileManager.attributesOfItem(atPath: path),
                let size = attrs[.size] as? UInt64 {
                 totalSize = size
             }
@@ -208,33 +205,76 @@ extension BackupScope {
         return totalSize
     }
 
-    /// Resolve this scope into concrete plugins and projects
-    @MainActor func resolve(scanner: ScannerService) -> (plugins: [AudioPlugin], projects: [SessionProject]) {
+    /// Resolve this scope into concrete plugins and projects.
+    /// When `matchUsedFormatsOnly` is true (default), only the plugin format actually used
+    /// in the project (AU/VST/VST3/AAX) is included rather than all installed formats.
+    @MainActor func resolve(scanner: ScannerService, matchUsedFormatsOnly: Bool = true) -> (plugins: [AudioPlugin], projects: [SessionProject]) {
         switch self {
         case .everything:
             let projects = SessionProject.groupSessions(scanner.sessions)
             return (scanner.plugins, projects)
 
         case .projectWithDependencies(let project):
-            // Get all plugins used in this project's sessions
-            let usedPluginNames = Set(project.sessions.flatMap { session -> [String] in
-                guard let parsedProject = session.project else { return [] }
+            // Collect structured plugin info (with format) from parsed sessions
+            var pluginInfos: [AbletonPluginInfo] = []
+            var pluginNames: Set<String> = []
+
+            for session in project.sessions {
+                guard let parsedProject = session.project else { continue }
                 switch parsedProject {
                 case .ableton(let abletonProject):
-                    return abletonProject.usedPlugins
+                    // Prefer structured pluginInfos from tracks (has format data)
+                    for track in abletonProject.tracks {
+                        if let infos = track.pluginInfos {
+                            pluginInfos.append(contentsOf: infos)
+                        }
+                    }
+                    pluginNames.formUnion(abletonProject.usedPlugins)
                 case .logic(_), .proTools(_):
-                    // Logic and Pro Tools parsing doesn't extract plugin info yet
-                    return []
+                    break
                 }
-            })
+            }
 
-            // Match plugin names to actual plugins (fuzzy match)
+            // Build a set of (name, format) pairs for format-aware matching
+            let usedFormats: [String: Set<String>] = {
+                var map: [String: Set<String>] = [:]
+                for info in pluginInfos {
+                    let normalized = info.name.lowercased()
+                    let fmt = info.format.uppercased()
+                        .replacingOccurrences(of: "VST2", with: "VST")
+                    map[normalized, default: []].insert(fmt)
+                }
+                return map
+            }()
+
+            // Match plugin names to actual plugins
             let usedPlugins = scanner.plugins.filter { plugin in
                 let pluginName = plugin.name.lowercased()
-                return usedPluginNames.contains { usedName in
+                let nameMatch = pluginNames.contains { usedName in
                     let name = usedName.lowercased()
                     return name.contains(pluginName) || pluginName.contains(name)
                 }
+                guard nameMatch else { return false }
+
+                // If format-aware matching is enabled and we have format data, filter by format
+                if matchUsedFormatsOnly && !usedFormats.isEmpty {
+                    // Check if any used plugin name matches this plugin AND uses its format
+                    let pluginFmt = plugin.format.rawValue.uppercased()
+                    for (usedName, formats) in usedFormats {
+                        let nameMatches = usedName.contains(pluginName) || pluginName.contains(usedName)
+                        if nameMatches && formats.contains(pluginFmt) {
+                            return true
+                        }
+                    }
+                    // Name matched but format didn't — check if we have format data for this plugin
+                    // If no format info exists for this plugin name, include it (safe fallback)
+                    let hasFormatData = usedFormats.keys.contains { key in
+                        key.contains(pluginName) || pluginName.contains(key)
+                    }
+                    return !hasFormatData
+                }
+
+                return true
             }
             return (usedPlugins, [project])
 

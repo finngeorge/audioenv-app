@@ -39,6 +39,7 @@ struct RemoteObject: Identifiable {
 /// Outcome of a single upload attempt.
 enum BackupStatus {
     case success
+    case skipped(String)
     case failed(String)
 }
 
@@ -160,6 +161,7 @@ struct BackupListItem: Identifiable, Hashable {
     let createdAt: Date
     let pluginCount: Int
     let projectCount: Int
+    let projectNames: [String]  // Names of projects in this backup
     let totalSize: UInt64
     let s3Prefix: String        // For downloading
 
@@ -212,6 +214,7 @@ class BackupService: ObservableObject {
     @Published private(set) var availableBackups: [BackupListItem] = []     /// List of backups in S3
     @Published private(set) var isLoadingBackups: Bool             = false
     @Published private(set) var pluginBackupIndex: [String: [String]] = [:] /// pluginKey -> [backupId]
+    @Published private(set) var projectBackupIndex: [String: [String]] = [:] /// projectName -> [backupId]
 
     /// Current authenticated user ID (set by authentication service)
     var userId: String?
@@ -230,6 +233,16 @@ class BackupService: ObservableObject {
     /// Formatted total storage for display
     var formattedTotalStorage: String {
         ByteCountFormatter.string(fromByteCount: Int64(totalStorageUsed), countStyle: .file)
+    }
+
+    /// Check if a project has any backups
+    func isProjectBackedUp(_ projectName: String) -> Bool {
+        !(projectBackupIndex[projectName]?.isEmpty ?? true)
+    }
+
+    /// Number of backups containing a given project
+    func backupCount(forProject projectName: String) -> Int {
+        projectBackupIndex[projectName]?.count ?? 0
     }
 
     // MARK: – Configuration
@@ -355,27 +368,42 @@ class BackupService: ObservableObject {
         let phaseWeight = phaseCount > 0 ? 1.0 / Double(phaseCount) : 1.0
         var currentPhase = 0
 
-        // Phase 1: Upload plugins
+        // Phase 1: Upload plugins to shared pool (deduplicated across all backups)
         if !plugins.isEmpty {
             let offset = Double(currentPhase) * phaseWeight
             let total = max(plugins.count, 1)
-            for (i, plugin) in plugins.enumerated() {
-                let checksum = Self.sha256Checksum(forPluginAt: plugin.path)
-                let remote = BackupPath.pluginKey(
-                    userId: userId,
-                    backupId: backupId,
-                    checksum: checksum ?? UUID().uuidString,
-                    pluginName: plugin.name
-                )
 
-                do {
-                    try await dest.upload(localPath: plugin.path, remotePath: remote)
-                    uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .success))
+            // Load existing shared plugin checksums once
+            let existingChecksums: Set<String> = await {
+                let prefix = BackupPath.sharedPluginsPrefix(userId: userId)
+                let existing = (try? await dest.list(prefix: prefix)) ?? []
+                return Set(existing.map { obj in
+                    // Extract checksum from key like "users/{id}/plugins/{checksum}.zip"
+                    let filename = (obj.id as NSString).lastPathComponent
+                    return (filename as NSString).deletingPathExtension
+                })
+            }()
+
+            for (i, plugin) in plugins.enumerated() {
+                let pluginPath = plugin.path
+                let checksum = await Task.detached { Self.sha256Checksum(forPluginAt: pluginPath) }.value
+                let checksumOrId = checksum ?? UUID().uuidString
+                let remote = BackupPath.sharedPluginKey(userId: userId, checksum: checksumOrId)
+
+                if let checksum = checksum, existingChecksums.contains(checksum) {
+                    // Plugin already in shared pool — just reference it
+                    uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .skipped("Already in plugin pool")))
                     uploadedPlugins.append((plugin, remote, checksum))
-                } catch {
-                    let detail = Self.detailedErrorMessage(error)
-                    uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .failed(detail)))
-                    lastError = detail
+                } else {
+                    do {
+                        try await dest.upload(localPath: plugin.path, remotePath: remote)
+                        uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .success))
+                        uploadedPlugins.append((plugin, remote, checksum))
+                    } catch {
+                        let detail = Self.detailedErrorMessage(error)
+                        uploadLog.append(BackupLogEntry(path: plugin.path, remote: remote, status: .failed(detail)))
+                        lastError = detail
+                    }
                 }
                 uploadProgress = offset + phaseWeight * Double(i + 1) / Double(total)
             }
@@ -423,13 +451,17 @@ class BackupService: ObservableObject {
             )
         }
 
-        // Set success message
+        // Set success message and update indexes
         let allPluginsOk = uploadedPlugins.count == plugins.count
         let allProjectsOk = uploadedProjects.count == projects.count
         let allBouncesOk = uploadedBounces.count == bounces.count
         if allPluginsOk && allProjectsOk && allBouncesOk {
             lastSuccessfulBackup = backupName
             lastError = nil
+            // Update project backup index immediately so UI reflects backup state
+            for uploaded in uploadedProjects {
+                projectBackupIndex[uploaded.project.name, default: []].append(backupId)
+            }
         }
 
         isUploading = false
@@ -474,15 +506,17 @@ class BackupService: ObservableObject {
                 continue
             }
 
-            // Calculate folder size and modification date
-            let folderSize = FileSystemHelpers.calculateDirectorySize(projectPath)
-            guard let modDate = FileSystemHelpers.getDirectoryModificationDate(projectPath) else {
+            // Calculate folder size, modification date, and structure hash off the main thread
+            let (folderSize, modDateOpt, structureHash) = await Task.detached {
+                let size = FileSystemHelpers.calculateDirectorySize(projectPath)
+                let mod = FileSystemHelpers.getDirectoryModificationDate(projectPath)
+                let hash = FileSystemHelpers.computeStructureHash(projectPath)
+                return (size, mod, hash)
+            }.value
+            guard let modDate = modDateOpt else {
                 logger.warning("Skipping project '\(project.name)' - cannot read modification date")
                 continue
             }
-
-            // Compute structure hash for version tracking
-            let structureHash = FileSystemHelpers.computeStructureHash(projectPath)
 
             // Generate S3 key
             let s3Key = BackupPath.projectZipKey(
@@ -642,7 +676,7 @@ class BackupService: ObservableObject {
     /// Compute SHA-256 of a plugin at the given path.
     /// For bundles, hashes the main executable binary; for single files, hashes the file directly.
     /// Returns the hex digest or nil if the file cannot be read.
-    static func sha256Checksum(forPluginAt path: String) -> String? {
+    nonisolated static func sha256Checksum(forPluginAt path: String) -> String? {
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         guard fm.fileExists(atPath: path, isDirectory: &isDirectory) else { return nil }
@@ -990,6 +1024,7 @@ class BackupService: ObservableObject {
         isLoadingBackups = true
         lastError = nil // Clear previous errors
         pluginBackupIndex = [:] // Reset index
+        projectBackupIndex = [:] // Reset project index
 
         // Clean up any orphaned backups from failed uploads
         await cleanupOrphanedBackups()
@@ -1031,12 +1066,14 @@ class BackupService: ObservableObject {
 
                             let s3Prefix = "users/\(userId)/backups/\(backupId)"
 
+                            let projectNames = manifest.projects.map { $0.projectName }
                             let backupItem = BackupListItem(
                                 id: manifest.backupId,
                                 name: manifest.backupName,
                                 createdAt: manifest.createdAt,
                                 pluginCount: manifest.pluginCount,
                                 projectCount: manifest.projectCount,
+                                projectNames: projectNames,
                                 totalSize: manifest.totalSizeBytes,
                                 s3Prefix: s3Prefix
                             )
@@ -1047,17 +1084,22 @@ class BackupService: ObservableObject {
                         }
                     }
 
-                    var tempIndex: [String: [String]] = [:]
+                    var tempPluginIndex: [String: [String]] = [:]
+                    var tempProjectIndex: [String: [String]] = [:]
                     for await result in group {
                         if let (backup, pluginKeys) = result {
                             backups.append(backup)
                             for pluginKey in pluginKeys {
-                                tempIndex[pluginKey, default: []].append(backup.id)
+                                tempPluginIndex[pluginKey, default: []].append(backup.id)
+                            }
+                            for projectName in backup.projectNames {
+                                tempProjectIndex[projectName, default: []].append(backup.id)
                             }
                         }
                     }
-                    // Update plugin index after batch
-                    pluginBackupIndex.merge(tempIndex) { existing, new in existing + new }
+                    // Update indexes after batch
+                    pluginBackupIndex.merge(tempPluginIndex) { existing, new in existing + new }
+                    projectBackupIndex.merge(tempProjectIndex) { existing, new in existing + new }
                 }
             }
 

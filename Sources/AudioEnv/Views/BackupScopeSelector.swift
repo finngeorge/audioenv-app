@@ -469,7 +469,9 @@ struct BackupScopeSelector: View {
 
     private func calculateStats() {
         guard let scope = buildScope() else { return }
-        stats = scope.calculateStats(scanner: scanner)
+        Task {
+            stats = await scope.calculateStats(scanner: scanner)
+        }
     }
 
     private func buildScope() -> BackupScope? {

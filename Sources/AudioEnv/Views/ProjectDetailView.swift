@@ -6,6 +6,11 @@ struct ProjectDetailView: View {
     @State private var selectedSession: AudioSession? = nil
     @State private var showBackups = false
     @State private var isParsing = false
+    @State private var showBackupConfirmation = false
+    @State private var backupStats: BackupScopeStats? = nil
+    @State private var backupIncludeDeps = false
+    @State private var backupAllFormats = false
+    @State private var isCalculatingStats = false
     @EnvironmentObject var scanner: ScannerService
     @EnvironmentObject var backup: BackupService
 
@@ -83,6 +88,9 @@ struct ProjectDetailView: View {
                 selectedSession = newest
             }
         }
+        .sheet(isPresented: $showBackupConfirmation) {
+            backupConfirmationSheet()
+        }
         .onChange(of: scanner.sessions) { _, newSessions in
             // Refresh selectedSession with live data so parsed results appear
             if let current = selectedSession,
@@ -130,27 +138,147 @@ struct ProjectDetailView: View {
                 }
                 .buttonStyle(.bordered)
 
-                Button {
-                    Task {
-                        let scope = BackupScope.projectWithDependencies(project)
-                        let (plugins, projects) = scope.resolve(scanner: scanner)
-                        await backup.backupAll(
-                            plugins: plugins,
-                            projects: projects,
-                            backupName: "\(project.name) + Dependencies",
-                            scopeDescription: scope.getDescription()
-                        )
+                if backup.isProjectBackedUp(project.name) {
+                    let count = backup.backupCount(forProject: project.name)
+                    Label("\(count) backup\(count == 1 ? "" : "s")", systemImage: "checkmark.icloud.fill")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(6)
+                } else if backup.isUploading && backup.currentBackupName?.contains(project.name) == true {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Backing up…")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                } label: {
-                    Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                } else {
+                    Button {
+                        backupIncludeDeps = false
+                        isCalculatingStats = true
+                        showBackupConfirmation = true
+                        Task {
+                            let scope = BackupScope.singleProject(project)
+                            let stats = await scope.calculateStats(scanner: scanner)
+                            backupStats = stats
+                            isCalculatingStats = false
+                        }
+                    } label: {
+                        Label("Backup to Cloud", systemImage: "icloud.and.arrow.up")
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
-                .disabled(backup.isUploading)
             }
             .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
+    }
+
+    private func recalculateBackupStats() {
+        isCalculatingStats = true
+        backupStats = nil
+        Task {
+            let scope: BackupScope = backupIncludeDeps
+                ? .projectWithDependencies(project)
+                : .singleProject(project)
+            let stats = await scope.calculateStats(scanner: scanner, matchUsedFormatsOnly: !backupAllFormats)
+            backupStats = stats
+            isCalculatingStats = false
+        }
+    }
+
+    private func backupConfirmationSheet() -> some View {
+        VStack(spacing: 16) {
+            Text("Backup \(project.name)")
+                .font(.headline)
+
+            Picker("Scope", selection: $backupIncludeDeps) {
+                Text("Project Only").tag(false)
+                Text("Project + Plugin Dependencies").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: backupIncludeDeps) { _, _ in recalculateBackupStats() }
+
+            if backupIncludeDeps {
+                Toggle("Include all plugin formats (AU, VST, VST3, AAX)", isOn: $backupAllFormats)
+                    .font(.subheadline)
+                    .onChange(of: backupAllFormats) { _, _ in recalculateBackupStats() }
+
+                Text(backupAllFormats
+                     ? "All installed formats of each plugin will be backed up."
+                     : "Only the format used in the project will be backed up.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            GroupBox {
+                if isCalculatingStats {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Calculating size…")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                } else if let stats = backupStats {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if stats.projectCount > 0 {
+                            Label("\(stats.projectCount) project (\(stats.formattedProjectSize))", systemImage: "folder")
+                                .font(.subheadline)
+                        }
+                        if stats.pluginCount > 0 {
+                            Label("\(stats.pluginCount) plugins (\(stats.formattedPluginSize))", systemImage: "puzzlepiece")
+                                .font(.subheadline)
+                        }
+                        Divider()
+                        HStack {
+                            Text("Total upload size:")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(stats.formattedTotalSize)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Button("Cancel") {
+                    showBackupConfirmation = false
+                    backupStats = nil
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Start Backup") {
+                    showBackupConfirmation = false
+                    let scope: BackupScope = backupIncludeDeps
+                        ? .projectWithDependencies(project)
+                        : .singleProject(project)
+                    let matchFormats = !backupAllFormats
+                    Task {
+                        let (plugins, projects) = scope.resolve(scanner: scanner, matchUsedFormatsOnly: matchFormats)
+                        await backup.backupAll(
+                            plugins: plugins,
+                            projects: projects,
+                            backupName: scope.generateName(),
+                            scopeDescription: scope.getDescription()
+                        )
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(isCalculatingStats)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
     }
 
     private func emptyDetail() -> some View {

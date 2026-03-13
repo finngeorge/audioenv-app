@@ -7,20 +7,22 @@ import Foundation
 /// audioenv-backups/                  # Single bucket for all users
 ///   users/
 ///     {user-id}/                     # UUID (stable, immutable)
+///       plugins/                     # Shared plugin pool (deduplicated)
+///         {checksum}.zip             # Each plugin stored once by SHA-256
 ///       backups/
 ///         {backup-id}/               # Timestamp + UUID
-///           metadata.json            # Backup scope, stats, date
-///           plugins/
-///             {plugin-checksum}.zip  # Deduplicated by SHA-256
+///           metadata.json            # Backup scope, stats, date, plugin refs
 ///           projects/
-///             {project-name}/
-///               {session-file}
+///             {project-name}.zip
+///           bounces/
+///             {format}/{fileName}
 /// ```
 ///
 /// Considerations:
 /// - Use user UUID (not username) for path stability
 /// - Each backup gets a unique ID for versioning
-/// - Plugins deduplicated by checksum to save space
+/// - Plugins stored in shared pool, deduplicated by SHA-256 checksum
+/// - Backup manifests reference plugin checksums (no per-backup plugin copies)
 /// - Metadata enables restore workflow and backup browsing
 /// - S3 "folders" are created implicitly by upload paths
 struct BackupPath {
@@ -46,16 +48,23 @@ struct BackupPath {
         "users/\(userId)/backups/\(backupId)/metadata.json"
     }
 
-    /// Generate S3 key for a plugin
+    /// Generate S3 key for a plugin in the shared plugin pool (deduplicated across all backups)
     /// - Parameters:
     ///   - userId: User's UUID
-    ///   - backupId: Unique backup identifier
-    ///   - checksum: SHA-256 checksum of the plugin (for deduplication)
-    ///   - pluginName: Original plugin name (for reference)
-    /// - Returns: S3 key like "users/ABC-123/backups/2026-02-06-XYZ/plugins/sha256hash.zip"
+    ///   - checksum: SHA-256 checksum of the plugin binary
+    /// - Returns: S3 key like "users/ABC-123/plugins/sha256hash.zip"
+    static func sharedPluginKey(userId: String, checksum: String) -> String {
+        "users/\(userId)/plugins/\(checksum).zip"
+    }
+
+    /// Legacy per-backup plugin key (for reading old backups)
     static func pluginKey(userId: String, backupId: String, checksum: String, pluginName: String) -> String {
-        // Include plugin name in metadata but use checksum for deduplication
         "users/\(userId)/backups/\(backupId)/plugins/\(checksum).zip"
+    }
+
+    /// Prefix for listing all plugins in the shared pool
+    static func sharedPluginsPrefix(userId: String) -> String {
+        "users/\(userId)/plugins/"
     }
 
     /// Generate S3 key for a project session file

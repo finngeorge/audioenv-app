@@ -252,45 +252,41 @@ struct BackupDetailView: View {
 
     // MARK: - Consolidation Banner
 
+    /// Check if this backup has redundant versions (same scope backed up multiple times)
     private func shouldShowConsolidationBanner() -> Bool {
         guard let manifest = manifest else { return false }
-        let candidates = backupService.consolidationCandidates()
-        return candidates.contains { candidate in
-            manifest.plugins.contains {
-                $0.bundleId == candidate.plugin || $0.name == candidate.plugin
-            }
-        }
+        let sameName = backupService.availableBackups.filter { $0.name == manifest.backupName }
+        return sameName.count > 1
     }
 
     private func consolidationBanner() -> some View {
-        let candidates = backupService.consolidationCandidates()
-        let relevantCandidates = candidates.filter { candidate in
-            manifest?.plugins.contains {
-                $0.bundleId == candidate.plugin || $0.name == candidate.plugin
-            } ?? false
-        }
+        let backupName = manifest?.backupName ?? ""
+        let sameName = backupService.availableBackups
+            .filter { $0.name == backupName }
+            .sorted { $0.createdAt > $1.createdAt }
+        let olderCount = sameName.count - 1
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                Text("Storage Optimization Available")
+                Image(systemName: "doc.on.doc")
+                    .foregroundStyle(.blue)
+                Text("\(olderCount) older version\(olderCount == 1 ? "" : "s") of this backup")
                     .font(.subheadline)
                     .fontWeight(.semibold)
             }
 
-            Text("Some plugins appear in 4+ backups. Consider consolidating by keeping only recent backups.")
+            Text("You have \(sameName.count) backups named \"\(backupName)\". Older versions can be deleted to free storage if the latest version is confirmed good.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            ForEach(relevantCandidates.prefix(3), id: \.plugin) { candidate in
-                Text("• \(candidate.plugin) in \(candidate.count) backups")
+            ForEach(sameName.dropFirst().prefix(3)) { older in
+                Text("• \(older.formattedDate) — \(older.formattedSize)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .padding(12)
-        .background(Color.orange.opacity(0.1))
+        .background(Color.blue.opacity(0.08))
         .cornerRadius(8)
     }
 

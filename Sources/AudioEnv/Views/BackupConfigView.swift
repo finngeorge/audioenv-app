@@ -289,16 +289,9 @@ struct BackupConfigView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)
                     } else {
-                        VStack(spacing: 8) {
-                            ForEach(backup.availableBackups) { item in
-                                backupListRow(item)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(selectedBackup?.id == item.id ? Color.blue : Color.clear, lineWidth: 2)
-                                    )
-                                    .onTapGesture {
-                                        selectedBackup = item
-                                    }
+                        VStack(spacing: 12) {
+                            ForEach(groupedBackups, id: \.name) { group in
+                                backupGroupView(group)
                             }
                         }
                     }
@@ -337,8 +330,10 @@ struct BackupConfigView: View {
         }
         .onChange(of: selectedScope) { _, newScope in
             if let scope = newScope {
-                scopeStats = scope.calculateStats(scanner: scanner)
                 backupName = scope.generateName()
+                Task {
+                    scopeStats = await scope.calculateStats(scanner: scanner)
+                }
             } else {
                 scopeStats = nil
                 backupName = ""
@@ -639,6 +634,128 @@ struct BackupConfigView: View {
 
         // Reload backup list to show the new backup
         await backup.loadAvailableBackups()
+    }
+
+    // MARK: - Backup Grouping
+
+    struct BackupGroup: Equatable {
+        let name: String
+        let backups: [BackupListItem] // sorted newest first
+        var latest: BackupListItem { backups[0] }
+        var count: Int { backups.count }
+    }
+
+    /// Group backups by name (same scope = same name) for stacked display
+    private var groupedBackups: [BackupGroup] {
+        let grouped = Dictionary(grouping: backup.availableBackups) { $0.name }
+        return grouped.map { name, items in
+            BackupGroup(name: name, backups: items.sorted { $0.createdAt > $1.createdAt })
+        }
+        .sorted { $0.latest.createdAt > $1.latest.createdAt }
+    }
+
+    @State private var expandedGroups: Set<String> = []
+
+    @ViewBuilder
+    private func backupGroupView(_ group: BackupGroup) -> some View {
+        VStack(spacing: 0) {
+            // Group header — always shows latest backup
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(group.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        if group.count > 1 {
+                            Text("\(group.count) versions")
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.1))
+                                .foregroundColor(.blue)
+                                .cornerRadius(4)
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        Label("\(group.latest.pluginCount) plugins", systemImage: "waveform")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        if group.latest.projectCount > 0 {
+                            Text("·")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Label("\(group.latest.projectCount) projects", systemImage: "folder")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Text("Latest: \(group.latest.formattedDate)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(group.latest.formattedSize)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                    if group.count > 1 {
+                        Button {
+                            if expandedGroups.contains(group.name) {
+                                expandedGroups.remove(group.name)
+                            } else {
+                                expandedGroups.insert(group.name)
+                            }
+                        } label: {
+                            Image(systemName: expandedGroups.contains(group.name) ? "chevron.up" : "chevron.down")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color.secondary.opacity(0.05))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(selectedBackup?.id == group.latest.id ? Color.blue : Color.clear, lineWidth: 2)
+            )
+            .onTapGesture { selectedBackup = group.latest }
+
+            // Expanded version list
+            if expandedGroups.contains(group.name) {
+                VStack(spacing: 4) {
+                    ForEach(group.backups) { item in
+                        HStack(spacing: 8) {
+                            if item.id == group.latest.id {
+                                Text("Latest")
+                                    .font(.caption2)
+                                    .foregroundColor(.green)
+                                    .frame(width: 40)
+                            } else {
+                                Text("")
+                                    .frame(width: 40)
+                            }
+                            Text(item.formattedDate)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(item.formattedSize)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(selectedBackup?.id == item.id ? Color.blue.opacity(0.1) : Color.clear)
+                        .cornerRadius(4)
+                        .onTapGesture { selectedBackup = item }
+                    }
+                }
+                .padding(.leading, 16)
+                .padding(.top, 4)
+            }
+        }
     }
 
     // MARK: - Backup List Row
