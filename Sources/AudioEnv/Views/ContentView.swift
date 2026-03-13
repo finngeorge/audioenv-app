@@ -7,11 +7,14 @@ enum AppSection: String, CaseIterable, Identifiable {
     case plugins     = "Plugins"
     case projects    = "Projects"
     case collections = "Collections"
+    case activity    = "Activity"
     case bounces     = "Bounces"
     case patterns    = "Patterns"
     case commands    = "Commands"
     case scan        = "Scan"
     case spotlight    = "Spotlight"
+    case transfers   = "Transfers"
+    case cloud       = "Cloud"
     case backup      = "Backup"
     case profile     = "Profile"
 
@@ -29,6 +32,8 @@ struct ContentView: View {
     @EnvironmentObject var backup: BackupService
     @EnvironmentObject var auth: AuthenticationService
     @EnvironmentObject var audioPlayer: AudioPlayerService
+    @EnvironmentObject var remoteCommand: RemoteCommandService
+    @EnvironmentObject var activityService: ActivityService
 
     @State private var section:         AppSection?    = .summary
     @State private var selectedProject: SessionProject? = nil
@@ -36,8 +41,10 @@ struct ContentView: View {
     @State private var selectedBackup:     BackupListItem? = nil
     @State private var selectedCollection: AudioCollection?     = nil
     @State private var selectedBounce:     Bounce?         = nil
+    @State private var selectedActivity: ActivityRecord?  = nil
     @State private var selectedCommand:  Command?        = nil
     @State private var selectedPattern:  BouncePattern?  = nil
+    @State private var selectedCloudItem: CloudItem?     = nil
     @State private var projectFormatFilter: SessionFormat? = nil
     @State private var showPaths                      = false
     @State private var showHowToScan                  = false
@@ -82,6 +89,9 @@ struct ContentView: View {
                     Label("Collections", systemImage: "rectangle.stack")
                         .tag(AppSection.collections)
 
+                    Label("Activity", systemImage: "clock.arrow.circlepath")
+                        .tag(AppSection.activity)
+
                     Label("Bounces", systemImage: "waveform")
                         .tag(AppSection.bounces)
 
@@ -98,9 +108,14 @@ struct ContentView: View {
 
                     Label("Spotlight", systemImage: "sparkle.magnifyingglass")
                         .tag(AppSection.spotlight)
+
+                    Label("Transfers", systemImage: "arrow.down.circle")
+                        .tag(AppSection.transfers)
                 }
 
                 Section("Cloud") {
+                    Label("Files", systemImage: "cloud")
+                        .tag(AppSection.cloud)
                     Label("Backup", systemImage: "arrow.up.circle")
                         .tag(AppSection.backup)
                 }
@@ -198,6 +213,8 @@ struct ContentView: View {
                     SessionBrowserView(selectedProject: $selectedProject, formatFilter: $projectFormatFilter)
                 case .collections:
                     CollectionBrowserView(selectedCollection: $selectedCollection)
+                case .activity:
+                    ActivityBrowserView(selectedActivity: $selectedActivity)
                 case .bounces:
                     BounceBrowserView(selectedBounce: $selectedBounce)
                 case .patterns:
@@ -208,6 +225,10 @@ struct ContentView: View {
                     ScanView()
                 case .spotlight:
                     SpotlightSettingsView()
+                case .transfers:
+                    WebTransfersSettingsView()
+                case .cloud:
+                    CloudBrowserView(selectedItem: $selectedCloudItem)
                 case .backup:
                     BackupConfigView(scanner: scanner, backup: backup, selectedBackup: $selectedBackup)
                 case .profile:
@@ -229,6 +250,8 @@ struct ContentView: View {
                 if selectedBackup != nil { selectedBackup = nil }
                 if selectedCollection != nil { selectedCollection = nil }
                 if selectedBounce != nil { selectedBounce = nil }
+                if selectedActivity != nil { selectedActivity = nil }
+                if selectedCloudItem != nil { selectedCloudItem = nil }
                 if selectedCommand != nil { selectedCommand = nil }
 
                 columnVisibility = .all
@@ -255,6 +278,12 @@ struct ContentView: View {
                 } else {
                     emptyDetail()
                 }
+            case .activity:
+                if let activity = selectedActivity {
+                    ActivityDetailView(activity: activity)
+                } else {
+                    emptyDetail()
+                }
             case .bounces:
                 if let bounce = selectedBounce {
                     BounceDetailPanel(bounce: bounce)
@@ -273,6 +302,12 @@ struct ContentView: View {
                 } else {
                     emptyDetail()
                 }
+            case .cloud:
+                if let cloudItem = selectedCloudItem {
+                    CloudItemDetailView(item: cloudItem)
+                } else {
+                    emptyDetail()
+                }
             case .backup:
                 if let backupItem = selectedBackup {
                     BackupDetailView(backup: backupItem, backupService: backup)
@@ -285,6 +320,8 @@ struct ContentView: View {
                 scanDetailPanel()
             case .spotlight:
                 spotlightDetailPanel()
+            case .transfers:
+                transfersDetailPanel()
             default:
                 Color.clear
             }
@@ -317,6 +354,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showHowToScan) {
             HowToScanView()
+        }
+        .sheet(item: $remoteCommand.pendingDownloadPrompt) { prompt in
+            WebDownloadPromptView(prompt: prompt)
         }
         .confirmationDialog(
             "Are you sure you want to rescan?",
@@ -734,12 +774,248 @@ struct ContentView: View {
         }
     }
 
+    private func transfersDetailPanel() -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.blue)
+                        Spacer()
+                    }
+                    Text("Web Transfers")
+                        .font(.title)
+                        .fontWeight(.bold)
+                    Text("Configure where projects sent from the web app are saved on this Mac")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.bottom, 8)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("How it Works")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    InfoRow(label: "Upload", value: "Upload a project zip on the web app")
+                    InfoRow(label: "Send", value: "Click \"Send to Mac\" on the web dashboard")
+                    InfoRow(label: "Receive", value: "Choose where to save on this Mac")
+                    InfoRow(label: "Scan", value: "Project is auto-scanned after download")
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.05))
+                .cornerRadius(12)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Saved Paths")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    ForEach(SessionFormat.allCases) { format in
+                        let path = WebDownloadPaths.path(for: format)
+                        InfoRow(
+                            label: format.rawValue,
+                            value: path.map { abbreviateHomePath($0) } ?? "Not set"
+                        )
+                    }
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.05))
+                .cornerRadius(12)
+
+                Spacer()
+            }
+            .padding(20)
+        }
+    }
+
+    private func abbreviateHomePath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
+    }
+
     private func lastScannedText() -> String {
         guard let date = scanner.lastScanDate else { return "Never" }
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - Web Download Prompt Sheet
+
+struct WebDownloadPromptView: View {
+    let prompt: WebDownloadPrompt
+
+    @State private var savePath: String
+    @State private var selectedFormat: SessionFormat?
+    @State private var rememberChoice = false
+    @State private var userChangedPath = false
+    @Environment(\.dismiss) private var dismiss
+
+    init(prompt: WebDownloadPrompt) {
+        self.prompt = prompt
+        self._savePath = State(initialValue: prompt.suggestedPath)
+        self._selectedFormat = State(initialValue: prompt.detectedFormat)
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "arrow.down.doc.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(.blue)
+
+                Text("Project from Web")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Text("Choose where to save this project")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
+            Divider()
+
+            // File info + format picker
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("File")
+                        .foregroundColor(.secondary)
+                        .frame(width: 60, alignment: .leading)
+                    Text(prompt.filename)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                HStack {
+                    Text("Type")
+                        .foregroundColor(.secondary)
+                        .frame(width: 60, alignment: .leading)
+
+                    Picker("", selection: $selectedFormat) {
+                        Text("Unknown").tag(SessionFormat?.none)
+                        ForEach(SessionFormat.allCases) { format in
+                            Text(format.rawValue).tag(SessionFormat?.some(format))
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 160)
+                    .onChange(of: selectedFormat) { _, newFormat in
+                        // Re-infer path when user changes format (unless they manually browsed)
+                        guard !userChangedPath else { return }
+                        if let format = newFormat {
+                            if let saved = WebDownloadPaths.path(for: format) {
+                                savePath = saved
+                            } else if let inferred = WebDownloadPaths.inferPath(for: format, from: prompt.sessions) {
+                                savePath = inferred
+                            }
+                        } else {
+                            savePath = prompt.suggestedPath
+                        }
+                    }
+
+                    if prompt.detectedFormat != nil && selectedFormat == prompt.detectedFormat {
+                        Text("auto-detected")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.05))
+            .cornerRadius(8)
+
+            // Path selection
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Save Location")
+                    .font(.headline)
+
+                HStack(spacing: 8) {
+                    Text(abbreviatePath(savePath))
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color.secondary.opacity(0.08))
+                        .cornerRadius(6)
+
+                    Button("Browse") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseFiles = false
+                        panel.canChooseDirectories = true
+                        panel.allowsMultipleSelection = false
+                        panel.message = "Choose where to save \"\(prompt.filename)\""
+                        panel.directoryURL = URL(fileURLWithPath: savePath)
+                        if panel.runModal() == .OK, let url = panel.url {
+                            savePath = url.path
+                            userChangedPath = true
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+            // Remember toggle
+            if selectedFormat != nil {
+                Toggle(isOn: $rememberChoice) {
+                    Text("Always save \(selectedFormat!.rawValue) projects here")
+                        .font(.subheadline)
+                }
+            }
+
+            Divider()
+
+            // Actions
+            HStack {
+                Button("Cancel") {
+                    prompt.continuation.resume(returning: WebDownloadPromptResult(
+                        savePath: prompt.suggestedPath,
+                        selectedFormat: nil,
+                        rememberForFormat: false
+                    ))
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Save Here") {
+                    prompt.continuation.resume(returning: WebDownloadPromptResult(
+                        savePath: savePath,
+                        selectedFormat: selectedFormat,
+                        rememberForFormat: rememberChoice
+                    ))
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 460)
+    }
+
+    private func abbreviatePath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
     }
 }
 
