@@ -86,20 +86,29 @@ struct ContentView: View {
                         .badge(projectCount)
                         .tag(AppSection.projects)
 
-                    Label("Collections", systemImage: "rectangle.stack")
-                        .tag(AppSection.collections)
-
-                    Label("Activity", systemImage: "clock.arrow.circlepath")
-                        .tag(AppSection.activity)
-
                     Label("Bounces", systemImage: "waveform")
                         .tag(AppSection.bounces)
+
+                    Label("Collections", systemImage: "rectangle.stack")
+                        .tag(AppSection.collections)
+                }
+
+                Section("Cloud") {
+                    Label("Files", systemImage: "cloud")
+                        .tag(AppSection.cloud)
+                    Label("Backup", systemImage: "arrow.up.circle")
+                        .tag(AppSection.backup)
+                }
+
+                Section("Tools") {
+                    Label("Commands", systemImage: "terminal")
+                        .tag(AppSection.commands)
 
                     Label("Patterns", systemImage: "text.viewfinder")
                         .tag(AppSection.patterns)
 
-                    Label("Commands", systemImage: "terminal")
-                        .tag(AppSection.commands)
+                    Label("Activity", systemImage: "clock.arrow.circlepath")
+                        .tag(AppSection.activity)
                 }
 
                 Section("Settings") {
@@ -111,13 +120,6 @@ struct ContentView: View {
 
                     Label("Transfers", systemImage: "arrow.down.circle")
                         .tag(AppSection.transfers)
-                }
-
-                Section("Cloud") {
-                    Label("Files", systemImage: "cloud")
-                        .tag(AppSection.cloud)
-                    Label("Backup", systemImage: "arrow.up.circle")
-                        .tag(AppSection.backup)
                 }
 
                 Section("Account") {
