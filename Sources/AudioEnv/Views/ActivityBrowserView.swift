@@ -23,6 +23,7 @@ enum ActivityDayRange: Int, CaseIterable, Identifiable {
 struct ActivityBrowserView: View {
     @EnvironmentObject var activityService: ActivityService
     @EnvironmentObject var auth: AuthenticationService
+    @EnvironmentObject var sessionMonitor: SessionMonitorService
 
     @Binding var selectedActivity: ActivityRecord?
 
@@ -125,6 +126,22 @@ struct ActivityBrowserView: View {
                 }
             }
             refilter()
+        }
+        // Auto-refresh when active sessions change (session opened/closed/synced)
+        .onChange(of: sessionMonitor.activeSessions.count) { _, _ in
+            Task {
+                // Small delay to let the sync complete before fetching
+                try? await Task.sleep(for: .seconds(2))
+                guard let token = auth.authToken else { return }
+                await activityService.fetchAll(token: token, days: dayRange.rawValue)
+            }
+        }
+        .onChange(of: sessionMonitor.recentSessions.count) { _, _ in
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                guard let token = auth.authToken else { return }
+                await activityService.fetchAll(token: token, days: dayRange.rawValue)
+            }
         }
     }
 

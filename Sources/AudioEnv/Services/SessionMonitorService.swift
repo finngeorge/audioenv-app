@@ -115,6 +115,8 @@ class SessionMonitorService: ObservableObject {
     private static let pollIntervalSeconds: TimeInterval = 3
     private var lastLogPollDate: Date = .distantPast
     private static let logPollIntervalSeconds: TimeInterval = 10
+    private static let activitySyncIntervalSeconds: TimeInterval = 60
+    private var lastActivitySyncDate: Date = .distantPast
 
     private static let audioDeviceCacheSeconds: TimeInterval = 30
 
@@ -1001,6 +1003,8 @@ class SessionMonitorService: ObservableObject {
             for i in closingIndices.reversed() {
                 var session = activeSessions.remove(at: i)
                 session.closedAt = Date()
+                logger.info("Session closed (poll fallback): \(session.projectName)")
+                syncSessionToAPI(session)
                 recentSessions.insert(session, at: 0)
             }
             stopWatchersForPID(daw.pid)
@@ -1088,6 +1092,15 @@ class SessionMonitorService: ObservableObject {
                 handleFileChange(projectPath: session.projectPath, daw: daw)
             }
         }
+
+        // Periodically sync active sessions so they appear in the activity panel while open
+        if !activeSessions.isEmpty,
+           Date().timeIntervalSince(lastActivitySyncDate) >= Self.activitySyncIntervalSeconds {
+            lastActivitySyncDate = Date()
+            for session in activeSessions {
+                syncSessionToAPI(session)
+            }
+        }
     }
 
     // MARK: - Helpers
@@ -1143,7 +1156,14 @@ class SessionMonitorService: ObservableObject {
     // MARK: - Activity Sync
 
     private func syncSessionToAPI(_ session: LiveSession) {
-        guard let sync, let auth, auth.isAuthenticated, let token = auth.authToken else { return }
+        guard let sync else {
+            logger.warning("Activity sync skipped (no sync service): \(session.projectName)")
+            return
+        }
+        guard let auth, auth.isAuthenticated, let token = auth.authToken else {
+            logger.warning("Activity sync skipped (not authenticated): \(session.projectName)")
+            return
+        }
         Task {
             await sync.syncSessionActivity(session: session, token: token)
         }
