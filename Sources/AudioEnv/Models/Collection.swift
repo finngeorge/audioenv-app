@@ -112,12 +112,14 @@ struct CollectionProjectMembership: Identifiable, Codable {
     let collectionId: UUID
     let scannedSessionId: UUID
     let addedAt: Date
+    let folderId: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
         case collectionId = "collection_id"
         case scannedSessionId = "scanned_session_id"
         case addedAt = "added_at"
+        case folderId = "folder_id"
     }
 }
 
@@ -128,12 +130,64 @@ struct CollectionBounceMembership: Identifiable, Codable {
     let collectionId: UUID
     let bounceId: UUID
     let addedAt: Date
+    let folderId: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
         case collectionId = "collection_id"
         case bounceId = "bounce_id"
         case addedAt = "added_at"
+        case folderId = "folder_id"
+    }
+}
+
+// MARK: - Collection folder
+
+struct CollectionFolder: Identifiable, Hashable, Codable {
+    let id: UUID
+    let collectionId: UUID
+    let parentFolderId: UUID?
+    let name: String
+    let color: String?
+    let position: Int
+    let createdAt: Date
+    let updatedAt: Date
+    let projectCount: Int
+    let bounceCount: Int
+    let children: [CollectionFolder]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case collectionId = "collection_id"
+        case parentFolderId = "parent_folder_id"
+        case name, color, position
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case projectCount = "project_count"
+        case bounceCount = "bounce_count"
+        case children
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        collectionId = try container.decode(UUID.self, forKey: .collectionId)
+        parentFolderId = try container.decodeIfPresent(UUID.self, forKey: .parentFolderId)
+        name = try container.decode(String.self, forKey: .name)
+        color = try container.decodeIfPresent(String.self, forKey: .color)
+        position = try container.decodeIfPresent(Int.self, forKey: .position) ?? 0
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        projectCount = try container.decodeIfPresent(Int.self, forKey: .projectCount) ?? 0
+        bounceCount = try container.decodeIfPresent(Int.self, forKey: .bounceCount) ?? 0
+        children = try container.decodeIfPresent([CollectionFolder].self, forKey: .children) ?? []
+    }
+
+    var totalItemCount: Int { projectCount + bounceCount }
+
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    static func == (lhs: CollectionFolder, rhs: CollectionFolder) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name && lhs.updatedAt == rhs.updatedAt
     }
 }
 

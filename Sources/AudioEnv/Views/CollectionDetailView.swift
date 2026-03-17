@@ -31,6 +31,11 @@ struct CollectionDetailView: View {
     @State private var stackBounceFormats = false
     @State private var expandedBounceGroups: Set<String> = []
     @State private var bounceSortOrder: BounceSortOrder = .newestFirst
+    @State private var collectionFolders: [CollectionFolder] = []
+    @State private var currentFolderId: UUID?
+    @State private var folderPath: [(id: UUID?, name: String)] = []
+    @State private var showNewFolderAlert = false
+    @State private var newFolderName = ""
 
     enum BounceSortOrder: String, CaseIterable {
         case newestFirst = "Newest First"
@@ -113,6 +118,40 @@ struct CollectionDetailView: View {
         }
     }
 
+    /// Folders at the current navigation level.
+    private var currentLevelFolders: [CollectionFolder] {
+        if currentFolderId == nil {
+            return collectionFolders
+        }
+        func findChildren(in folders: [CollectionFolder], parentId: UUID) -> [CollectionFolder] {
+            for f in folders {
+                if f.id == parentId { return f.children }
+                let found = findChildren(in: f.children, parentId: parentId)
+                if !found.isEmpty { return found }
+            }
+            return []
+        }
+        return findChildren(in: collectionFolders, parentId: currentFolderId!)
+    }
+
+    /// Projects filtered to the current folder level.
+    private var currentLevelProjects: [CollectionService.CollectionProject] {
+        guard !collectionFolders.isEmpty else { return projects }
+        if let fid = currentFolderId {
+            return projects.filter { $0.folderId == fid.uuidString }
+        }
+        return projects.filter { $0.folderId == nil }
+    }
+
+    /// Bounces filtered to the current folder level.
+    private var currentLevelBounces: [CollectionService.CollectionBounce] {
+        guard !collectionFolders.isEmpty else { return sortedBounces }
+        if let fid = currentFolderId {
+            return sortedBounces.filter { $0.folderId == fid.uuidString }
+        }
+        return sortedBounces.filter { $0.folderId == nil }
+    }
+
     var body: some View {
         if let collection {
             content(collection)
@@ -131,6 +170,9 @@ struct CollectionDetailView: View {
                 header(collection)
 
                 Divider()
+
+                folderBreadcrumb(collection)
+                folderGrid()
 
                 // Projects section (if content_types includes "projects")
                 if collection.hasProjects {
@@ -197,6 +239,28 @@ struct CollectionDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will remove the collection but not the projects or bounces themselves.")
+        }
+        .alert("New Folder", isPresented: $showNewFolderAlert) {
+            TextField("Folder name", text: $newFolderName)
+            Button("Create") {
+                let name = newFolderName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { return }
+                Task {
+                    if let token = auth.authToken {
+                        _ = await collectionService.createFolder(
+                            collectionId: collectionId,
+                            name: name,
+                            parentFolderId: currentFolderId,
+                            token: token
+                        )
+                        collectionFolders = await collectionService.fetchCollectionFolders(collectionId: collectionId, token: token)
+                        newFolderName = ""
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                newFolderName = ""
+            }
         }
     }
 
@@ -352,6 +416,14 @@ struct CollectionDetailView: View {
                                 systemImage: stackBounceFormats ? "rectangle.expand.vertical" : "rectangle.compress.vertical"
                             )
                         }
+                    }
+
+                    Divider()
+
+                    Button {
+                        showNewFolderAlert = true
+                    } label: {
+                        Label("New Folder", systemImage: "folder.badge.plus")
                     }
 
                     Divider()
@@ -548,9 +620,9 @@ struct CollectionDetailView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             } else {
-                ForEach(projects) { project in
+                ForEach(currentLevelProjects) { project in
                     projectRow(project)
-                    if project.id != projects.last?.id {
+                    if project.id != currentLevelProjects.last?.id {
                         Divider()
                     }
                 }
@@ -701,9 +773,9 @@ struct CollectionDetailView: View {
                     }
                 }
             } else {
-                ForEach(sortedBounces) { bounce in
+                ForEach(currentLevelBounces) { bounce in
                     bounceRow(bounce)
-                    if bounce.id != sortedBounces.last?.id {
+                    if bounce.id != currentLevelBounces.last?.id {
                         Divider()
                     }
                 }
@@ -1170,6 +1242,9 @@ struct CollectionDetailView: View {
         guard let collection else { return }
         if collection.hasProjects { await loadProjects() }
         if collection.hasBounces { await loadBounces() }
+        if let token = auth.authToken {
+            collectionFolders = await collectionService.fetchCollectionFolders(collectionId: collectionId, token: token)
+        }
     }
 
     private func loadProjects() async {
@@ -1223,6 +1298,122 @@ struct CollectionDetailView: View {
         }
         let secs = Int(seconds) % 60
         return "\(mins)m \(secs)s"
+    }
+
+    // MARK: - Folder Navigation
+
+    @ViewBuilder
+    private func folderBreadcrumb(_ collection: AudioCollection) -> some View {
+        if !folderPath.isEmpty {
+            HStack(spacing: 4) {
+                Button(action: {
+                    currentFolderId = nil
+                    folderPath = []
+                }) {
+                    Text(collection.name)
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+
+                ForEach(Array(folderPath.enumerated()), id: \.offset) { index, entry in
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                        Button(action: {
+                            currentFolderId = entry.id
+                            folderPath = Array(folderPath.prefix(index + 1))
+                        }) {
+                            Text(entry.name)
+                                .font(.caption)
+                                .foregroundColor(index == folderPath.count - 1 ? .primary : .accentColor)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func folderGrid() -> some View {
+        if !currentLevelFolders.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Folders")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 8)], spacing: 8) {
+                    ForEach(currentLevelFolders) { folder in
+                        folderCard(folder)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Folder Card
+
+    @ViewBuilder
+    private func folderCard(_ folder: CollectionFolder) -> some View {
+        let colorValue = folder.color.flatMap { Color(hex: $0) }
+
+        Button(action: {
+            currentFolderId = folder.id
+            folderPath.append((id: folder.id, name: folder.name))
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(colorValue ?? .secondary)
+
+                Text(folder.name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                Spacer()
+
+                if folder.totalItemCount > 0 {
+                    Text("\(folder.totalItemCount)")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.tint.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Rename...") {
+                newFolderName = folder.name
+                // For simplicity, use the alert to rename
+            }
+            Button("Delete", role: .destructive) {
+                Task {
+                    if let token = auth.authToken {
+                        await collectionService.deleteFolder(collectionId: collectionId, folderId: folder.id, token: token)
+                        collectionFolders = await collectionService.fetchCollectionFolders(collectionId: collectionId, token: token)
+                        if currentFolderId == folder.id {
+                            currentFolderId = nil
+                            folderPath = []
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

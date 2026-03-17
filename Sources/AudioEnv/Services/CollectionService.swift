@@ -301,6 +301,7 @@ class CollectionService: ObservableObject {
         let pluginCount: Int?
         let isBackup: Bool?
         let addedAt: String?
+        let folderId: String?
 
         enum CodingKeys: String, CodingKey {
             case id
@@ -313,6 +314,7 @@ class CollectionService: ObservableObject {
             case pluginCount = "plugin_count"
             case isBackup = "is_backup"
             case addedAt = "added_at"
+            case folderId = "folder_id"
         }
 
         var displayName: String {
@@ -394,6 +396,7 @@ class CollectionService: ObservableObject {
         let createdAt: String?
         let fileModifiedAt: String?
         let addedAt: String?
+        let folderId: String?
 
         enum CodingKeys: String, CodingKey {
             case id
@@ -408,6 +411,7 @@ class CollectionService: ObservableObject {
             case createdAt = "created_at"
             case fileModifiedAt = "file_modified_at"
             case addedAt = "added_at"
+            case folderId = "folder_id"
         }
     }
 
@@ -466,6 +470,116 @@ class CollectionService: ObservableObject {
         } catch {
             lastError = error.localizedDescription
             logger.error("removeBounce failed: \(error)")
+        }
+    }
+
+    // MARK: - Collection Folders
+
+    func fetchCollectionFolders(collectionId: UUID, token: String) async -> [CollectionFolder] {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/folders")!
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return [] }
+
+            let decoder = FlexibleISO8601.makeAPIDecoder()
+            let folders = try decoder.decode([CollectionFolder].self, from: data)
+            logger.info("Fetched \(folders.count) folders for collection \(collectionId)")
+            return folders
+        } catch {
+            logger.error("fetchCollectionFolders failed: \(error)")
+            return []
+        }
+    }
+
+    func createFolder(collectionId: UUID, name: String, parentFolderId: UUID? = nil, color: String? = nil, token: String) async -> CollectionFolder? {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/folders")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            var payload: [String: Any] = ["name": name]
+            if let pid = parentFolderId { payload["parent_folder_id"] = pid.uuidString }
+            if let c = color { payload["color"] = c }
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                logger.error("createFolder returned \(status)")
+                return nil
+            }
+
+            let decoder = FlexibleISO8601.makeAPIDecoder()
+            let folder = try decoder.decode(CollectionFolder.self, from: data)
+            logger.info("Created folder: \(folder.name)")
+            return folder
+        } catch {
+            logger.error("createFolder failed: \(error)")
+            return nil
+        }
+    }
+
+    func updateFolder(collectionId: UUID, folderId: UUID, name: String? = nil, color: String? = nil, token: String) async {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/folders/\(folderId)")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "PUT"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            var payload: [String: Any] = [:]
+            if let n = name { payload["name"] = n }
+            if let c = color { payload["color"] = c }
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+            logger.info("Updated folder \(folderId)")
+        } catch {
+            logger.error("updateFolder failed: \(error)")
+        }
+    }
+
+    func deleteFolder(collectionId: UUID, folderId: UUID, token: String) async {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/folders/\(folderId)")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+            logger.info("Deleted folder \(folderId)")
+        } catch {
+            logger.error("deleteFolder failed: \(error)")
+        }
+    }
+
+    func moveItems(collectionId: UUID, folderId: UUID?, projectIds: [UUID] = [], bounceIds: [UUID] = [], token: String) async {
+        do {
+            let url = URL(string: "\(baseURL)/api/collections/\(collectionId)/folders/move")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            var payload: [String: Any] = [
+                "project_ids": projectIds.map(\.uuidString),
+                "bounce_ids": bounceIds.map(\.uuidString),
+            ]
+            if let fid = folderId { payload["folder_id"] = fid.uuidString }
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
+            logger.info("Moved items to folder \(folderId?.uuidString ?? "root")")
+        } catch {
+            logger.error("moveItems failed: \(error)")
         }
     }
 
