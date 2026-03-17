@@ -152,6 +152,20 @@ struct CollectionDetailView: View {
         return sortedBounces.filter { $0.folderId == nil }
     }
 
+    /// All folders flattened for move-to-folder menus.
+    private var allFoldersFlat: [(id: UUID, name: String)] {
+        var result: [(id: UUID, name: String)] = []
+        func flatten(_ items: [CollectionFolder], prefix: String) {
+            for f in items {
+                let label = prefix.isEmpty ? f.name : "\(prefix) / \(f.name)"
+                result.append((id: f.id, name: label))
+                flatten(f.children, prefix: label)
+            }
+        }
+        flatten(collectionFolders, prefix: "")
+        return result
+    }
+
     var body: some View {
         if let collection {
             content(collection)
@@ -703,6 +717,34 @@ struct CollectionDetailView: View {
             }
         }
         .padding(.vertical, 4)
+        .contextMenu {
+            if !collectionFolders.isEmpty {
+                Menu("Move to Folder") {
+                    if currentFolderId != nil {
+                        Button("Collection Root") {
+                            Task {
+                                if let token = auth.authToken, let sid = UUID(uuidString: project.id) {
+                                    await collectionService.moveItems(collectionId: collectionId, folderId: nil, projectIds: [sid], token: token)
+                                    await loadProjects()
+                                }
+                            }
+                        }
+                        Divider()
+                    }
+                    ForEach(allFoldersFlat, id: \.id) { entry in
+                        Button(entry.name) {
+                            Task {
+                                if let token = auth.authToken, let sid = UUID(uuidString: project.id) {
+                                    await collectionService.moveItems(collectionId: collectionId, folderId: entry.id, projectIds: [sid], token: token)
+                                    await loadProjects()
+                                }
+                            }
+                        }
+                        .disabled(entry.id == currentFolderId)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Bounces Section
@@ -909,6 +951,34 @@ struct CollectionDetailView: View {
         .onTapGesture(count: 2) {
             if !isEditing && isAvailable {
                 playBounce(bounce)
+            }
+        }
+        .contextMenu {
+            if !collectionFolders.isEmpty {
+                Menu("Move to Folder") {
+                    if currentFolderId != nil {
+                        Button("Collection Root") {
+                            Task {
+                                if let token = auth.authToken, let bid = UUID(uuidString: bounce.id) {
+                                    await collectionService.moveItems(collectionId: collectionId, folderId: nil, bounceIds: [bid], token: token)
+                                    await loadBounces()
+                                }
+                            }
+                        }
+                        Divider()
+                    }
+                    ForEach(allFoldersFlat, id: \.id) { entry in
+                        Button(entry.name) {
+                            Task {
+                                if let token = auth.authToken, let bid = UUID(uuidString: bounce.id) {
+                                    await collectionService.moveItems(collectionId: collectionId, folderId: entry.id, bounceIds: [bid], token: token)
+                                    await loadBounces()
+                                }
+                            }
+                        }
+                        .disabled(entry.id == currentFolderId)
+                    }
+                }
             }
         }
     }
