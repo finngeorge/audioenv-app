@@ -65,14 +65,30 @@ fi
 SPARKLE_BIN="$PROJECT_DIR/.build/artifacts/sparkle/Sparkle/bin"
 
 echo "    Version: $VERSION"
+
+# Compute numeric build number from version string.
+# Scheme: MAJOR*100000 + MINOR*10000 + PATCH*1000 + beta_num (or 999 for release)
+# e.g. 1.0.0-beta.3 → 100003, 1.0.0 → 100999, 1.1.0 → 110999
+SEMVER="${VERSION%%-*}"  # strip pre-release suffix → "1.0.0"
+MAJOR=$(echo "$SEMVER" | cut -d. -f1)
+MINOR=$(echo "$SEMVER" | cut -d. -f2)
+PATCH=$(echo "$SEMVER" | cut -d. -f3)
+if echo "$VERSION" | grep -q "beta\."; then
+    BETA_NUM=$(echo "$VERSION" | sed 's/.*beta\.\([0-9]*\)/\1/')
+else
+    BETA_NUM=999
+fi
+BUILD_NUMBER=$(( MAJOR * 100000 + MINOR * 10000 + PATCH * 1000 + BETA_NUM ))
+
+echo "    Build:   $BUILD_NUMBER"
 echo ""
 
 # ─── Step 2: Set version ──────────────────────────────────────────────────────
 
-echo "==> Setting version to $VERSION..."
+echo "==> Setting version to $VERSION (build $BUILD_NUMBER)..."
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Sources/AudioEnv/Info.plist
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" Sources/AudioEnv/Info.plist
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" Sources/AudioEnv/Info.plist
 
 echo ""
 
@@ -138,7 +154,7 @@ cat > "$APP_PATH/Contents/Info.plist" << EOF
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
     <key>CFBundleVersion</key>
-    <string>$VERSION</string>
+    <string>$BUILD_NUMBER</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSApplicationCategoryType</key>
