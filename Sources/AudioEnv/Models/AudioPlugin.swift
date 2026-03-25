@@ -47,6 +47,35 @@ struct AudioPlugin: Identifiable, Hashable, Codable {
     func hash(into hasher: inout Hasher)                        { hasher.combine(path) }
 }
 
+// MARK: – Plugin group (stacked by name)
+
+/// Groups multiple format variants of the same plugin into a single list item.
+struct PluginGroup: Identifiable, Hashable {
+    let name: String
+    let plugins: [AudioPlugin]
+
+    var id: String { name.lowercased() }
+    var formats: [PluginFormat] { plugins.map(\.format).sorted { $0.rawValue < $1.rawValue } }
+    var primaryPlugin: AudioPlugin { plugins.first! }
+    var manufacturer: String? { plugins.compactMap(\.manufacturer).first }
+    var version: String? { plugins.compactMap(\.version).first }
+    var isMultiFormat: Bool { plugins.count > 1 }
+
+    /// Group a flat list of plugins by name.
+    static func grouped(from plugins: [AudioPlugin]) -> [PluginGroup] {
+        let dict = Dictionary(grouping: plugins) { $0.name.lowercased() }
+        return dict.values
+            .map { variants in
+                let sorted = variants.sorted { $0.format.rawValue < $1.format.rawValue }
+                return PluginGroup(name: sorted.first!.name, plugins: sorted)
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    static func == (lhs: PluginGroup, rhs: PluginGroup) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
 // MARK: – Plugin match confidence
 
 /// Confidence level for plugin matches found via binary scanning.

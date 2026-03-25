@@ -110,22 +110,42 @@ struct BackupDetailView: View {
     // MARK: - Header
 
     private func header() -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "archivebox.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(.blue)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "archivebox.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.blue)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(backup.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(backup.name)
+                        .font(.title2)
+                        .fontWeight(.bold)
 
-                Text(backup.formattedDate)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    Text(backup.formattedDate)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
             }
 
-            Spacer()
+            // Full scope description
+            if !backup.scopeDescription.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(backup.scopeIconNames, id: \.self) { icon in
+                        Image(systemName: icon)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(backup.scopeDescription)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.05))
+                .cornerRadius(8)
+            }
         }
     }
 
@@ -168,12 +188,13 @@ struct BackupDetailView: View {
                         .fontWeight(.medium)
                 }
 
-                GridRow {
-                    Text("Scope:")
-                        .foregroundStyle(.secondary)
-                    Text(manifest.scopeDescription.isEmpty ? "Manual selection" : manifest.scopeDescription)
-                        .fontWeight(.medium)
-                        .lineLimit(3)
+                if manifest.scopeDescription.isEmpty {
+                    GridRow {
+                        Text("Scope:")
+                            .foregroundStyle(.secondary)
+                        Text("Manual selection")
+                            .fontWeight(.medium)
+                    }
                 }
             }
             .font(.subheadline)

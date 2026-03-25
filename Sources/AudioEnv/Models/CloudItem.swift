@@ -34,9 +34,20 @@ struct CloudItem: Identifiable, Hashable {
     let shareId: String?            // For shared items
     let senderUsername: String?     // For shared items
     let isPending: Bool             // Pending sync flag
+    let scopeDescription: String?   // Verbose backup scope (shown in detail pane only)
 
     var formattedSize: String {
         ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
+    }
+
+    /// SF Symbol icons for the file type — used in the file list subtitle
+    var fileTypeIcons: [String] {
+        switch fileType {
+        case "plugin":  return ["puzzlepiece.extension"]
+        case "project": return ["folder.fill"]
+        case "bounce":  return ["waveform"]
+        default:        return []
+        }
     }
 
     // Hashable by s3Key for deduplication

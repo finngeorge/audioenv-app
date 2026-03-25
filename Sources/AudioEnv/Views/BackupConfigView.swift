@@ -663,7 +663,7 @@ struct BackupConfigView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text(group.name)
+                        Text(group.latest.shortName)
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .lineLimit(1)
@@ -678,7 +678,7 @@ struct BackupConfigView: View {
                         }
                     }
                     HStack(spacing: 8) {
-                        Label("\(group.latest.pluginCount) plugins", systemImage: "waveform")
+                        Label("\(group.latest.pluginCount) plugins", systemImage: "puzzlepiece.extension")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         if group.latest.projectCount > 0 {
@@ -686,6 +686,14 @@ struct BackupConfigView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                             Label("\(group.latest.projectCount) projects", systemImage: "folder")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        if group.latest.bounceCount > 0 {
+                            Text("·")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Label("\(group.latest.bounceCount) bounces", systemImage: "waveform")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -770,7 +778,7 @@ struct BackupConfigView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    Label("\(backupItem.pluginCount) plugins", systemImage: "waveform")
+                    Label("\(backupItem.pluginCount) plugins", systemImage: "puzzlepiece.extension")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
 
@@ -779,6 +787,15 @@ struct BackupConfigView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Label("\(backupItem.projectCount) projects", systemImage: "folder")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if backupItem.bounceCount > 0 {
+                        Text("•")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Label("\(backupItem.bounceCount) bounces", systemImage: "waveform")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -876,24 +893,39 @@ private struct BackupListRowCompact: View {
     let backup: BackupListItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(backup.name)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .lineLimit(2)
+        HStack(spacing: 8) {
+            HStack(spacing: 3) {
+                ForEach(backup.scopeIconNames, id: \.self) { icon in
+                    Image(systemName: icon)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 22, alignment: .center)
 
-            Text(backup.formattedDate)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(backup.shortName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
 
-            HStack(spacing: 6) {
-                Label("\(backup.pluginCount)", systemImage: "waveform")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                if backup.projectCount > 0 {
-                    Text("•")
-                    Label("\(backup.projectCount)", systemImage: "folder")
+                HStack(spacing: 6) {
+                    if backup.pluginCount > 0 {
+                        Label("\(backup.pluginCount)", systemImage: "puzzlepiece.extension")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if backup.projectCount > 0 {
+                        Label("\(backup.projectCount)", systemImage: "folder")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if backup.bounceCount > 0 {
+                        Label("\(backup.bounceCount)", systemImage: "waveform")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(backup.formattedDate)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

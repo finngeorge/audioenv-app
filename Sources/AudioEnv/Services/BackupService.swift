@@ -161,9 +161,68 @@ struct BackupListItem: Identifiable, Hashable {
     let createdAt: Date
     let pluginCount: Int
     let projectCount: Int
+    let bounceCount: Int        // Number of bounces in this backup
     let projectNames: [String]  // Names of projects in this backup
     let totalSize: UInt64
     let s3Prefix: String        // For downloading
+    let scopeDescription: String // Full verbose scope description
+
+    /// Inferred scope type for icon display in list rows
+    enum ScopeType {
+        case everything
+        case projectWithDeps
+        case singleProject
+        case singlePlugin
+        case selectedPlugins
+        case selectedProjects
+        case collection
+        case custom
+    }
+
+    var scopeType: ScopeType {
+        let lower = name.lowercased()
+        if lower == "complete environment backup" { return .everything }
+        if lower.hasSuffix("+ dependencies") { return .projectWithDeps }
+        if lower.hasSuffix("only") && projectCount > 0 { return .singleProject }
+        if lower.hasSuffix("plugin") && pluginCount == 1 { return .singlePlugin }
+        if lower.hasSuffix("collection") || scopeDescription.lowercased().hasPrefix("collection ") { return .collection }
+        if lower.contains("selected plugins") { return .selectedPlugins }
+        if lower.contains("selected projects") { return .selectedProjects }
+        if pluginCount > 0 && projectCount > 0 { return .custom }
+        if projectCount > 0 { return .singleProject }
+        if pluginCount > 0 { return .selectedPlugins }
+        return .custom
+    }
+
+    /// SF Symbol names representing this scope's content types
+    var scopeIconNames: [String] {
+        switch scopeType {
+        case .everything:       return ["sparkles"]
+        case .projectWithDeps:  return ["folder.fill", "puzzlepiece.extension"]
+        case .singleProject:    return ["folder.fill"]
+        case .singlePlugin:     return ["puzzlepiece.extension"]
+        case .selectedPlugins:  return ["puzzlepiece.extension"]
+        case .selectedProjects: return ["folder.fill"]
+        case .collection:       return ["rectangle.stack.fill"]
+        case .custom:
+            var icons: [String] = []
+            if projectCount > 0 { icons.append("folder.fill") }
+            if pluginCount > 0 { icons.append("puzzlepiece.extension") }
+            return icons.isEmpty ? ["archivebox"] : icons
+        }
+    }
+
+    /// Short display name for list rows (strips redundant suffixes)
+    var shortName: String {
+        switch scopeType {
+        case .everything:       return "Full Environment"
+        case .projectWithDeps:  return name.replacingOccurrences(of: " + Dependencies", with: "")
+        case .singleProject:    return name.replacingOccurrences(of: " Only", with: "")
+        case .singlePlugin:     return name.replacingOccurrences(of: " Plugin", with: "")
+        case .collection:       return name.replacingOccurrences(of: " Collection", with: "")
+        default:                return name
+        }
+    }
 
     var formattedDate: String {
         let formatter = DateFormatter()
@@ -1077,9 +1136,11 @@ class BackupService: ObservableObject {
                                 createdAt: manifest.createdAt,
                                 pluginCount: manifest.pluginCount,
                                 projectCount: manifest.projectCount,
+                                bounceCount: manifest.bounceCount,
                                 projectNames: projectNames,
                                 totalSize: manifest.totalSizeBytes,
-                                s3Prefix: s3Prefix
+                                s3Prefix: s3Prefix,
+                                scopeDescription: manifest.scopeDescription
                             )
 
                             let pluginKeys = manifest.plugins.map { $0.bundleId ?? $0.name }

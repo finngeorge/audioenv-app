@@ -201,10 +201,13 @@ struct CloudBrowserView: View {
                     }
                 }
 
-                HStack(spacing: 8) {
-                    Text(item.fileType.capitalized)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    // File type icons
+                    ForEach(item.fileTypeIcons, id: \.self) { icon in
+                        Image(systemName: icon)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
 
                     if let format = item.format {
                         Text(format)

@@ -105,7 +105,8 @@ class CloudService: ObservableObject {
                         backupId: backupId,
                         shareId: nil,
                         senderUsername: nil,
-                        isPending: isPending
+                        isPending: isPending,
+                        scopeDescription: entry["scope_description"] as? String
                     )
                     cloudItems.append(item)
                 }
@@ -152,12 +153,13 @@ class CloudService: ObservableObject {
                     fileType: entityType,
                     s3Key: "shared/\(shareId)",
                     sizeBytes: 0,
-                    uploadedAt: parseDate(entry["created_at"]),
+                    uploadedAt: parseDate(entry["uploaded_at"] ?? entry["created_at"]),
                     format: nil,
                     backupId: nil,
                     shareId: shareId,
                     senderUsername: entry["owner_username"] as? String,
-                    isPending: false
+                    isPending: false,
+                    scopeDescription: nil
                 )
                 sharedItems.append(item)
             }

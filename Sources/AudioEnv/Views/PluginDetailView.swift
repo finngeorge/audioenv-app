@@ -6,10 +6,20 @@ struct PluginDetailView: View {
     @EnvironmentObject var backup: BackupService
     let plugin: AudioPlugin
 
+    /// All format variants sharing the same name as the selected plugin.
+    private var siblings: [AudioPlugin] {
+        let target = plugin.name.lowercased()
+        return scanner.plugins
+            .filter { $0.name.lowercased() == target }
+            .sorted { $0.format.rawValue < $1.format.rawValue }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header()
+                Divider()
+                formatVariants()
                 Divider()
                 metadata()
                 Divider()
@@ -29,6 +39,7 @@ struct PluginDetailView: View {
     private func header() -> some View {
         let entry = scanner.catalogEntry(for: plugin)
         let iconImage = scanner.catalogImage(for: plugin)
+        let formats = siblings.map(\.format)
         return HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(plugin.name)
@@ -36,10 +47,18 @@ struct PluginDetailView: View {
                     .fontWeight(.bold)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Text(plugin.format.rawValue)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    ForEach(formats) { fmt in
+                        Text(fmt.rawValue)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(ColorTokens.shared.pluginFormatColor(fmt).opacity(0.15))
+                            .foregroundColor(ColorTokens.shared.pluginFormatColor(fmt))
+                            .cornerRadius(4)
+                    }
+                }
                 let resolvedMfr = ManufacturerResolver.displayManufacturer(
                     plugin: plugin, catalogManufacturer: entry?.manufacturer)
                 if resolvedMfr != "Unknown" {
@@ -61,6 +80,50 @@ struct PluginDetailView: View {
                 Image(systemName: "puzzlepiece.extension")
                     .font(.system(size: 36))
                     .foregroundColor(ColorTokens.shared.pluginFormatColor(plugin.format))
+            }
+        }
+    }
+
+    private func formatVariants() -> some View {
+        let variants = siblings
+        return Group {
+            if variants.count > 1 {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Installed Formats")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(variants) { variant in
+                            HStack(spacing: 8) {
+                                Image(systemName: "puzzlepiece.extension")
+                                    .font(.caption)
+                                    .foregroundColor(ColorTokens.shared.pluginFormatColor(variant.format))
+
+                                Text(variant.format.rawValue)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+
+                                if let v = variant.version {
+                                    Text("v\(v)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                Text(variant.path)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .padding(6)
+                            .background(Color.secondary.opacity(0.05))
+                            .cornerRadius(6)
+                        }
+                    }
+                }
             }
         }
     }

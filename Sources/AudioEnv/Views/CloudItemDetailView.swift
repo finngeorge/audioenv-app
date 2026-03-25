@@ -26,7 +26,7 @@ struct CloudItemDetailView: View {
                         Text(item.name)
                             .font(.title2)
                             .fontWeight(.semibold)
-                            .lineLimit(2)
+                            .lineLimit(3)
 
                         HStack(spacing: 8) {
                             Text(item.itemType.rawValue)
@@ -60,6 +60,10 @@ struct CloudItemDetailView: View {
 
                 // Metadata
                 VStack(alignment: .leading, spacing: 8) {
+                    if let scope = item.scopeDescription {
+                        infoRow("Scope", value: scope)
+                    }
+
                     if item.sizeBytes > 0 {
                         infoRow("Size", value: item.formattedSize)
                     }
