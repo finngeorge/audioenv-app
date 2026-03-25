@@ -215,6 +215,8 @@ struct AudioEnvApp: App {
                         Task {
                             guard let token = try? await auth.validToken() else { return }
                             await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                            // Auto-discover bounces inside project folders
+                            await bounceService.discoverProjectBounces(sessions: scanner.sessions, token: token)
                         }
                     }
                     // Rebuild menu bar to reflect scan state

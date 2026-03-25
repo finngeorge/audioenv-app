@@ -269,7 +269,7 @@ struct BounceBrowserView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        BounceRow(bounce: bounce)
+                        BounceRow(bounce: bounce, projectName: bounceService.projectNameForBounce(bounce))
                     }
                     .contentShape(Rectangle())
                     .tag(bounce)
@@ -448,6 +448,7 @@ struct BounceBrowserView: View {
 
 private struct BounceRow: View {
     let bounce: Bounce
+    var projectName: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -463,6 +464,18 @@ private struct BounceRow: View {
                         .font(.caption)
                         .foregroundColor(.blue)
                         .help("Uploaded from another device")
+                }
+
+                if let project = projectName {
+                    Text(project)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.orange.opacity(0.12))
+                        .foregroundColor(.orange)
+                        .cornerRadius(3)
+                        .lineLimit(1)
                 }
 
                 Spacer()

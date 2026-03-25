@@ -11,8 +11,11 @@ struct ProjectDetailView: View {
     @State private var backupIncludeDeps = false
     @State private var backupAllFormats = false
     @State private var isCalculatingStats = false
+    @State private var showBounces = true
     @EnvironmentObject var scanner: ScannerService
     @EnvironmentObject var backup: BackupService
+    @EnvironmentObject var bounceService: BounceService
+    @EnvironmentObject var audioPlayer: AudioPlayerService
 
     /// Look up live versions of sessions from the scanner so parsed data is reflected.
     private var sessionsToShow: [AudioSession] {
@@ -64,10 +67,18 @@ struct ProjectDetailView: View {
             Divider()
 
             HStack(spacing: 0) {
-                List(sessionsToShow, selection: $selectedSession) { session in
-                    SessionRow(session: session)
-                        .tag(session)
-                        .id("\(session.path):\(session.project != nil)")
+                VStack(spacing: 0) {
+                    List(sessionsToShow, selection: $selectedSession) { session in
+                        SessionRow(session: session)
+                            .tag(session)
+                            .id("\(session.path):\(session.project != nil)")
+                    }
+
+                    // Project bounces section
+                    if !projectBounces.isEmpty {
+                        Divider()
+                        bouncesSection()
+                    }
                 }
                 .frame(minWidth: 220, idealWidth: 280)
 
@@ -281,6 +292,58 @@ struct ProjectDetailView: View {
         .frame(width: 380)
     }
 
+    /// Bounces found inside this project's folder.
+    private var projectBounces: [Bounce] {
+        guard let folderPath = projectFolderPath() else { return [] }
+        return bounceService.bouncesForProjectFolder(folderPath)
+            .sorted { $0.fileModifiedAt > $1.fileModifiedAt }
+    }
+
+    private func bouncesSection() -> some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { showBounces.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: showBounces ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Image(systemName: "waveform")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Text("Bounces")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                    Text("\(projectBounces.count)")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.orange)
+                        .cornerRadius(4)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(Color.orange.opacity(0.06))
+
+            if showBounces {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(projectBounces) { bounce in
+                            ProjectBounceRow(bounce: bounce)
+                                .environmentObject(audioPlayer)
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+            }
+        }
+    }
+
     private func emptyDetail() -> some View {
         VStack(spacing: 12) {
             Image(systemName: "doc.plaintext")
@@ -428,5 +491,94 @@ private struct SessionRow: View {
 
     private var sizeString: String {
         ByteCountFormatter.string(fromByteCount: Int64(session.fileSize), countStyle: .file)
+    }
+}
+
+// MARK: - Project Bounce Row
+
+private struct ProjectBounceRow: View {
+    let bounce: Bounce
+    @EnvironmentObject var audioPlayer: AudioPlayerService
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Play button
+            if bounce.isLocallyAvailable {
+                Button {
+                    if audioPlayer.currentBounce?.id == bounce.id {
+                        audioPlayer.togglePlayPause()
+                    } else {
+                        audioPlayer.play(bounce: bounce)
+                    }
+                } label: {
+                    Image(systemName: audioPlayer.currentBounce?.id == bounce.id && audioPlayer.isPlaying
+                          ? "pause.circle.fill" : "play.circle")
+                        .font(.body)
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(bounce.fileName)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                HStack(spacing: 6) {
+                    Text(bounce.format.uppercased())
+                        .font(.caption2)
+                        .foregroundColor(ColorTokens.shared.bounceFormatColor(bounce.format))
+
+                    if let dur = bounce.formattedDuration {
+                        Text(dur)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Text(bounce.formattedSize)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+
+                    if let bpm = bounce.bpm {
+                        Text("\(bpm) bpm")
+                            .font(.caption2)
+                            .foregroundColor(ColorTokens.shared.badgeBPM)
+                    }
+
+                    if let key = bounce.musicalKey {
+                        Text(key)
+                            .font(.caption2)
+                            .foregroundColor(ColorTokens.shared.badgeKey)
+                    }
+
+                    if let stage = bounce.stage {
+                        Text(stage)
+                            .font(.caption2)
+                            .foregroundColor(ColorTokens.shared.badgeStage)
+                    }
+
+                    if let version = bounce.version {
+                        Text("v\(version)")
+                            .font(.caption2)
+                            .foregroundColor(ColorTokens.shared.badgeVersion)
+                    }
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            guard bounce.isLocallyAvailable else { return }
+            if audioPlayer.currentBounce?.id == bounce.id {
+                audioPlayer.togglePlayPause()
+            } else {
+                audioPlayer.play(bounce: bounce)
+            }
+        }
     }
 }

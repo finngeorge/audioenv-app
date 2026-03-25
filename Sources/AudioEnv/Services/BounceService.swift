@@ -628,6 +628,185 @@ class BounceService: ObservableObject {
         return (bpm, key, stage, version)
     }
 
+    // MARK: - Project Bounce Auto-Discovery
+
+    /// Known subdirectory names where DAWs typically store bounced/exported audio.
+    private static let bounceSubdirNames: Set<String> = [
+        "Bounces", "bounces",
+        "Bounced Files",
+        "Exports", "exports",
+        "Mixdowns", "mixdowns",
+    ]
+
+    /// Maps project folder paths to project names, populated during discovery.
+    @Published var projectFolderNames: [String: String] = [:]
+
+    /// Set of folder IDs that were auto-linked from project discovery (not user-linked).
+    @Published var autoLinkedFolderIds: Set<UUID> = []
+
+    /// Scan a project folder for audio files at root level + known bounce subdirectories.
+    private nonisolated func scanProjectFolder(path: String) async -> [LocalBounceInfo] {
+        var results: [LocalBounceInfo] = []
+        let fm = FileManager.default
+
+        // Scan root level for audio files
+        results.append(contentsOf: await scanLocalFiles(in: path))
+
+        // Scan known bounce subdirectories
+        guard let contents = try? fm.contentsOfDirectory(atPath: path) else { return results }
+        for item in contents {
+            let itemPath = (path as NSString).appendingPathComponent(item)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: itemPath, isDirectory: &isDir), isDir.boolValue else { continue }
+            if Self.bounceSubdirNames.contains(item) {
+                results.append(contentsOf: await scanLocalFiles(in: itemPath))
+            }
+        }
+
+        return results
+    }
+
+    /// Auto-discover bounces inside DAW project folders and link them.
+    /// Called after scan completes to detect bounces co-located with sessions.
+    func discoverProjectBounces(sessions: [AudioSession], token: String) async {
+        // Build unique project folder paths with their display names
+        var projectFolders: [String: String] = [:]  // path -> project name
+        for session in sessions where !session.isBackup {
+            var dir = (session.path as NSString).deletingLastPathComponent
+            if dir.lowercased().hasSuffix("/backups") || dir.lowercased().hasSuffix("/backup") {
+                dir = (dir as NSString).deletingLastPathComponent
+            }
+
+            // Skip if folder is a default session root (too broad)
+            let defaultRoots = Set(ScannerService.defaultSessionRoots)
+            if defaultRoots.contains(dir) { continue }
+
+            // For Logic standalone bundles (no project folder wrapper), skip
+            if session.format == .logic {
+                let parentDir = (session.path as NSString).deletingLastPathComponent
+                let ext = (session.path as NSString).pathExtension.lowercased()
+                if ext == "logicx" || ext == "logicpro" {
+                    // The session IS a bundle dir; use its parent as the project folder
+                    // but only if it's not a default root
+                    if defaultRoots.contains(parentDir) { continue }
+                    dir = parentDir
+                }
+            }
+
+            if projectFolders[dir] == nil {
+                projectFolders[dir] = session.projectDisplayName
+            }
+        }
+
+        // Check which folders are already linked as bounce folders
+        let linkedPaths = Set(bounceFolders.map { $0.folderPath })
+
+        var newFolderCount = 0
+        var updatedFolderNames: [String: String] = [:]
+
+        for (folderPath, projectName) in projectFolders {
+            updatedFolderNames[folderPath] = projectName
+
+            guard !linkedPaths.contains(folderPath) else { continue }
+
+            // Check if folder actually has audio files
+            let foundBounces = await scanProjectFolder(path: folderPath)
+            guard !foundBounces.isEmpty else { continue }
+
+            // Auto-link this folder and sync its bounces
+            await autoLinkFolder(path: folderPath, bounces: foundBounces, token: token)
+            newFolderCount += 1
+        }
+
+        // Also re-scan existing auto-linked folders for new files
+        for folderId in autoLinkedFolderIds {
+            guard let folder = bounceFolders.first(where: { $0.id == folderId }) else { continue }
+            let foundBounces = await scanProjectFolder(path: folder.folderPath)
+            if !foundBounces.isEmpty {
+                await syncScanResults(folderId: folder.id, bounces: foundBounces, token: token)
+            }
+        }
+
+        projectFolderNames = updatedFolderNames
+
+        if newFolderCount > 0 || !autoLinkedFolderIds.isEmpty {
+            // Refresh bounce list from API
+            await fetchBounces(token: token)
+            // Generate local folder-based suggestions and auto-confirm them
+            matchBouncesByFolder(sessions: sessions)
+            await autoConfirmHighConfidenceSuggestions(token: token)
+        }
+
+        if newFolderCount > 0 {
+            logger.info("Auto-linked \(newFolderCount) project folder(s) as bounce sources")
+        }
+    }
+
+    /// Create a bounce folder via API and sync pre-scanned bounces (no FSEvents watching).
+    private func autoLinkFolder(path: String, bounces: [LocalBounceInfo], token: String) async {
+        do {
+            let url = URL(string: "\(baseURL)/api/bounces/folders")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let payload: [String: Any] = ["folder_path": path, "auto_scan": false]
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return }
+
+            if http.statusCode == 200 || http.statusCode == 201 {
+                let decoder = FlexibleISO8601.makeAPIDecoder()
+                let folder = try decoder.decode(BounceFolder.self, from: data)
+                bounceFolders.append(folder)
+                autoLinkedFolderIds.insert(folder.id)
+
+                // Sync the bounces we already found
+                await syncScanResults(folderId: folder.id, bounces: bounces, token: token)
+                logger.info("Auto-linked project folder: \(path) with \(bounces.count) bounces")
+            } else if http.statusCode == 409 {
+                // Already exists — find it and sync bounces into it
+                if let existing = bounceFolders.first(where: { $0.folderPath == path }) {
+                    autoLinkedFolderIds.insert(existing.id)
+                    await syncScanResults(folderId: existing.id, bounces: bounces, token: token)
+                }
+            }
+        } catch {
+            logger.error("autoLinkFolder failed: \(error)")
+        }
+    }
+
+    /// Auto-confirm all high-confidence (folder-based) suggestions without user intervention.
+    private func autoConfirmHighConfidenceSuggestions(token: String) async {
+        let highConfidence = suggestions.filter { $0.confidence >= 0.9 }
+        for suggestion in highConfidence {
+            await confirmSuggestion(
+                bounceId: suggestion.bounceId,
+                sessionId: suggestion.scannedSessionId,
+                token: token
+            )
+        }
+    }
+
+    /// Get bounces that live inside a given project folder path.
+    func bouncesForProjectFolder(_ folderPath: String) -> [Bounce] {
+        let prefix = folderPath.hasSuffix("/") ? folderPath : folderPath + "/"
+        return bounces.filter { $0.filePath.hasPrefix(prefix) }
+    }
+
+    /// Get the project name for a bounce, if it lives inside a known project folder.
+    func projectNameForBounce(_ bounce: Bounce) -> String? {
+        for (folderPath, name) in projectFolderNames {
+            let prefix = folderPath.hasSuffix("/") ? folderPath : folderPath + "/"
+            if bounce.filePath.hasPrefix(prefix) {
+                return name
+            }
+        }
+        return nil
+    }
+
     // MARK: - Local Folder Matching
 
     /// Match bounces to projects by checking if a bounce file lives inside a known project folder.
