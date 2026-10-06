@@ -73,8 +73,8 @@ class ScannerService: ObservableObject {
 
     private static let logger = Logger(subsystem: "com.audioenv", category: "ScannerService")
 
-    /// Maximum time (seconds) allowed for parsing a single session file.
-    private static let perSessionTimeout: TimeInterval = 10
+    /// How often to log that a single session parse is still running.
+    private static let stillParsingLogInterval: TimeInterval = 30
 
     private let cacheStore = ScanCacheStore()
     private let pluginCatalog = PluginCatalogStore()
@@ -360,7 +360,7 @@ class ScannerService: ObservableObject {
                 for _ in 0..<4 {
                     guard let (idx, session) = iter.next() else { break }
                     group.addTask {
-                        (idx, await Self.parseWithTimeout(session, plugins: foundPlugins))
+                        (idx, await Self.parseWithWatchdog(session, plugins: foundPlugins))
                     }
                 }
 
@@ -388,7 +388,7 @@ class ScannerService: ObservableObject {
                     // Maintain concurrency — start next task
                     if let (nextIdx, nextSession) = iter.next() {
                         group.addTask {
-                            (nextIdx, await Self.parseWithTimeout(nextSession, plugins: foundPlugins))
+                            (nextIdx, await Self.parseWithWatchdog(nextSession, plugins: foundPlugins))
                         }
                     }
                 }
@@ -994,29 +994,20 @@ class ScannerService: ObservableObject {
         return s
     }
 
-    /// Run parseSession with a timeout to prevent one file from stalling the scan.
-    private nonisolated static func parseWithTimeout(_ session: AudioSession, plugins: [AudioPlugin]) async -> AudioSession {
-        await withTaskGroup(of: AudioSession?.self) { group in
-            group.addTask {
-                Self.parseSession(session, plugins: plugins)
+    /// Parse a session to completion. There is deliberately no cutoff: large
+    /// projects (big Logic mixes, film scores) can legitimately take minutes, and
+    /// the parse is synchronous so a timeout could only discard the result, never
+    /// save time. A watchdog logs while a parse runs long so a stuck file is visible.
+    private nonisolated static func parseWithWatchdog(_ session: AudioSession, plugins: [AudioPlugin]) async -> AudioSession {
+        let watchdog = Task {
+            var waited: TimeInterval = 0
+            while true {
+                try await Task.sleep(for: .seconds(stillParsingLogInterval))
+                waited += stillParsingLogInterval
+                logger.warning("Still parsing after \(Int(waited))s: \(session.name, privacy: .public) at \(session.path, privacy: .public)")
             }
-            group.addTask {
-                try? await Task.sleep(for: .seconds(perSessionTimeout))
-                return nil // sentinel for timeout
-            }
-
-            // Take whichever finishes first
-            if let first = await group.next() {
-                if let result = first {
-                    group.cancelAll()
-                    return result
-                }
-                // Timeout fired first (returned nil) – log and skip
-                logger.warning("Parse timed out after \(perSessionTimeout)s: \(session.name, privacy: .public) at \(session.path, privacy: .public)")
-                group.cancelAll()
-                return session
-            }
-            return session
         }
+        defer { watchdog.cancel() }
+        return parseSession(session, plugins: plugins)
     }
 }
