@@ -280,8 +280,13 @@ class BounceService: ObservableObject {
         return (validDuration, nil, nil, nil)
     }
 
+    /// Result of a bounce-folder API call, so callers can tell real success
+    /// from failure and stop early when the token has been rejected.
+    private enum SyncOutcome { case ok, unauthorized, failed }
+
     /// Sync local scan results to the API.
-    private func syncScanResults(folderId: UUID, bounces: [LocalBounceInfo], token: String) async {
+    @discardableResult
+    private func syncScanResults(folderId: UUID, bounces: [LocalBounceInfo], token: String) async -> SyncOutcome {
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -321,11 +326,13 @@ class BounceService: ObservableObject {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             if status == 200 {
                 logger.info("Synced \(bounces.count) bounces for folder \(folderId)")
-            } else {
-                logger.warning("Bounce scan sync returned \(status)")
+                return .ok
             }
+            logger.warning("Bounce scan sync returned \(status)")
+            return status == 401 ? .unauthorized : .failed
         } catch {
             logger.error("syncScanResults failed: \(error)")
+            return .failed
         }
     }
 
@@ -705,6 +712,7 @@ class BounceService: ObservableObject {
         var newFolderCount = 0
         var resyncCount = 0
         var emptyFolderCount = 0
+        var failedCount = 0
         var updatedFolderNames: [String: String] = [:]
 
         for (folderPath, projectName) in projectFolders {
@@ -717,22 +725,33 @@ class BounceService: ObservableObject {
                 continue
             }
 
-            if let existing = bounceFolders.first(where: { $0.folderPath == folderPath }) {
+            let outcome: SyncOutcome
+            let existing = bounceFolders.first(where: { $0.folderPath == folderPath })
+            if let existing {
                 // Folder already linked (possibly from a previous run that was rate-limited
                 // before its bounces synced). Re-sync now.
-                await syncScanResults(folderId: existing.id, bounces: foundBounces, token: token)
-                autoLinkedFolderIds.insert(existing.id)
-                resyncCount += 1
+                outcome = await syncScanResults(folderId: existing.id, bounces: foundBounces, token: token)
+                if outcome == .ok { autoLinkedFolderIds.insert(existing.id) }
             } else {
-                await autoLinkFolder(path: folderPath, bounces: foundBounces, token: token)
-                newFolderCount += 1
+                outcome = await autoLinkFolder(path: folderPath, bounces: foundBounces, token: token)
+            }
+
+            switch outcome {
+            case .ok where existing != nil: resyncCount += 1
+            case .ok: newFolderCount += 1
+            case .failed: failedCount += 1
+            case .unauthorized:
+                // Token rejected — every remaining call would 401 too. Stop here;
+                // the next scan after re-login picks up where this left off.
+                logger.warning("discoverProjectBounces: 401 from API, stopping (\(newFolderCount) linked, \(resyncCount) re-synced before stop)")
+                return
             }
 
             // Throttle to stay under rate limits when many folders are processed
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
 
-        logger.info("discoverProjectBounces: \(newFolderCount) new auto-linked, \(resyncCount) re-synced, \(emptyFolderCount) had no audio")
+        logger.info("discoverProjectBounces: \(newFolderCount) new auto-linked, \(resyncCount) re-synced, \(failedCount) failed, \(emptyFolderCount) had no audio")
 
         projectFolderNames = updatedFolderNames
 
@@ -750,7 +769,7 @@ class BounceService: ObservableObject {
     }
 
     /// Create a bounce folder via API and sync pre-scanned bounces (no FSEvents watching).
-    private func autoLinkFolder(path: String, bounces: [LocalBounceInfo], token: String) async {
+    private func autoLinkFolder(path: String, bounces: [LocalBounceInfo], token: String) async -> SyncOutcome {
         do {
             let url = URL(string: "\(baseURL)/api/bounces/folders")!
             var request = URLRequest(url: url)
@@ -762,7 +781,7 @@ class BounceService: ObservableObject {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { return }
+            guard let http = response as? HTTPURLResponse else { return .failed }
 
             if http.statusCode == 200 || http.statusCode == 201 {
                 let decoder = FlexibleISO8601.makeAPIDecoder()
@@ -770,18 +789,27 @@ class BounceService: ObservableObject {
                 bounceFolders.append(folder)
                 autoLinkedFolderIds.insert(folder.id)
 
-                // Sync the bounces we already found
-                await syncScanResults(folderId: folder.id, bounces: bounces, token: token)
+                // Sync the bounces we already found. The folder is linked either
+                // way; a failed sync is retried by the re-sync path next run.
+                let synced = await syncScanResults(folderId: folder.id, bounces: bounces, token: token)
                 logger.info("Auto-linked project folder: \(path) with \(bounces.count) bounces")
+                return synced == .unauthorized ? .unauthorized : .ok
             } else if http.statusCode == 409 {
                 // Already exists — find it and sync bounces into it
-                if let existing = bounceFolders.first(where: { $0.folderPath == path }) {
-                    autoLinkedFolderIds.insert(existing.id)
-                    await syncScanResults(folderId: existing.id, bounces: bounces, token: token)
+                guard let existing = bounceFolders.first(where: { $0.folderPath == path }) else {
+                    logger.warning("autoLinkFolder: 409 for \(path) but folder not in local list")
+                    return .failed
                 }
+                autoLinkedFolderIds.insert(existing.id)
+                return await syncScanResults(folderId: existing.id, bounces: bounces, token: token)
+            } else if http.statusCode == 401 {
+                return .unauthorized
             }
+            logger.warning("autoLinkFolder returned \(http.statusCode) for \(path)")
+            return .failed
         } catch {
             logger.error("autoLinkFolder failed: \(error)")
+            return .failed
         }
     }
 
