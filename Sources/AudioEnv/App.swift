@@ -194,7 +194,7 @@ struct AudioEnvApp: App {
                        !scanner.plugins.isEmpty || !scanner.sessions.isEmpty {
                         Task {
                             guard let token = try? await auth.validToken() else { return }
-                            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token, trigger: "After login")
                             await bounceService.discoverProjectBounces(sessions: scanner.sessions, token: token)
                         }
                     }
@@ -215,7 +215,7 @@ struct AudioEnvApp: App {
                     if oldValue == true && newValue == false, auth.isAuthenticated {
                         Task {
                             guard let token = try? await auth.validToken() else { return }
-                            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token, trigger: "After scan")
                             // Auto-discover bounces inside project folders
                             await bounceService.discoverProjectBounces(sessions: scanner.sessions, token: token)
                         }
@@ -384,7 +384,7 @@ struct AudioEnvApp: App {
             if auth.isAuthenticated {
                 Task {
                     guard let token = try? await auth.validToken() else { return }
-                    await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                    await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token, trigger: "audioenv://sync link")
                 }
             }
         default:

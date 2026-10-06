@@ -184,8 +184,11 @@ class CollectionService: ObservableObject {
                 let autoBackupKey = "smartAutoBackup-\(collection.id)"
                 if UserDefaults.standard.bool(forKey: autoBackupKey) {
                     let expectedBackupName = "\(collection.name) Collection"
-                    let hasBackup = backup.availableBackups.contains { $0.name == expectedBackupName }
-                    if hasBackup {
+                    // Newest backup of this collection; new matches are added to it in place.
+                    let targetBackup = backup.availableBackups
+                        .filter { $0.name == expectedBackupName }
+                        .max { $0.createdAt < $1.createdAt }
+                    if let targetBackup {
                         // Gather locally available bounces for backup
                         let allBounces = await fetchCollectionBounces(collectionId: collection.id, token: token)
                         let localBounces = allBounces.compactMap { cb -> Bounce? in
@@ -209,14 +212,14 @@ class CollectionService: ObservableObject {
                             )
                         }
                         if !localBounces.isEmpty {
-                            await backup.backupAll(
-                                plugins: [],
-                                projects: [],
-                                bounces: localBounces,
-                                backupName: expectedBackupName,
-                                scopeDescription: "Smart collection '\(collection.name)' auto-backup"
+                            // Upload only bounces the backup doesn't have yet (also
+                            // backfills any that failed on an earlier run).
+                            let added = await backup.appendBounces(
+                                localBounces,
+                                toBackup: targetBackup,
+                                trigger: "Auto-backup: smart collection '\(collection.name)'"
                             )
-                            logger.info("Smart collection '\(collection.name)': auto-backup triggered")
+                            logger.info("Smart collection '\(collection.name)': auto-backup added \(added) bounces")
                         }
                     }
                 }

@@ -42,10 +42,14 @@ class SyncService: ObservableObject {
     weak var authService: AuthenticationService?
 
     /// Sync plugins and sessions to the backend.
-    func syncToCloud(plugins: [AudioPlugin], sessions: [AudioSession], token: String) async {
+    /// `trigger` is a short human-readable reason shown in the Activity panel.
+    func syncToCloud(plugins: [AudioPlugin], sessions: [AudioSession], token: String, trigger: String = "Automatic") async {
         guard !isSyncing else { return }
 
         isSyncing = true
+        let activity = BackgroundActivityCenter.shared
+        let jobId = activity.start(.librarySync, title: "Syncing library", trigger: trigger,
+                                   detail: "\(plugins.count) plugins, \(sessions.count) sessions")
         lastSyncError = nil
         logger.info("Starting cloud sync: \(plugins.count) plugins, \(sessions.count) sessions")
 
@@ -56,6 +60,7 @@ class SyncService: ObservableObject {
             try await registerDevice(token: currentToken)
 
             // 2. Sync plugins (with 401 retry)
+            activity.update(jobId, progress: 0.1, detail: "Plugins")
             do {
                 try await syncPlugins(plugins, token: currentToken)
             } catch SyncError.unauthorized {
@@ -68,6 +73,7 @@ class SyncService: ObservableObject {
             }
 
             // 3. Sync sessions (with 401 retry)
+            activity.update(jobId, progress: 0.5, detail: "Sessions")
             do {
                 try await syncSessions(sessions, token: currentToken)
             } catch SyncError.unauthorized {
@@ -81,9 +87,11 @@ class SyncService: ObservableObject {
 
             lastSyncDate = Date()
             logger.info("Cloud sync completed successfully")
+            activity.finish(jobId)
         } catch {
             lastSyncError = error.localizedDescription
             logger.error("Cloud sync failed: \(error)")
+            activity.finish(jobId, .failed(error.localizedDescription))
         }
 
         isSyncing = false

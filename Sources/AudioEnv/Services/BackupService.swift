@@ -264,7 +264,13 @@ class BackupService: ObservableObject {
 
     @Published private(set) var destination:    BackupDestination? = nil
     @Published private(set) var isUploading:    Bool               = false
-    @Published private(set) var uploadProgress: Double             = 0      /// 0 … 1
+    @Published private(set) var uploadProgress: Double             = 0 {    /// 0 … 1
+        didSet {
+            if let id = activityJobId { BackgroundActivityCenter.shared.update(id, progress: uploadProgress) }
+        }
+    }
+    /// Activity-center job for the backup in progress (nil when idle).
+    private var activityJobId: UUID?
     @Published var lastError:      String?            = nil
     @Published private(set) var uploadLog:      [BackupLogEntry]   = []
     @Published private(set) var currentBackupId: String?           = nil
@@ -399,7 +405,8 @@ class BackupService: ObservableObject {
         projects: [SessionProject],
         bounces: [Bounce] = [],
         backupName: String = "Complete Backup",
-        scopeDescription: String = ""
+        scopeDescription: String = "",
+        trigger: String = "Manual backup"
     ) async {
         guard let dest = destination else {
             lastError = "No backup destination configured."
@@ -416,6 +423,7 @@ class BackupService: ObservableObject {
         lastError = nil
         uploadLog = []
         currentBackupName = backupName
+        activityJobId = BackgroundActivityCenter.shared.start(.backup, title: "Backing up \(backupName)", trigger: trigger)
 
         // Generate unique backup ID for this session
         let backupId = BackupPath.generateBackupId()
@@ -518,6 +526,11 @@ class BackupService: ObservableObject {
         let allPluginsOk = uploadedPlugins.count == plugins.count
         let allProjectsOk = uploadedProjects.count == projects.count
         let allBouncesOk = uploadedBounces.count == bounces.count
+        if let id = activityJobId {
+            let ok = allPluginsOk && allProjectsOk && allBouncesOk
+            BackgroundActivityCenter.shared.finish(id, ok ? .succeeded : .failed(lastError ?? "Some items failed"))
+            activityJobId = nil
+        }
         if allPluginsOk && allProjectsOk && allBouncesOk {
             lastSuccessfulBackup = backupName
             lastError = nil
@@ -639,6 +652,9 @@ class BackupService: ObservableObject {
                 format: bounce.format,
                 fileName: bounce.fileName
             )
+            if let id = activityJobId {
+                BackgroundActivityCenter.shared.update(id, detail: "\(i + 1) / \(bounces.count): \(bounce.fileName)")
+            }
 
             do {
                 try await destination.upload(localPath: bounce.filePath, remotePath: s3Key)
@@ -959,6 +975,15 @@ class BackupService: ObservableObject {
             bounces: bounceItems
         )
 
+        await writeManifest(metadata, destination: destination)
+    }
+
+    /// Encode a manifest, upload it as the backup's metadata.json, and sync it
+    /// to the backend (which upserts by backupId).
+    private func writeManifest(_ metadata: BackupManifest, destination: BackupDestination) async {
+        let userId = metadata.userId
+        let backupId = metadata.backupId
+
         // Serialize to JSON
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -995,6 +1020,104 @@ class BackupService: ObservableObject {
             logger.error("Failed to upload unified metadata: \(error)")
             lastError = "Metadata upload failed: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: – Incremental bounce backup
+
+    /// Add bounces to an existing backup in place: upload only the files its
+    /// manifest doesn't already contain, then rewrite its metadata.json.
+    /// Used by smart-collection auto-backup so a new match uploads one file
+    /// instead of re-uploading the whole collection as a new backup.
+    /// Returns the number of bounces uploaded.
+    @discardableResult
+    func appendBounces(_ bounces: [Bounce], toBackup backup: BackupListItem, trigger: String) async -> Int {
+        guard let dest = destination, let userId = userId else { return 0 }
+        guard !isUploading else {
+            logger.info("appendBounces: another backup is running; skipping '\(backup.name)' until next run")
+            return 0
+        }
+
+        let metadataKey = BackupPath.metadataKey(userId: userId, backupId: backup.id)
+        guard let manifest = await downloadAndParseMetadata(key: metadataKey, destination: dest) else {
+            logger.warning("appendBounces: couldn't read manifest for '\(backup.name)'; not uploading")
+            return 0
+        }
+
+        let existingKeys = Set(manifest.bounces.map(\.s3Key))
+        let missing = bounces.filter { bounce in
+            let key = BackupPath.bounceKey(userId: userId, backupId: backup.id,
+                                           format: bounce.format, fileName: bounce.fileName)
+            return !existingKeys.contains(key)
+        }
+        guard !missing.isEmpty else {
+            logger.info("appendBounces: '\(backup.name)' already has all \(bounces.count) bounces")
+            return 0
+        }
+
+        let newBytes = missing.reduce(Int64(0)) { $0 + Int64($1.fileSizeBytes) }
+        let sizeText = ByteCountFormatter.string(fromByteCount: newBytes, countStyle: .file)
+        let activity = BackgroundActivityCenter.shared
+        if newBytes >= BackgroundActivityCenter.largeUploadNotifyBytes {
+            activity.notify?("Large automatic backup",
+                             "Uploading \(missing.count) bounces (\(sizeText)) to \(backup.shortName). \(trigger).")
+        }
+
+        isUploading = true
+        uploadProgress = 0
+        lastError = nil
+        uploadLog = []
+        currentBackupName = backup.name
+        currentBackupId = backup.id
+        activityJobId = activity.start(.backup, title: "Backing up \(backup.shortName)", trigger: trigger,
+                                       detail: "\(missing.count) new · \(sizeText)")
+
+        let uploaded = await backupBounces(missing, userId: userId, backupId: backup.id, destination: dest)
+
+        if !uploaded.isEmpty {
+            let addedItems = uploaded.map { item in
+                BounceBackupItem(fileName: item.bounce.fileName, format: item.bounce.format,
+                                 s3Key: item.s3Key, fileSizeBytes: item.bounce.fileSizeBytes,
+                                 durationSeconds: item.bounce.durationSeconds)
+            }
+            let addedBytes = uploaded.reduce(UInt64(0)) { $0 + UInt64($1.bounce.fileSizeBytes) }
+            let merged = BackupManifest(
+                backupId: manifest.backupId, userId: manifest.userId,
+                backupName: manifest.backupName, scopeDescription: manifest.scopeDescription,
+                createdAt: manifest.createdAt,
+                pluginCount: manifest.pluginCount, projectCount: manifest.projectCount,
+                sessionCount: manifest.sessionCount,
+                bounceCount: manifest.bounces.count + addedItems.count,
+                totalSizeBytes: manifest.totalSizeBytes + addedBytes,
+                appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? manifest.appVersion,
+                plugins: manifest.plugins, projects: manifest.projects,
+                bounces: manifest.bounces + addedItems
+            )
+            await writeManifest(merged, destination: dest)
+
+            if let i = availableBackups.firstIndex(where: { $0.id == backup.id }) {
+                let old = availableBackups[i]
+                availableBackups[i] = BackupListItem(
+                    id: old.id, name: old.name, createdAt: old.createdAt,
+                    pluginCount: old.pluginCount, projectCount: old.projectCount,
+                    bounceCount: merged.bounceCount, projectNames: old.projectNames,
+                    totalSize: merged.totalSizeBytes, s3Prefix: old.s3Prefix,
+                    scopeDescription: old.scopeDescription
+                )
+            }
+        }
+
+        let failed = missing.count - uploaded.count
+        if let id = activityJobId {
+            activity.finish(id, failed == 0 ? .succeeded : .failed("\(failed) of \(missing.count) failed"),
+                            detail: "\(uploaded.count) added · \(sizeText)")
+            activityJobId = nil
+        }
+        logger.info("appendBounces: added \(uploaded.count)/\(missing.count) bounces to '\(backup.name)'")
+
+        isUploading = false
+        currentBackupId = nil
+        currentBackupName = nil
+        return uploaded.count
     }
 
     /// Download and parse metadata.json from S3

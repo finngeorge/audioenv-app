@@ -149,7 +149,7 @@ struct SummaryView: View {
                     Button("Sync Now") {
                         Task {
                             guard let token = try? await auth.validToken() else { return }
-                            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token, trigger: "Sync Now button")
                         }
                     }
                     .font(.subheadline)

@@ -221,7 +221,7 @@ class WebSocketService: ObservableObject {
 
         Task {
             guard let token = try? await auth.validToken() else { return }
-            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+            await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token, trigger: "Server data change")
         }
     }
 

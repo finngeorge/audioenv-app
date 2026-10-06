@@ -709,6 +709,12 @@ class BounceService: ObservableObject {
 
         logger.info("discoverProjectBounces: derived \(projectFolders.count) unique project folders from sessions")
 
+        let activity = BackgroundActivityCenter.shared
+        let jobId = activity.start(.bounceLinking, title: "Linking project bounces",
+                                   trigger: "After library sync")
+        let folderTotal = max(projectFolders.count, 1)
+        var foldersDone = 0
+
         var newFolderCount = 0
         var resyncCount = 0
         var emptyFolderCount = 0
@@ -717,6 +723,9 @@ class BounceService: ObservableObject {
 
         for (folderPath, projectName) in projectFolders {
             updatedFolderNames[folderPath] = projectName
+            foldersDone += 1
+            activity.update(jobId, progress: Double(foldersDone) / Double(folderTotal),
+                            detail: "\(foldersDone.formatted()) / \(projectFolders.count.formatted()) folders")
 
             // Scan first — if no audio, skip without any API calls
             let foundBounces = await scanProjectFolder(path: folderPath)
@@ -744,6 +753,7 @@ class BounceService: ObservableObject {
                 // Token rejected — every remaining call would 401 too. Stop here;
                 // the next scan after re-login picks up where this left off.
                 logger.warning("discoverProjectBounces: 401 from API, stopping (\(newFolderCount) linked, \(resyncCount) re-synced before stop)")
+                activity.finish(jobId, .failed("Signed out"))
                 return
             }
 
@@ -752,6 +762,8 @@ class BounceService: ObservableObject {
         }
 
         logger.info("discoverProjectBounces: \(newFolderCount) new auto-linked, \(resyncCount) re-synced, \(failedCount) failed, \(emptyFolderCount) had no audio")
+        activity.finish(jobId, failedCount > 0 ? .failed("\(failedCount) folders failed") : .succeeded,
+                        detail: "\(newFolderCount) new, \(resyncCount) updated")
 
         projectFolderNames = updatedFolderNames
 

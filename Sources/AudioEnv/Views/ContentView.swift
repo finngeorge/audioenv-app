@@ -351,18 +351,24 @@ struct ContentView: View {
             }
         }
         .toolbar {
+            // Always visible: shows when sync / bounce linking / backups are running
+            ToolbarItem(placement: .navigation) {
+                BackgroundActivityToolbarButton()
+            }
             // Only show scan buttons on the Scan page
-            if section == .scan {
-                Button(action: { showPaths.toggle() }) {
-                    Label("Manage Paths", systemImage: "folder.badge.gear")
+            ToolbarItemGroup(placement: .primaryAction) {
+                if section == .scan {
+                    Button(action: { showPaths.toggle() }) {
+                        Label("Manage Paths", systemImage: "folder.badge.gear")
+                    }
+                    Button(action: { showRescanConfirmation = true }) {
+                        Label(
+                            scanner.isScanning ? "Scanning…" : "Scan",
+                            systemImage: scanner.isScanning ? "circle.dotted" : "magnifyingglass"
+                        )
+                    }
+                    .disabled(scanner.isScanning)
                 }
-                Button(action: { showRescanConfirmation = true }) {
-                    Label(
-                        scanner.isScanning ? "Scanning…" : "Scan",
-                        systemImage: scanner.isScanning ? "circle.dotted" : "magnifyingglass"
-                    )
-                }
-                .disabled(scanner.isScanning)
             }
         }
         .sheet(isPresented: $showPaths) {

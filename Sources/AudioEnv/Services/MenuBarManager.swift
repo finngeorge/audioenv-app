@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import UserNotifications
 import os.log
@@ -26,6 +27,8 @@ class MenuBarManager: ObservableObject {
 
     private var scanTimer: Timer?
     private var menuRefreshTimer: Timer?
+    private var menuDelegate: MenuRefreshDelegate?
+    private var activityCancellable: AnyCancellable?
     private static let bgScanKey = "com.audioenv.backgroundScanEnabled"
     private static let intervalKey = "com.audioenv.scanIntervalMinutes"
 
@@ -50,6 +53,13 @@ class MenuBarManager: ObservableObject {
         self.sessionMonitor = sessionMonitor
         setupStatusItem()
         requestNotificationPermission()
+
+        // Background jobs drive the status icon and can post notifications.
+        let activity = BackgroundActivityCenter.shared
+        activity.notify = { [weak self] title, body in self?.sendNotification(title: title, body: body) }
+        activityCancellable = activity.$running
+            .receive(on: RunLoop.main)
+            .sink { [weak self] jobs in self?.updateStatusIcon(runningJobs: jobs) }
         if backgroundScanEnabled {
             rescheduleTimer()
         }
@@ -70,18 +80,53 @@ class MenuBarManager: ObservableObject {
         rebuildMenu()
     }
 
-    /// Rebuild the dropdown menu with current state.
+    private static let idleSymbol = "waveform.badge.magnifyingglass"
+
+    /// Swap the menu bar icon while background work runs so it's visible
+    /// without opening the menu.
+    private func updateStatusIcon(runningJobs: [BackgroundActivityCenter.Job]) {
+        guard let button = statusItem?.button else { return }
+        let symbol = runningJobs.first?.kind.symbolName ?? Self.idleSymbol
+        let label = runningJobs.isEmpty ? "AudioEnv" : "AudioEnv — \(runningJobs.count) task(s) running"
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        button.image?.size = NSSize(width: 18, height: 18)
+        button.image?.isTemplate = true
+        button.toolTip = runningJobs.isEmpty ? nil : runningJobs.map(\.title).joined(separator: "\n")
+    }
+
+    /// "just now" under a minute, otherwise "5 min. ago" (never "in 0s").
+    private static func relativeTime(_ date: Date) -> String {
+        let elapsed = Date().timeIntervalSince(date)
+        if elapsed < 60 { return "just now" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: min(date, Date()), relativeTo: Date())
+    }
+
+    /// Rebuild the dropdown menu with current state. The menu also refreshes
+    /// itself each time it opens, so times and progress are never stale.
     func rebuildMenu() {
         let menu = NSMenu()
+        let delegate = MenuRefreshDelegate { [weak self] menu in
+            MainActor.assumeIsolated {
+                menu.removeAllItems()
+                self?.populate(menu)
+            }
+        }
+        menuDelegate = delegate
+        menu.delegate = delegate
+        populate(menu)
+        statusItem?.menu = menu
+    }
+
+    private func populate(_ menu: NSMenu) {
 
         // Scan status
         let lastScanTitle: String
         if scanner?.isScanning == true {
             lastScanTitle = "Scanning..."
         } else if let date = scanner?.lastScanDate {
-            let formatter = RelativeDateTimeFormatter()
-            formatter.unitsStyle = .abbreviated
-            lastScanTitle = "Last scan: \(formatter.localizedString(for: date, relativeTo: Date()))"
+            lastScanTitle = "Last scan: \(Self.relativeTime(date))"
         } else {
             lastScanTitle = "No scans yet"
         }
@@ -89,20 +134,22 @@ class MenuBarManager: ObservableObject {
         lastScanItem.isEnabled = false
         menu.addItem(lastScanItem)
 
-        // Sync status
-        let syncTitle: String
-        if sync?.isSyncing == true {
-            syncTitle = "Syncing..."
-        } else if let date = sync?.lastSyncDate {
-            let formatter = RelativeDateTimeFormatter()
-            formatter.unitsStyle = .abbreviated
-            syncTitle = "Last sync: \(formatter.localizedString(for: date, relativeTo: Date()))"
-        } else {
-            syncTitle = "Not synced"
+        // Background activity: one entry per running job (what + why), then
+        // the last sync time once nothing is syncing.
+        for job in BackgroundActivityCenter.shared.running {
+            menu.addItem(Self.activityItem(for: job))
         }
-        let syncItem = NSMenuItem(title: syncTitle, action: nil, keyEquivalent: "")
-        syncItem.isEnabled = false
-        menu.addItem(syncItem)
+        if sync?.isSyncing != true {
+            let syncTitle: String
+            if let date = sync?.lastSyncDate {
+                syncTitle = "Synced \(Self.relativeTime(date))"
+            } else {
+                syncTitle = "Not synced"
+            }
+            let syncItem = NSMenuItem(title: syncTitle, action: nil, keyEquivalent: "")
+            syncItem.isEnabled = false
+            menu.addItem(syncItem)
+        }
 
         // Live session status
         if let monitor = sessionMonitor, !monitor.activeSessions.isEmpty {
@@ -281,7 +328,29 @@ class MenuBarManager: ObservableObject {
         quitItem.target = self
         menu.addItem(quitItem)
 
-        statusItem?.menu = menu
+    }
+
+    /// Two-line menu entry: "Backing up X — 23 / 60: file.wav · 40%" over the trigger.
+    private static func activityItem(for job: BackgroundActivityCenter.Job) -> NSMenuItem {
+        var headline = job.title
+        if let detail = job.detail { headline += " — \(detail)" }
+        if let progress = job.progress { headline += " · \(Int(progress * 100))%" }
+
+        let text = NSMutableAttributedString(
+            string: headline,
+            attributes: [.font: NSFont.menuFont(ofSize: 0)]
+        )
+        text.append(NSAttributedString(
+            string: "\n\(job.trigger)",
+            attributes: [.font: NSFont.menuFont(ofSize: NSFont.smallSystemFontSize),
+                         .foregroundColor: NSColor.secondaryLabelColor]
+        ))
+
+        let item = NSMenuItem(title: headline, action: nil, keyEquivalent: "")
+        item.attributedTitle = text
+        item.image = NSImage(systemSymbolName: job.kind.symbolName, accessibilityDescription: nil)
+        item.isEnabled = false
+        return item
     }
 
     // MARK: - Menu Actions
@@ -398,7 +467,7 @@ class MenuBarManager: ObservableObject {
             // Auto-sync if authenticated
             if let auth, let sync, auth.isAuthenticated,
                let token = try? await auth.validToken() {
-                await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token, trigger: "Background scan")
             }
 
             sendNotification(
@@ -481,4 +550,11 @@ class MenuBarManager: ObservableObject {
         }
         return nil
     }
+}
+
+/// Repopulates the status menu right before it opens.
+private final class MenuRefreshDelegate: NSObject, NSMenuDelegate {
+    private let onOpen: (NSMenu) -> Void
+    init(onOpen: @escaping (NSMenu) -> Void) { self.onOpen = onOpen }
+    func menuNeedsUpdate(_ menu: NSMenu) { onOpen(menu) }
 }
