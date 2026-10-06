@@ -15,6 +15,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case spotlight    = "Spotlight"
     case transfers   = "Transfers"
     case cloud       = "Cloud"
+    case webUploads  = "Web Uploads"
     case backup      = "Backup"
     case profile     = "Profile"
 
@@ -34,6 +35,8 @@ struct ContentView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var remoteCommand: RemoteCommandService
     @EnvironmentObject var activityService: ActivityService
+
+    @StateObject private var webUploads = WebUploadsViewModel()
 
     @State private var section:         AppSection?    = .summary
     @State private var selectedProject: SessionProject? = nil
@@ -96,6 +99,9 @@ struct ContentView: View {
                 Section("Cloud") {
                     Label("Files", systemImage: "cloud")
                         .tag(AppSection.cloud)
+                    Label("Web Uploads", systemImage: "tray.and.arrow.down")
+                        .badge(webUploads.pendingCount)
+                        .tag(AppSection.webUploads)
                     Label("Backup", systemImage: "arrow.up.circle")
                         .tag(AppSection.backup)
                 }
@@ -231,6 +237,8 @@ struct ContentView: View {
                     WebTransfersSettingsView()
                 case .cloud:
                     CloudBrowserView(selectedItem: $selectedCloudItem)
+                case .webUploads:
+                    WebUploadsView(model: webUploads)
                 case .backup:
                     BackupConfigView(scanner: scanner, backup: backup, selectedBackup: $selectedBackup)
                 case .profile:
@@ -333,6 +341,13 @@ struct ContentView: View {
             // Prevent macOS from auto-collapsing the sidebar
             if newValue != .all {
                 columnVisibility = .all
+            }
+        }
+        // Keep the Web Uploads badge populated; refresh when auth state changes.
+        .task(id: auth.isAuthenticated) {
+            webUploads.configure(auth: auth, remoteCommand: remoteCommand)
+            if auth.isAuthenticated {
+                await webUploads.refresh()
             }
         }
         .toolbar {

@@ -145,8 +145,6 @@ class RemoteCommandService: ObservableObject {
                 scanner.parseIndividualSession(path: path)
 
             case "download_uploaded_project":
-                guard let token = authService?.authToken else { throw RemoteCommandError.notAuthenticated }
-                guard let scanner = scannerService else { throw RemoteCommandError.serviceUnavailable("ScannerService") }
                 guard let fileId = command.payload["file_id"] as? String else {
                     throw RemoteCommandError.invalidPayload("Missing file_id")
                 }
@@ -154,31 +152,7 @@ class RemoteCommandService: ObservableObject {
                     throw RemoteCommandError.invalidPayload("Missing s3_key")
                 }
                 let filename = command.payload["filename"] as? String ?? "project.zip"
-
-                // Detect DAW type from filename
-                let detectedFormat = Self.detectSessionFormat(from: filename)
-
-                // Resolve save path: check saved preference, or prompt user
-                let savePath = try await resolveSavePath(
-                    filename: filename,
-                    detectedFormat: detectedFormat,
-                    sessions: scanner.sessions
-                )
-
-                let localPath = try await downloadAndExtractUploadedProject(
-                    token: token,
-                    fileId: fileId,
-                    s3Key: s3Key,
-                    filename: filename,
-                    destinationFolder: savePath
-                )
-
-                // Trigger a scan to pick up the new session
-                scanner.scanAll()
-
-                // Mark as synced
-                await markUploadSynced(token: token, fileId: fileId)
-
+                let localPath = try await downloadUploadedProject(fileId: fileId, s3Key: s3Key, filename: filename)
                 result = ["local_path": localPath]
 
             default:
@@ -281,6 +255,38 @@ class RemoteCommandService: ObservableObject {
 
         pendingDownloadPrompt = nil
         return result.savePath
+    }
+
+    /// Download a web-uploaded project zip onto this Mac, extract it to the
+    /// resolved DAW folder, rescan, and mark it synced. Shared by the
+    /// `download_uploaded_project` remote command and the local Web Uploads view.
+    @discardableResult
+    func downloadUploadedProject(fileId: String, s3Key: String, filename: String) async throws -> String {
+        guard let token = authService?.authToken else { throw RemoteCommandError.notAuthenticated }
+        guard let scanner = scannerService else { throw RemoteCommandError.serviceUnavailable("ScannerService") }
+
+        // Detect DAW type from filename, then resolve a save path (saved
+        // preference, or prompt the user via WebDownloadPromptView).
+        let detectedFormat = Self.detectSessionFormat(from: filename)
+        let savePath = try await resolveSavePath(
+            filename: filename,
+            detectedFormat: detectedFormat,
+            sessions: scanner.sessions
+        )
+
+        let localPath = try await downloadAndExtractUploadedProject(
+            token: token,
+            fileId: fileId,
+            s3Key: s3Key,
+            filename: filename,
+            destinationFolder: savePath
+        )
+
+        // Pick up the new session, then mark the upload as synced.
+        scanner.scanAll()
+        await markUploadSynced(token: token, fileId: fileId)
+
+        return localPath
     }
 
     private func downloadAndExtractUploadedProject(
