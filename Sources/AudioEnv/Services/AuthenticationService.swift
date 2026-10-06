@@ -179,6 +179,12 @@ class AuthenticationService: ObservableObject {
                 if refreshTokenValue != nil {
                     do {
                         try await refreshToken()
+                    } catch AuthError.refreshRejected {
+                        // Server definitively rejected the refresh token (expired or
+                        // revoked) — the saved session is dead. Send the user to login
+                        // now instead of failing every API call until a later refresh.
+                        logger.warning("Refresh token rejected on init, logging out")
+                        logout()
                     } catch {
                         logger.warning("Token refresh on init failed: \(error)")
                         // Try fetching profile with existing access token
@@ -397,6 +403,10 @@ class AuthenticationService: ObservableObject {
             do {
                 try await refreshToken()
                 return self.authToken ?? token
+            } catch AuthError.refreshRejected {
+                logger.warning("Proactive refresh rejected by server, logging out")
+                logout()
+                throw AuthError.refreshRejected
             } catch {
                 logger.warning("Proactive refresh failed, using existing token: \(error)")
                 return token
@@ -447,7 +457,7 @@ class AuthenticationService: ObservableObject {
             try? await fetchUserProfile()
         } else if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
             logger.error("Token refresh rejected with status \(httpResponse.statusCode)")
-            throw AuthError.serverError("Refresh token expired or revoked")
+            throw AuthError.refreshRejected
         } else {
             logger.error("Token refresh failed with status \(httpResponse.statusCode)")
             // Throw as a generic error so handleUnauthorized doesn't logout
@@ -467,9 +477,9 @@ class AuthenticationService: ObservableObject {
         do {
             try await refreshToken()
             return true
-        } catch let error as AuthError {
+        } catch AuthError.refreshRejected {
             // Server explicitly rejected the refresh token — logout
-            logger.warning("Reactive refresh rejected by server, logging out: \(error)")
+            logger.warning("Reactive refresh rejected by server, logging out")
             logout()
             return false
         } catch {
@@ -688,6 +698,8 @@ enum AuthError: Error, LocalizedError {
     case invalidResponse
     case serverError(String)
     case networkError
+    /// The server rejected the refresh token (401/403): the session is over.
+    case refreshRejected
 
     var errorDescription: String? {
         switch self {
@@ -697,6 +709,8 @@ enum AuthError: Error, LocalizedError {
             return message
         case .networkError:
             return "Network error occurred"
+        case .refreshRejected:
+            return "Refresh token expired or revoked"
         }
     }
 }

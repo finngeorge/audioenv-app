@@ -223,6 +223,13 @@ struct AudioEnvApp: App {
                     // Rebuild menu bar to reflect scan state
                     menuBar.rebuildMenu()
                 }
+                .onChange(of: auth.isAuthenticated) { _, isAuthenticated in
+                    // A logout with no loaded profile doesn't change currentUser,
+                    // so stop the WebSocket from retrying with a dead token here.
+                    if !isAuthenticated {
+                        webSocket.disconnect()
+                    }
+                }
                 .onChange(of: scanner.sessions.count) { oldValue, newValue in
                     // Fast-rescan path returns without flipping isScanning, so fire
                     // discovery when sessions first become available on launch.
