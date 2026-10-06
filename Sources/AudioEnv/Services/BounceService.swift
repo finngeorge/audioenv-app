@@ -669,6 +669,8 @@ class BounceService: ObservableObject {
     /// Auto-discover bounces inside DAW project folders and link them.
     /// Called after scan completes to detect bounces co-located with sessions.
     func discoverProjectBounces(sessions: [AudioSession], token: String) async {
+        logger.info("discoverProjectBounces: starting with \(sessions.count) sessions, \(self.bounceFolders.count) already-linked folders")
+
         // Build unique project folder paths with their display names
         var projectFolders: [String: String] = [:]  // path -> project name
         for session in sessions where !session.isBackup {
@@ -698,34 +700,39 @@ class BounceService: ObservableObject {
             }
         }
 
-        // Check which folders are already linked as bounce folders
-        let linkedPaths = Set(bounceFolders.map { $0.folderPath })
+        logger.info("discoverProjectBounces: derived \(projectFolders.count) unique project folders from sessions")
 
         var newFolderCount = 0
+        var resyncCount = 0
+        var emptyFolderCount = 0
         var updatedFolderNames: [String: String] = [:]
 
         for (folderPath, projectName) in projectFolders {
             updatedFolderNames[folderPath] = projectName
 
-            guard !linkedPaths.contains(folderPath) else { continue }
-
-            // Check if folder actually has audio files
+            // Scan first — if no audio, skip without any API calls
             let foundBounces = await scanProjectFolder(path: folderPath)
-            guard !foundBounces.isEmpty else { continue }
-
-            // Auto-link this folder and sync its bounces
-            await autoLinkFolder(path: folderPath, bounces: foundBounces, token: token)
-            newFolderCount += 1
-        }
-
-        // Also re-scan existing auto-linked folders for new files
-        for folderId in autoLinkedFolderIds {
-            guard let folder = bounceFolders.first(where: { $0.id == folderId }) else { continue }
-            let foundBounces = await scanProjectFolder(path: folder.folderPath)
-            if !foundBounces.isEmpty {
-                await syncScanResults(folderId: folder.id, bounces: foundBounces, token: token)
+            if foundBounces.isEmpty {
+                emptyFolderCount += 1
+                continue
             }
+
+            if let existing = bounceFolders.first(where: { $0.folderPath == folderPath }) {
+                // Folder already linked (possibly from a previous run that was rate-limited
+                // before its bounces synced). Re-sync now.
+                await syncScanResults(folderId: existing.id, bounces: foundBounces, token: token)
+                autoLinkedFolderIds.insert(existing.id)
+                resyncCount += 1
+            } else {
+                await autoLinkFolder(path: folderPath, bounces: foundBounces, token: token)
+                newFolderCount += 1
+            }
+
+            // Throttle to stay under rate limits when many folders are processed
+            try? await Task.sleep(nanoseconds: 200_000_000)
         }
+
+        logger.info("discoverProjectBounces: \(newFolderCount) new auto-linked, \(resyncCount) re-synced, \(emptyFolderCount) had no audio")
 
         projectFolderNames = updatedFolderNames
 

@@ -44,6 +44,14 @@ struct BounceBrowserView: View {
     @State private var availableVersions: [Int] = []
     @State private var availableStages: [String] = []
 
+    private var sortedBounceFolders: [BounceFolder] {
+        let counts = Dictionary(grouping: bounceService.bounces, by: { $0.bounceFolderId })
+            .mapValues { $0.count }
+        return bounceService.bounceFolders.sorted {
+            (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Search bar + actions
@@ -118,7 +126,7 @@ struct BounceBrowserView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         folderChip(label: "All Folders", folderId: nil)
-                        ForEach(bounceService.bounceFolders) { folder in
+                        ForEach(sortedBounceFolders) { folder in
                             folderChip(label: folder.displayName, folderId: folder.id)
                         }
                     }

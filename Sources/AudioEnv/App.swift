@@ -195,6 +195,7 @@ struct AudioEnvApp: App {
                         Task {
                             guard let token = try? await auth.validToken() else { return }
                             await sync.syncToCloud(plugins: scanner.plugins, sessions: scanner.sessions, token: token)
+                            await bounceService.discoverProjectBounces(sessions: scanner.sessions, token: token)
                         }
                     }
 
@@ -221,6 +222,16 @@ struct AudioEnvApp: App {
                     }
                     // Rebuild menu bar to reflect scan state
                     menuBar.rebuildMenu()
+                }
+                .onChange(of: scanner.sessions.count) { oldValue, newValue in
+                    // Fast-rescan path returns without flipping isScanning, so fire
+                    // discovery when sessions first become available on launch.
+                    if oldValue == 0 && newValue > 0, auth.isAuthenticated {
+                        Task {
+                            guard let token = try? await auth.validToken() else { return }
+                            await bounceService.discoverProjectBounces(sessions: scanner.sessions, token: token)
+                        }
+                    }
                 }
                 .onChange(of: backup.destination != nil) { _, hasDestination in
                     if hasDestination {
