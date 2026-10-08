@@ -9,6 +9,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case collections = "Collections"
     case activity    = "Activity"
     case bounces     = "Bounces"
+    case linkBounces = "Link Bounces"
     case patterns    = "Patterns"
     case commands    = "Commands"
     case scan        = "Scan"
@@ -37,6 +38,7 @@ struct ContentView: View {
     @EnvironmentObject var activityService: ActivityService
 
     @StateObject private var webUploads = WebUploadsViewModel()
+    @StateObject private var linkQueue = LinkQueueService()
 
     @State private var section:         AppSection?    = .summary
     @State private var selectedProject: SessionProject? = nil
@@ -91,6 +93,10 @@ struct ContentView: View {
 
                     Label("Bounces", systemImage: "waveform")
                         .tag(AppSection.bounces)
+
+                    Label("Link Bounces", systemImage: "link.badge.plus")
+                        .badge(linkQueue.remainingCount)
+                        .tag(AppSection.linkBounces)
 
                     Label("Collections", systemImage: "rectangle.stack")
                         .tag(AppSection.collections)
@@ -239,6 +245,8 @@ struct ContentView: View {
                     CloudBrowserView(selectedItem: $selectedCloudItem)
                 case .webUploads:
                     WebUploadsView(model: webUploads)
+                case .linkBounces:
+                    LinkBouncesView(queue: linkQueue)
                 case .backup:
                     BackupConfigView(scanner: scanner, backup: backup, selectedBackup: $selectedBackup)
                 case .profile:
@@ -346,8 +354,19 @@ struct ContentView: View {
         // Keep the Web Uploads badge populated; refresh when auth state changes.
         .task(id: auth.isAuthenticated) {
             webUploads.configure(auth: auth, remoteCommand: remoteCommand)
+            linkQueue.configure(auth: auth)
             if auth.isAuthenticated {
                 await webUploads.refresh()
+                await linkQueue.refresh()
+            }
+        }
+        // New predictions are scored on the server after a sync or bounce scan;
+        // refresh the Link Bounces badge shortly after background work finishes.
+        .onReceive(BackgroundActivityCenter.shared.$running) { running in
+            guard running.isEmpty, auth.isAuthenticated else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(5))
+                await linkQueue.refresh()
             }
         }
         .toolbar {
