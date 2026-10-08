@@ -105,4 +105,46 @@ final class BounceServiceTests: XCTestCase {
             projectName: "My Song"
         ))
     }
+
+    // MARK: - DAW media exclusions
+
+    func testDAWMediaFoldersAreExcluded() {
+        let excluded = [
+            "/Users/me/Music/Pro Tools/Teddy 435/Audio Files",
+            "/Users/me/Music/Pro Tools/Teddy 435/Rendered Files",
+            "/Users/me/Music/Pro Tools/Teddy 435/Session File Backups",
+            "/Users/me/Music/Ableton/candy bass Project/Samples/Recorded",
+            "/Users/me/Music/Ableton/candy bass Project/Backup",
+            "/Users/me/Music/Logic/Grandpa 1.2.logicx/Media/Audio Files",
+            "/Users/me/Music/Logic/Grandpa 1.2.logicx",
+            "/Users/me/Music/Logic/Tell It True/Audio Files",
+            "/Users/me/Music/Logic/Tell It True/Freeze Files.nosync",
+        ]
+        for path in excluded {
+            XCTAssertTrue(BounceService.isDAWMediaDirectory(path), path)
+        }
+    }
+
+    func testBounceFoldersAreNotExcluded() {
+        let kept = [
+            "/Users/me/Music/Originals",
+            "/Users/me/Music/Pro Tools/Teddy 435/Bounced Files",
+            "/Users/me/Music/Pro Tools/Teddy 435",
+            "/Users/me/Music/Ableton/candy bass Project",
+            "/Users/me/Music/Logic/Bounces",
+            "/Users/me/Music/Logic/Tell It True/Bounces",
+            "/Volumes/Backup/Bounces",          // "Backup" outside an Ableton project
+            "/Users/me/Samples/Bounce Library", // "Samples" outside an Ableton project
+        ]
+        for path in kept {
+            XCTAssertFalse(BounceService.isDAWMediaDirectory(path), path)
+        }
+    }
+
+    func testProToolsDuplicateFilesAreExcluded() {
+        XCTAssertTrue(BounceService.isDAWGeneratedAudioFile("HAPPY DAYS .dup1_01.L.wav"))
+        XCTAssertTrue(BounceService.isDAWGeneratedAudioFile("Vox.DUP2_03.wav"))
+        XCTAssertFalse(BounceService.isDAWGeneratedAudioFile("Mix 1.L.wav"))      // split-mono bounce
+        XCTAssertFalse(BounceService.isDAWGeneratedAudioFile("candy bass 1.1 [135].wav"))
+    }
 }

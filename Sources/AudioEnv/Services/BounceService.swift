@@ -190,9 +190,40 @@ class BounceService: ObservableObject {
         }
     }
 
+    // MARK: - DAW media exclusions
+
+    /// DAW-managed media folders that hold recordings/edits, never bounces.
+    /// Pro Tools: Audio Files, Rendered Files, ... · Logic: Audio Files, Freeze Files.
+    private static let dawMediaDirNames: Set<String> = [
+        "audio files", "rendered files", "clip groups", "fade files", "video files",
+        "session file backups", "freeze files", "freeze files.nosync",
+    ]
+    /// Only excluded inside an Ableton project folder ("<name> Project"): these names
+    /// are common elsewhere (a drive called "Backup", a "Samples" library).
+    private static let abletonMediaDirNames: Set<String> = ["samples", "backup"]
+
+    /// True when a directory is (or is inside) DAW-managed media: Pro Tools / Logic
+    /// media folders, Ableton's Samples and Backup, or anything inside a Logic bundle.
+    nonisolated static func isDAWMediaDirectory(_ path: String) -> Bool {
+        let parts = (path as NSString).pathComponents.map { $0.lowercased() }
+        for (i, part) in parts.enumerated() {
+            if part.hasSuffix(".logicx") || part.hasSuffix(".logicpro") { return true }
+            if dawMediaDirNames.contains(part) { return true }
+            if abletonMediaDirNames.contains(part), i > 0, parts[i - 1].hasSuffix(" project") { return true }
+        }
+        return false
+    }
+
+    /// Pro Tools duplicate/consolidated audio ("HAPPY DAYS .dup1_01.L.wav") — not a bounce.
+    /// Split-mono ".L/.R" alone is NOT excluded: a split-mono bounce is a real bounce.
+    nonisolated static func isDAWGeneratedAudioFile(_ fileName: String) -> Bool {
+        fileName.range(of: #"\.dup\d+"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     /// Scan a directory for WAV/MP3/AIFF/FLAC files and extract metadata via AVFoundation.
     private nonisolated func scanLocalFiles(in folderPath: String) async -> [LocalBounceInfo] {
         let fm = FileManager.default
+        guard !Self.isDAWMediaDirectory(folderPath) else { return [] }
         guard let contents = try? fm.contentsOfDirectory(atPath: folderPath) else { return [] }
 
         var results: [LocalBounceInfo] = []
@@ -200,6 +231,7 @@ class BounceService: ObservableObject {
         for fileName in contents {
             let ext = (fileName as NSString).pathExtension.lowercased()
             guard Self.audioExtensions.contains(ext) else { continue }
+            guard !Self.isDAWGeneratedAudioFile(fileName) else { continue }
 
             let filePath = (folderPath as NSString).appendingPathComponent(fileName)
             guard let attrs = try? fm.attributesOfItem(atPath: filePath),
@@ -770,9 +802,10 @@ class BounceService: ObservableObject {
         if newFolderCount > 0 || !autoLinkedFolderIds.isEmpty {
             // Refresh bounce list from API
             await fetchBounces(token: token)
-            // Generate local folder-based suggestions and auto-confirm them
+            // Generate local folder-based suggestions. They are NOT confirmed
+            // automatically: every link is reviewed by the user (bounce linking plan,
+            // decision 1), via the review queue or the bounce detail view.
             matchBouncesByFolder(sessions: sessions)
-            await autoConfirmHighConfidenceSuggestions(token: token)
         }
 
         if newFolderCount > 0 {
@@ -822,18 +855,6 @@ class BounceService: ObservableObject {
         } catch {
             logger.error("autoLinkFolder failed: \(error)")
             return .failed
-        }
-    }
-
-    /// Auto-confirm all high-confidence (folder-based) suggestions without user intervention.
-    private func autoConfirmHighConfidenceSuggestions(token: String) async {
-        let highConfidence = suggestions.filter { $0.confidence >= 0.9 }
-        for suggestion in highConfidence {
-            await confirmSuggestion(
-                bounceId: suggestion.bounceId,
-                sessionId: suggestion.scannedSessionId,
-                token: token
-            )
         }
     }
 
