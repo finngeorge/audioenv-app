@@ -75,140 +75,17 @@ struct ContentView: View {
                 })
         } else {
         VStack(spacing: 0) {
+        Group {
+            if section == .linkBounces {
+                // Link Bounces is a single-pane tool: sidebar + one full-width view.
+                NavigationSplitView(columnVisibility: $columnVisibility) {
+                    sidebar
+                } detail: {
+                    LinkBouncesView(queue: linkQueue)
+                }
+            } else {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            // ── Sidebar ─────────────────────────────────────────
-            List(selection: $section) {
-                Section("Library") {
-                    Label("Summary",  systemImage: "chart.bar")
-                        .badge(0)
-                        .tag(AppSection.summary)
-
-                    Label("Plugins",  systemImage: scanner.hasCatalogMatches ? "puzzlepiece.extension" : "waveform")
-                        .badge(scanner.plugins.count)
-                        .tag(AppSection.plugins)
-
-                    Label("Projects", systemImage: "folder.fill")
-                        .badge(projectCount)
-                        .tag(AppSection.projects)
-
-                    Label("Bounces", systemImage: "waveform")
-                        .tag(AppSection.bounces)
-
-                    Label("Link Bounces", systemImage: "link.badge.plus")
-                        .badge(linkQueue.remainingCount)
-                        .tag(AppSection.linkBounces)
-
-                    Label("Collections", systemImage: "rectangle.stack")
-                        .tag(AppSection.collections)
-                }
-
-                Section("Cloud") {
-                    Label("Files", systemImage: "cloud")
-                        .tag(AppSection.cloud)
-                    Label("Web Uploads", systemImage: "tray.and.arrow.down")
-                        .badge(webUploads.pendingCount)
-                        .tag(AppSection.webUploads)
-                    Label("Backup", systemImage: "arrow.up.circle")
-                        .tag(AppSection.backup)
-                }
-
-                Section("Tools") {
-                    Label("Commands", systemImage: "terminal")
-                        .tag(AppSection.commands)
-
-                    Label("Patterns", systemImage: "text.viewfinder")
-                        .tag(AppSection.patterns)
-
-                    Label("Activity", systemImage: "clock.arrow.circlepath")
-                        .tag(AppSection.activity)
-                }
-
-                Section("Settings") {
-                    Label("Scan", systemImage: "viewfinder.circle")
-                        .tag(AppSection.scan)
-
-                    Label("Spotlight", systemImage: "sparkle.magnifyingglass")
-                        .tag(AppSection.spotlight)
-
-                    Label("Transfers", systemImage: "arrow.down.circle")
-                        .tag(AppSection.transfers)
-                }
-
-                Section("Account") {
-                    HStack {
-                        Label("Profile", systemImage: auth.isAuthenticated ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle")
-                        if auth.isAuthenticated {
-                            Spacer()
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 8, height: 8)
-                        }
-                    }
-                    .tag(AppSection.profile)
-                }
-
-                if backup.isUploading {
-                    Section {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Image(systemName: "icloud.and.arrow.up")
-                                    .foregroundColor(.blue)
-                                Text("Backing up...")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                Spacer()
-                                Text("\(Int(backup.uploadProgress * 100))%")
-                                    .font(.caption)
-                                    .monospacedDigit()
-                            }
-                            ProgressView(value: backup.uploadProgress)
-                                .progressViewStyle(.linear)
-                            if let name = backup.currentBackupName {
-                                Text(name)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-
-                if scanner.isScanning || scanner.isParsingIndividual {
-                    Section {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Image(systemName: scanner.isScanning ? "viewfinder.circle" : "doc.text.magnifyingglass")
-                                    .foregroundColor(.blue)
-                                Text(scanner.isScanning ? "Scanning..." : "Parsing...")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                Spacer()
-                                if scanner.isScanning {
-                                    Text("\(Int(scanner.scanProgress * 100))%")
-                                        .font(.caption)
-                                        .monospacedDigit()
-                                }
-                            }
-                            if scanner.isScanning {
-                                ProgressView(value: scanner.scanProgress)
-                                    .progressViewStyle(.linear)
-                            } else {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Text(scanner.statusMessage)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 220)
-            .navigationTitle("AudioEnv")
-
+            sidebar
         } content: {
             // ── Content column ──────────────────────────────────
             Group {
@@ -246,7 +123,7 @@ struct ContentView: View {
                 case .webUploads:
                     WebUploadsView(model: webUploads)
                 case .linkBounces:
-                    LinkBouncesView(queue: linkQueue)
+                    EmptyView()  // shown full-width in the two-column layout
                 case .backup:
                     BackupConfigView(scanner: scanner, backup: backup, selectedBackup: $selectedBackup)
                 case .profile:
@@ -258,22 +135,6 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 360, ideal: 400, max: 520)
             .navigationTitle("")
             .toolbarTitleDisplayMode(.inline)
-            // Clear detail selection whenever the sidebar category changes.
-            .onChange(of: section) { oldValue, newValue in
-                // Only clear selections if we're actually changing sections
-                guard oldValue != newValue else { return }
-                // Only clear the selections that were set
-                if selectedProject != nil { selectedProject = nil }
-                if selectedPlugin != nil { selectedPlugin = nil }
-                if selectedBackup != nil { selectedBackup = nil }
-                if selectedCollection != nil { selectedCollection = nil }
-                if selectedBounce != nil { selectedBounce = nil }
-                if selectedActivity != nil { selectedActivity = nil }
-                if selectedCloudItem != nil { selectedCloudItem = nil }
-                if selectedCommand != nil { selectedCommand = nil }
-
-                columnVisibility = .all
-            }
 
         } detail: {
             // ── Detail column ───────────────────────────────────
@@ -343,6 +204,24 @@ struct ContentView: View {
             default:
                 Color.clear
             }
+        }
+            }
+        }
+        // Clear detail selection whenever the sidebar category changes.
+        .onChange(of: section) { oldValue, newValue in
+            // Only clear selections if we're actually changing sections
+            guard oldValue != newValue else { return }
+            // Only clear the selections that were set
+            if selectedProject != nil { selectedProject = nil }
+            if selectedPlugin != nil { selectedPlugin = nil }
+            if selectedBackup != nil { selectedBackup = nil }
+            if selectedCollection != nil { selectedCollection = nil }
+            if selectedBounce != nil { selectedBounce = nil }
+            if selectedActivity != nil { selectedActivity = nil }
+            if selectedCloudItem != nil { selectedCloudItem = nil }
+            if selectedCommand != nil { selectedCommand = nil }
+
+            columnVisibility = .all
         }
         .frame(minWidth: 1200, idealWidth: 1500, minHeight: 620, idealHeight: 780)
         .onChange(of: columnVisibility) { _, newValue in
@@ -500,6 +379,142 @@ struct ContentView: View {
     }
 
     // ── Detail placeholder ──────────────────────────────────────
+
+    // MARK: - Sidebar
+
+    private var sidebar: some View {
+        List(selection: $section) {
+            Section("Library") {
+                Label("Summary",  systemImage: "chart.bar")
+                    .badge(0)
+                    .tag(AppSection.summary)
+
+                Label("Plugins",  systemImage: scanner.hasCatalogMatches ? "puzzlepiece.extension" : "waveform")
+                    .badge(scanner.plugins.count)
+                    .tag(AppSection.plugins)
+
+                Label("Projects", systemImage: "folder.fill")
+                    .badge(projectCount)
+                    .tag(AppSection.projects)
+
+                Label("Bounces", systemImage: "waveform")
+                    .tag(AppSection.bounces)
+
+                Label("Collections", systemImage: "rectangle.stack")
+                    .tag(AppSection.collections)
+            }
+
+            Section("Cloud") {
+                Label("Files", systemImage: "cloud")
+                    .tag(AppSection.cloud)
+                Label("Web Uploads", systemImage: "tray.and.arrow.down")
+                    .badge(webUploads.pendingCount)
+                    .tag(AppSection.webUploads)
+                Label("Backup", systemImage: "arrow.up.circle")
+                    .tag(AppSection.backup)
+            }
+
+            Section("Tools") {
+                Label("Link Bounces", systemImage: "link.badge.plus")
+                    .badge(linkQueue.remainingCount)
+                    .tag(AppSection.linkBounces)
+
+                Label("Commands", systemImage: "terminal")
+                    .tag(AppSection.commands)
+
+                Label("Patterns", systemImage: "text.viewfinder")
+                    .tag(AppSection.patterns)
+
+                Label("Activity", systemImage: "clock.arrow.circlepath")
+                    .tag(AppSection.activity)
+            }
+
+            Section("Settings") {
+                Label("Scan", systemImage: "viewfinder.circle")
+                    .tag(AppSection.scan)
+
+                Label("Spotlight", systemImage: "sparkle.magnifyingglass")
+                    .tag(AppSection.spotlight)
+
+                Label("Transfers", systemImage: "arrow.down.circle")
+                    .tag(AppSection.transfers)
+            }
+
+            Section("Account") {
+                HStack {
+                    Label("Profile", systemImage: auth.isAuthenticated ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle")
+                    if auth.isAuthenticated {
+                        Spacer()
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                    }
+                }
+                .tag(AppSection.profile)
+            }
+
+            if backup.isUploading {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: "icloud.and.arrow.up")
+                                .foregroundColor(.blue)
+                            Text("Backing up...")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text("\(Int(backup.uploadProgress * 100))%")
+                                .font(.caption)
+                                .monospacedDigit()
+                        }
+                        ProgressView(value: backup.uploadProgress)
+                            .progressViewStyle(.linear)
+                        if let name = backup.currentBackupName {
+                            Text(name)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            if scanner.isScanning || scanner.isParsingIndividual {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: scanner.isScanning ? "viewfinder.circle" : "doc.text.magnifyingglass")
+                                .foregroundColor(.blue)
+                            Text(scanner.isScanning ? "Scanning..." : "Parsing...")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                            Spacer()
+                            if scanner.isScanning {
+                                Text("\(Int(scanner.scanProgress * 100))%")
+                                    .font(.caption)
+                                    .monospacedDigit()
+                            }
+                        }
+                        if scanner.isScanning {
+                            ProgressView(value: scanner.scanProgress)
+                                .progressViewStyle(.linear)
+                        } else {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(scanner.statusMessage)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 220)
+        .navigationTitle("AudioEnv")
+    }
 
     private func emptyDetail() -> some View {
         Group {
