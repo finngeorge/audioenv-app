@@ -336,6 +336,11 @@ class SyncService: ObservableObject {
             if index > 0 {
                 wrapper["replace"] = false
             }
+            // The server removes sessions that weren't re-sent only after the
+            // last batch, so earlier batches keep their ids (links, tags).
+            if index == batches.count - 1 {
+                wrapper["final"] = true
+            }
 
             let url = URL(string: "\(baseURL)/api/sessions/sync")!
             var request = URLRequest(url: url)
